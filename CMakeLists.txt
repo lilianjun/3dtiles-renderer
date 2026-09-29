@@ -229,6 +229,45 @@ if(TILES_WITH_CESIUM_NATIVE)
   # CesiumGltfWriter to re-serialize converted models (b3dm/i3dm) to glb.
   target_link_libraries(tiles_renderer PUBLIC CesiumCurl CesiumGltfWriter)
   target_compile_definitions(tiles_renderer PRIVATE TILES_WITH_CESIUM_NATIVE)
+  # P19-hotfix: src/tileset.cpp includes <glm/...> directly (since P7), but
+  # glm only reaches us transitively via cesium-native's glm::glm (through
+  # CesiumUtility PUBLIC). That propagation proved unreliable: the vcpkg
+  # include dir lands on our compile line on Linux, but was missing on
+  # Windows/Android/iOS/WASM CI (C1083 / 'glm/gtc/matrix_transform.hpp'
+  # file not found), breaking all four. Resolve the headers explicitly from
+  # cesium-native's vcpkg tree instead of relying on the transitive link.
+  # PRIVATE: our public headers never mention glm.
+  if(NOT TILES_GLM_INCLUDE_DIR)
+    # ezvcpkg home: $HOME on Unix, %USERPROFILE% on Windows (GitHub Actions
+    # sets HOME too, but don't rely on it).
+    set(_tiles_ezvcpkg_homes "$ENV{HOME}")
+    if(WIN32 AND DEFINED ENV{USERPROFILE})
+      list(APPEND _tiles_ezvcpkg_homes "$ENV{USERPROFILE}")
+    endif()
+    foreach(_tiles_home IN LISTS _tiles_ezvcpkg_homes)
+      file(GLOB _tiles_glm_headers "${_tiles_home}/.ezvcpkg/*/installed/*/include/glm/glm.hpp")
+      if(_tiles_glm_headers)
+        break()
+      endif()
+    endforeach()
+    if(_tiles_glm_headers)
+      list(GET _tiles_glm_headers 0 _tiles_glm_hpp)
+      get_filename_component(_tiles_glm_dir "${_tiles_glm_hpp}" DIRECTORY)
+      get_filename_component(TILES_GLM_INCLUDE_DIR "${_tiles_glm_dir}" DIRECTORY)
+      message(STATUS "[P19-hotfix] using glm headers: ${TILES_GLM_INCLUDE_DIR}")
+    else()
+      message(WARNING "[P19-hotfix] glm headers not found under $ENV{HOME}/.ezvcpkg — "
+        "relying on transitive glm::glm (known-broken on non-Linux CI)")
+    endif()
+    unset(_tiles_glm_headers)
+    unset(_tiles_glm_hpp)
+    unset(_tiles_glm_dir)
+    unset(_tiles_ezvcpkg_homes)
+    unset(_tiles_home)
+  endif()
+  if(TILES_GLM_INCLUDE_DIR)
+    target_include_directories(tiles_renderer PRIVATE "${TILES_GLM_INCLUDE_DIR}")
+  endif()
 endif()
 
 # --- Filament: rendering. Goes into the SDK. ---

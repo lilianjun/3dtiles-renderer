@@ -67,7 +67,10 @@ TRAJECTORY_GOLDENS = [
 ]
 
 WIDTH, HEIGHT = 800, 600
-MAX_ALLOWED_FRAC = 0.001  # hard ceiling for the escape hatch
+MAX_ALLOWED_FRAC = 0.005  # hard ceiling for the escape hatch (0.5% = 2400 px
+# at 800x600; observed cross-Mesa variance peaks at 0.29%, see
+# tests/golden/README.md). A real regression (missing/wrong-colored box,
+# broken lighting) moves tens of thousands of pixels, so this still gates.
 
 
 def render_demo(demo, tileset_dir, out, frames):

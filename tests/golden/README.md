@@ -34,11 +34,15 @@ their phase tests, not here).
   bit-identical run to run on this stack (verified for all 11 entries at
   freeze time: same md5 across runs).
 - **CI escape hatch:** env `GOLDEN_MAX_DIFF_FRAC`, default 0, hard ceiling
-  0.001 (0.1%). Exists for GL stacks that are not bit-identical across
+  0.005 (0.5%). Exists for GL stacks that are not bit-identical across
   machines (mesa version / driver differences). Any nonzero diff is always
   printed with its exact pixel count — tolerance can never silently hide a
-  regression. CI does **not** set it today; it stays strict until a real
-  environment proves noisy.
+  regression. CI sets `GOLDEN_MAX_DIFF_FRAC=0.005` on the Linux job: the
+  first completed CI run after P11 (P18's) showed 25–1389 differing pixels
+  (max 0.29% on `p16_traj_f11`) against the dev machine's Mesa 25.2.8 —
+  deterministic edge-rasterization variance, same scenes bit-identical
+  locally. A real regression (missing box, wrong color, broken lighting)
+  moves tens of thousands of pixels, so 0.5% still gates.
 - Comparison is done by `tests/golden_test.py` (manifest + renderer +
   differ); it needs `Pillow` and `numpy`, same as the other screenshot
   tests.

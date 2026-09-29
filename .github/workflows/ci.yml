@@ -44,6 +44,13 @@ jobs:
       - name: Build
         run: cmake --build --preset linux -j"$(nproc)"
       - name: Test (headless, Mesa software GL)
+        # P19-hotfix: golden screenshots are bit-identical on one Mesa stack
+        # but CI runners ship a different Mesa — observed 25-1389 differing
+        # edge pixels (max 0.29%) vs the dev machine's baseline. The escape
+        # hatch tolerates cross-Mesa rasterization variance; real regressions
+        # still move tens of thousands of pixels. See tests/golden/README.md.
+        env:
+          GOLDEN_MAX_DIFF_FRAC: "0.005"
         run: xvfb-run -a ctest --preset linux --output-on-failure
       # P14: lock in P13's install packaging. Runs as steps in this job
       # (not a separate job) because the check needs the already-built
