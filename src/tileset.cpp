@@ -1066,15 +1066,18 @@ struct TilesetRenderer::Impl {
         // Keep an AsyncSystem handle: TilesetExternals takes a copy (it is a
         // shared-ownership wrapper), we keep ours for pumping main-thread
         // tasks every frame.
-        taskProcessor = std::make_shared<SimpleTaskProcessor>();
-        asyncSystem.emplace(taskProcessor);
+        // P22: build the replacement tileset with LOCAL state first and
+        // commit to members only after its root tile arrives. A failed load
+        // (bad URL, corrupt tileset.json, 30s timeout) must leave the
+        // currently-loaded tileset untouched — the old code replaced the
+        // members up front, so a failed second loadTileset() destroyed the
+        // working tileset and left loaded=true with tileset=nullptr.
+        auto newTaskProcessor = std::make_shared<SimpleTaskProcessor>();
+        auto newAsyncSystem =
+            std::make_optional<CesiumAsync::AsyncSystem>(newTaskProcessor);
         Cesium3DTilesSelection::TilesetExternals externals{
-            pAccessor, pPrepare, *asyncSystem,
+            pAccessor, pPrepare, *newAsyncSystem,
             std::make_shared<CesiumUtility::CreditSystem>()};
-        // Keep the prepare resources alive as long as the tileset: the
-        // Tileset only holds the shared_ptr from externals during
-        // construction, so retain our own copy too.
-        prepareResources = pPrepare;
 
         Cesium3DTilesSelection::TilesetOptions options;
         // P19: honor a host-set cache budget (default: cesium-native's
@@ -1084,25 +1087,39 @@ struct TilesetRenderer::Impl {
         if (maxCachedBytes > 0) {
             options.maximumCachedBytes = maxCachedBytes;
         }
-        tileset = std::make_unique<Cesium3DTilesSelection::Tileset>(
+        auto newTileset = std::make_unique<Cesium3DTilesSelection::Tileset>(
             externals, url, options);
         // Wait (bounded) for the root tile metadata so load() can report
         // success/failure honestly instead of always succeeding.
         const auto deadline =
             std::chrono::steady_clock::now() + std::chrono::seconds(30);
-        while (tileset->getRootTile() == nullptr &&
+        while (newTileset->getRootTile() == nullptr &&
                std::chrono::steady_clock::now() < deadline) {
-            asyncSystem->dispatchMainThreadTasks();
+            newAsyncSystem->dispatchMainThreadTasks();
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
-        if (tileset->getRootTile() == nullptr) {
+        if (newTileset->getRootTile() == nullptr) {
             lastError = "failed to load tileset (no root tile within 30s): " +
                         urlOrPath;
             std::cerr << "[tiles_renderer] loadTileset: " << lastError
                       << std::endl;
-            tileset.reset();
+            // newTileset (and its accessor/prepare/async state) dies here;
+            // the previous tileset, if any, is untouched and keeps
+            // rendering.
             return false;
         }
+        // Commit: replace the live state. Assigning `tileset` destroys the
+        // old Tileset, whose destructor unloads its tiles (free() removes
+        // their Filament scene nodes) while its externals still hold the
+        // old prepare resources alive — so the scene is clean before the
+        // new tileset's first updateViewGroup.
+        taskProcessor = std::move(newTaskProcessor);
+        asyncSystem = std::move(newAsyncSystem);
+        // Keep the prepare resources alive as long as the tileset: the
+        // Tileset only holds the shared_ptr from externals during
+        // construction, so retain our own copy too.
+        prepareResources = pPrepare;
+        tileset = std::move(newTileset);
         // P5 rebase: pick the tileset's world-space center as the local
         // origin so huge coordinates (e.g. ECEF) survive the float32 render
         // transform. For small local tilesets this is ~(0,0,0) = no-op.

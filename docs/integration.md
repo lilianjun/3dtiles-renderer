@@ -27,7 +27,10 @@ initialize(config)          // once, on the render thread
   URL. It blocks (bounded, ~30 s) until the root tile metadata arrives,
   so call it off the time-critical path or show a loading indicator.
   Loading a second tileset replaces the first; there is no separate
-  unload — `shutdown()` drops everything.
+  unload — `shutdown()` drops everything. Replacement is atomic: a
+  *failed* `loadTileset` changes nothing — the previously loaded tileset
+  (if any) keeps rendering, and `lastError()` explains the failure
+  (P22, ADR-0020).
 - `renderFrame` returns `false` when the swap chain isn't ready yet
   (e.g. right after a resize); the host should just retry next frame.
 - `readPixels` is for screenshots/debugging, not per-frame use.

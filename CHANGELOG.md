@@ -8,7 +8,27 @@ A = Android, i = iOS, wasm = WebAssembly.
 
 ## [Unreleased]
 
+### Fixed
+- `loadTileset` re-entry safety (P22, ADR-0020): a second `loadTileset()`
+  is now build-then-commit — the replacement tileset is fully loaded
+  (root tile arrived) before it replaces the live one. Previously
+  `Renderer::loadTileset` did `s.tileset.reset()` *before* the new load,
+  so ANY failed second load (even a missing file) destroyed the working
+  tileset and left the SDK rendering the clear color. Now a failed load
+  changes nothing: the current tileset keeps rendering, `lastError()`
+  explains the failure. Documented in `docs/integration.md` as a
+  guarantee. Demo gained `--switch-tileset PATH --switch-at-frame N`
+  (repeatable, test/dev only).
+
 ### Added
+- Tileset switch safety test (P22): new `tileset_switch` ctest
+  (`tests/tileset_switch_test.py`, 4 scenarios x 3 reps, ~20s) plus
+  `sanitizer_tileset_switch` (ASan/LSan/UBSan, no reports). Scenarios:
+  clean p3->p8 switch (end screenshot bit-identical to direct-p8 load,
+  selected IDs flip with no residue), failed-switch-then-retry (bad path
+  fails at the probe, p3 keeps rendering, retry with p8 succeeds),
+  reload-same-path (pixel-identical), switch-away mid slow-HTTP load
+  (3 tiles in flight at switch time, no crash).
 - ADD refinement + region bounding-volume verification (P21, ADR-0019):
   new `add_region` ctest (`tests/add_region_test.py`, ~3s, PASS over 3 runs)
   plus `sanitizer_add_region` (ASan/LSan/UBSan, no reports). ADD fixture

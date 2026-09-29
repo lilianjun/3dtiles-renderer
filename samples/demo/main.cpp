@@ -69,6 +69,13 @@ struct DemoArgs {
     // prints process RSS (KB) after init and after the last frame.
     std::int64_t cacheBudget = 0;
     bool printRss = false;
+    // P22: mid-run tileset switching (test/dev only). Each --switch-tileset
+    // PATH appends a switch; the matching --switch-at-frame N (logical
+    // rendered-frame index, same order) fires Renderer::loadTileset(PATH)
+    // before that frame. A failed switch is logged ([switch] ok=0 ...) and
+    // does NOT abort the run, so tests can assert the old tileset survives.
+    std::vector<std::string> switchTilesets;
+    std::vector<int> switchAtFrames;
 };
 
 bool parseArgs(int argc, char** argv, DemoArgs& out) {
@@ -124,6 +131,20 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             out.cacheBudget = std::stoll(value);
         } else if (arg == "--print-rss") {
             out.printRss = true;
+        } else if (arg == "--switch-tileset") {
+            std::string v;
+            if (!needValue("--switch-tileset", v)) return false;
+            out.switchTilesets.push_back(v);
+            out.switchAtFrames.push_back(-1); // must be set via --switch-at-frame
+        } else if (arg == "--switch-at-frame") {
+            std::string v;
+            if (!needValue("--switch-at-frame", v)) return false;
+            if (out.switchAtFrames.empty() || out.switchAtFrames.back() != -1) {
+                std::cerr << "[demo] --switch-at-frame needs a preceding "
+                             "--switch-tileset" << std::endl;
+                return false;
+            }
+            out.switchAtFrames.back() = std::stoi(v);
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "usage: tiles_demo [--frames N] [--width W] [--height H] "
                          "[--screenshot out.png] [--tileset path-or-url] "
@@ -132,7 +153,8 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
                          "[--print-selected] "
                          "[--until-loaded N] [--exit-on-loading] "
                          "[--zoom-out-on-loading] [--cache-budget BYTES] "
-                         "[--print-rss]"
+                         "[--print-rss] "
+                         "[--switch-tileset PATH --switch-at-frame N]..."
                       << std::endl;
             return false;
         } else {
@@ -143,6 +165,13 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
     if (out.frames < 1) out.frames = 1;
     if (out.width < 1) out.width = 1;
     if (out.height < 1) out.height = 1;
+    for (int f : out.switchAtFrames) {
+        if (f < 0) {
+            std::cerr << "[demo] every --switch-tileset needs a "
+                         "--switch-at-frame" << std::endl;
+            return false;
+        }
+    }
     return true;
 }
 
@@ -421,6 +450,22 @@ int main(int argc, char** argv) {
                     static_cast<float>(pose.yawDeg),
                     static_cast<float>(pose.pitchDeg),
                     static_cast<float>(pose.distance));
+            }
+            // P22: mid-run tileset switch. Fires before the frame's render
+            // so frame N is the first frame of the new tileset. Failures are
+            // logged, never fatal (the SDK keeps the old tileset).
+            for (size_t s = 0; s < args.switchTilesets.size(); ++s) {
+                if (args.switchAtFrames[s] == rendered) {
+                    const bool ok = tiles_renderer::Renderer::loadTileset(
+                        args.switchTilesets[s]);
+                    std::cout << "[switch] frame=" << rendered
+                              << " ok=" << (ok ? 1 : 0);
+                    if (!ok) {
+                        std::cout << " error="
+                                  << tiles_renderer::Renderer::lastError();
+                    }
+                    std::cout << std::endl;
+                }
             }
             if (tiles_renderer::Renderer::renderFrame()) {
                 if (!args.frameDir.empty() && !dumpFramePng(rendered)) {

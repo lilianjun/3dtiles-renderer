@@ -341,6 +341,23 @@ if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   endif()
 endif()
 
+# P22: loadTileset re-entry / switching safety. Four scenarios
+# (clean A->B switch with pixel proof, failed-switch-then-retry, reload
+# same path, switch away mid slow-HTTP load). Fast (<60s for 3 reps);
+# run 3x for stability during development.
+if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME tileset_switch
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_switch_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>")
+    set_tests_properties(tileset_switch PROPERTIES TIMEOUT 600)
+  else()
+    message(WARNING "[P22] Python3 not found — tileset_switch test skipped")
+  endif()
+endif()
+
 # P11: golden screenshot regression gate. Re-renders one representative
 # fixture per phase with fixed parameters and requires pixel equality
 # against the frozen goldens in tests/golden/ (see its README for the
@@ -519,6 +536,16 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
               --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
               --demo "$<TARGET_FILE:tiles_demo>")
     set_tests_properties(sanitizer_add_region PROPERTIES TIMEOUT 600)
+    # P22: tileset switching under ASan/LSan/UBSan — teardown paths
+    # (clean switch, failed-switch-then-retry, reload, mid-load abandon)
+    # with the core assertions.
+    add_test(NAME sanitizer_tileset_switch
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_switch_test.py"
+              --sanitized
+              --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
+              --demo "$<TARGET_FILE:tiles_demo>")
+    set_tests_properties(sanitizer_tileset_switch PROPERTIES TIMEOUT 900)
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"

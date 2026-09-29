@@ -500,14 +500,19 @@ bool Renderer::loadTileset(const std::string& tilesetUrl) {
         setLastError("loadTileset: engine not ready");
         return false;
     }
-    s.tileset.reset(); // drop any previously loaded tileset first
     auto tileset = std::make_unique<TilesetRenderer>(s.engine, s.scene);
     // P19: apply a budget set before load (no-op when never set).
     tileset->setMaxCachedBytes(g_pendingMaxCachedBytes);
+    // P22: build-then-commit. The new TilesetRenderer is fully loaded
+    // before it replaces the old one, so a failed loadTileset() (bad
+    // path, corrupt tileset.json, timeout) leaves the currently-loaded
+    // tileset untouched and rendering. The old code reset s.tileset up
+    // front, destroying the working tileset even when the new load failed.
     if (!tileset->load(tilesetUrl)) {
         setLastError("loadTileset: " + tileset->lastError());
         return false;
     }
+    s.tileset.reset(); // drop the previous tileset only on success
     s.tileset = std::move(tileset);
     return true;
 #else
