@@ -33,7 +33,7 @@ jobs:
             libxcursor-dev libxi-dev libxinerama-dev libxss-dev libxtst-dev \
             libc++-dev libc++abi-dev
       - name: Install Pillow (screenshot pixel assertions)
-        run: pip3 install --user pillow
+        run: pip3 install --user pillow numpy
       - name: Configure
         run: >
           cmake --preset linux
@@ -63,7 +63,7 @@ jobs:
             libxcursor-dev libxi-dev libxinerama-dev libxss-dev libxtst-dev \
             libc++-dev libc++abi-dev
       - name: Install Pillow (screenshot pixel assertions)
-        run: pip3 install --user pillow
+        run: pip3 install --user pillow numpy
       - name: Configure
         run: cmake --preset linux-asan
       - name: Build
