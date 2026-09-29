@@ -76,6 +76,18 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
               --out "${CMAKE_BINARY_DIR}/screenshots/p5_http.png"
               --frames 60 --width 800 --height 600)
     set_tests_properties(http_tileset_screenshot PROPERTIES TIMEOUT 900)
+    if(TILES_SANITIZE)
+      # The linux-asan preset instruments the demo binary itself, so this
+      # plain test also runs under LSan. Apply the same third-party
+      # suppressions the sanitizer_* scenarios use (tests/lsan.supp):
+      # without it, the documented cesium-native CurlAssetAccessor
+      # handle-cache leak (ADR-0007, Entry 1) fails this test. Pre-existing
+      # harness gap found while validating P8; the leak is third-party,
+      # not ours. Only the HTTP test needs this — no other plain test
+      # touches libcurl.
+      set_tests_properties(http_tileset_screenshot PROPERTIES
+        ENVIRONMENT "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp")
+    endif()
 
     # Gap 2 — b3dm: child_a is a real b3dm (BATCH_LENGTH=1); the converter
     # path (b3dm -> CesiumGltf::Model -> glb -> gltfio) must render orange.
@@ -123,6 +135,32 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
     set_tests_properties(i3dm_tileset_screenshot PROPERTIES TIMEOUT 1200)
   else()
     message(WARNING "[P7] Python3 not found — i3dm screenshot test skipped")
+  endif()
+endif()
+
+# P8: pnts (Point Cloud) real support — 420-point color cloud, 60000-point
+# stress, tile-transform rebase, and RTC_CENTER, all with headless pixel
+# assertions. No SDK code change was needed: Filament v1.77's gltfio +
+# ubershader render POINTS primitives natively (1 px per point, exact
+# sRGB colors), and the SDK's generic converted-model path (P5 RTC
+# extraction + P7 multi-buffer merge) already covers pnts.
+if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME pnts_tileset_screenshot
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/pnts_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --out "${CMAKE_BINARY_DIR}/screenshots/p8_pnts_main.png"
+              --many-out "${CMAKE_BINARY_DIR}/screenshots/p8_pnts_many.png"
+              --rebase-near-out "${CMAKE_BINARY_DIR}/screenshots/p8_pnts_rebase_near.png"
+              --rebase-far-out "${CMAKE_BINARY_DIR}/screenshots/p8_pnts_rebase_far.png"
+              --rtc-out "${CMAKE_BINARY_DIR}/screenshots/p8_pnts_rtc.png"
+              --rtc-ref-out "${CMAKE_BINARY_DIR}/screenshots/p8_pnts_rtc_ref.png"
+              --frames 60 --width 800 --height 600)
+    set_tests_properties(pnts_tileset_screenshot PROPERTIES TIMEOUT 1200)
+  else()
+    message(WARNING "[P8] Python3 not found — pnts screenshot test skipped")
   endif()
 endif()
 
@@ -187,6 +225,12 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
       COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
               --frames 60
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p7_i3dm_tileset/tileset.json")
+    # P8 scene: pnts conversion path (POINTS primitive, native Filament
+    # points rendering; 60000-point cloud for the sanitizer build).
+    add_test(NAME sanitizer_pnts
+      COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
+              --frames 60
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p8_pnts_many/tileset.json")
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"
@@ -206,7 +250,7 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
     endif()
     set_tests_properties(
       sanitizer_demo sanitizer_tileset sanitizer_b3dm sanitizer_i3dm
-      sanitizer_http
+      sanitizer_pnts sanitizer_http
       sanitizer_faults
       PROPERTIES TIMEOUT 900)
   else()

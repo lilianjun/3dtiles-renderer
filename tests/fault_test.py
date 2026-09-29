@@ -9,6 +9,10 @@ Driven through tiles_demo; the exit-code contract is:
   E. i3dm with wrong magic    -> exit 0 (bad tile skipped, no crash)
   F. i3dm INSTANCES_LENGTH past the POSITION data
                               -> exit 0 (bad tile skipped, no crash)
+  G. truncated pnts            -> exit 0 (bad tile skipped, no crash)
+  H. pnts with wrong magic    -> exit 0 (bad tile skipped, no crash)
+  I. pnts POINTS_LENGTH past the POSITION/RGB data
+                              -> exit 0 (bad tile skipped, no crash)
 
 A crash (segfault/abort, e.g. exit -11/-6) fails the test. When the demo
 binary was built with -DTILES_SANITIZE=ON, wrap this script in
@@ -180,6 +184,62 @@ def main():
             failures += 1
         else:
             print("PASS: case %s (corrupt i3dm skipped, no crash)" % case)
+
+    # P8 cases G/H/I: corrupt pnts tile content. Same contract as case C:
+    # the bad tile is skipped, the demo exits 0, no crash.
+    print("=== cases G/H/I: corrupt pnts tile content ===")
+    pnts_dir = os.path.join(workdir, "corrupt_pnts")
+    shutil.rmtree(pnts_dir, ignore_errors=True)
+    os.makedirs(pnts_dir)
+    with open(os.path.join(HERE, "data", "p8_pnts_cloud",
+                           "cloud.pnts"), "rb") as f:
+        good_pnts = f.read()
+    # G: truncated mid-header (pnts header is 28 bytes).
+    with open(os.path.join(pnts_dir, "tile.pnts"), "wb") as f:
+        f.write(good_pnts[:20])
+    # H: wrong magic.
+    with open(os.path.join(pnts_dir, "tile_h.pnts"), "wb") as f:
+        f.write(b"xxxx" + good_pnts[4:])
+    # I: POINTS_LENGTH larger than the POSITION/RGB data (reads past end).
+    # NOTE: no padding assertion needed here: the P8 fixture's RGB data
+    # ends exactly at the feature-table binary end (byteOffset == POINTS*12
+    # already 4-aligned for 420 points), so doubling POINTS_LENGTH keeps the
+    # JSON at the same length.
+    ft_len = _struct.unpack("<I", good_pnts[12:16])[0]
+    ft = _json.loads(good_pnts[28:28 + ft_len].decode("utf-8"))
+    ft["POINTS_LENGTH"] = ft["POINTS_LENGTH"] * 2
+    new_ft = _json.dumps(ft, separators=(",", ":")).encode("utf-8")
+    new_ft += b" " * ((4 - len(new_ft) % 4) % 4)
+    assert len(new_ft) == ft_len, "feature-table padding changed"
+    with open(os.path.join(pnts_dir, "tile_i.pnts"), "wb") as f:
+        f.write(good_pnts[:28] + new_ft + good_pnts[28 + ft_len:])
+    for case, uri in (("G", "tile.pnts"), ("H", "tile_h.pnts"),
+                      ("I", "tile_i.pnts")):
+        ts_path = os.path.join(pnts_dir, "tileset_%s.json" % case)
+        with open(ts_path, "w") as f:
+            _json.dump({
+                "asset": {"version": "1.0"},
+                "root": {
+                    "boundingVolume": {
+                        "box": [0, 0, 0, 5, 0, 0, 0, 5, 0, 0, 0, 5]},
+                    "geometricError": 0.0,
+                    "content": {"uri": uri},
+                },
+            }, f)
+        shot = os.path.join(workdir, "corrupt_pnts_%s.png" % case)
+        rc = run_demo(args.demo, ["--frames", "30", "--tileset", ts_path,
+                                  "--screenshot", shot])
+        if rc is None:
+            failures += 1
+        elif crashed(rc):
+            print("FAIL: case %s crashed (exit %d)" % (case, rc))
+            failures += 1
+        elif rc != 0:
+            print("FAIL: case %s: expected exit 0 (bad tile skipped), "
+                  "got %d" % (case, rc))
+            failures += 1
+        else:
+            print("PASS: case %s (corrupt pnts skipped, no crash)" % case)
 
     if failures:
         print("FAIL: fault_test (%d case(s) failed)" % failures)

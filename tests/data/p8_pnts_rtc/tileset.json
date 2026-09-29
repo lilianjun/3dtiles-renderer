@@ -1,0 +1,28 @@
+{
+  "asset": {
+    "version": "1.0"
+  },
+  "geometricError": 200.0,
+  "root": {
+    "boundingVolume": {
+      "box": [
+        1210000.0,
+        -4736290.5,
+        4081600.0,
+        5,
+        0,
+        0,
+        0,
+        5,
+        0,
+        0,
+        0,
+        5
+      ]
+    },
+    "geometricError": 0.0,
+    "content": {
+      "uri": "cloud.pnts"
+    }
+  }
+}

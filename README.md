@@ -149,8 +149,9 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
   `far` tileset 验证：rebase 后与 `near` 的橙色质心偏差 ≤ 25 px。
   （这是通用 local-origin rebase，不是严格旋转 ENU 基；详见 ADR-0005。）
 
-> **边界（诚实说明）**：i3dm 见 P7（ADR-0008）；代理/证书走系统默认；
-> rebase 不是完整 ENU 姿态变换。详见 ADR-0005、ADR-0008。
+> **边界（诚实说明）**：i3dm 见 P7（ADR-0008）；pnts 见 P8（ADR-0009）；
+> 代理/证书走系统默认；rebase 不是完整 ENU 姿态变换。
+> 详见 ADR-0005、ADR-0008、ADR-0009。
 
 ### P6：内存与资源健壮性（见 ADR-0007）
 
@@ -221,6 +222,14 @@ cesium-native `CurlAssetAccessor` 的 handle 缓存泄漏），自有代码泄�
   256 实例不崩、rebase near/far 与 RTC/reference 截图 bit-identical；
   故障注入加截断/坏 magic/INSTANCES_LENGTH 越界 i3dm 优雅失败—— ✅ 已完成
   （sanitizer 7/7、普通 10/10，SDK 零 SDL；见 ADR-0008）
+- **P8 pnts 真实支持**：cesium-native `PntsToGltfConverter` 产出 POINTS
+  primitive，Filament v1.77 gltfio + ubershader **原生渲染点云**——无需
+  SDK 代码改动（P5 的 RTC 提取 + P7 的多 buffer 合并已覆盖；upAxisFix
+  仅对 `EXT_mesh_gpu_instancing` 生效）；每点恰好 1 像素、颜色精确；
+  `pnts_tileset_screenshot` 断言 420 点三色像素数、60000 点不崩、
+  rebase near/far 与 RTC/reference 截图 bit-identical；
+  故障注入加截断/坏 magic/POINTS_LENGTH 越界 pnts 优雅失败—— ✅ 已完成
+  （sanitizer 19/19、普通 11/11，SDK 零 SDL；见 ADR-0009）
 
 ## AI 协作
 
