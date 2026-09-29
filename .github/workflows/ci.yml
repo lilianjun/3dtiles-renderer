@@ -18,8 +18,9 @@ jobs:
         run: cmake --build --preset linux
       - name: Test
         run: ctest --preset linux --output-on-failure
-      - name: Run binary
-        run: ./build/linux/tiles_renderer
+      # NOTE: with zero-dep defaults there is no runnable app binary;
+      # the SDL demo (tiles_demo) only exists with -DTILES_WITH_SDL3=ON.
+      # ctest's smoke test already exercises a built binary.
 
   # -------------------------------------------------------------- windows
   windows:
@@ -31,8 +32,7 @@ jobs:
         run: cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64 -DTILES_PLATFORM=windows
       - name: Build
         run: cmake --build build/windows --config Release
-      - name: Run binary
-        run: ./build/windows/Release/tiles_renderer.exe
+      # NOTE: no runnable app binary in zero-dep defaults (see linux job).
 
   # -------------------------------------------------------------- android
   # P0: validates that the android preset configures with the NDK present.

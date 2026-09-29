@@ -1,35 +1,62 @@
 # 3dtiles-renderer
 
-跨平台 C++ 3D Tiles 渲染器：一次编码，随处运行 —— Windows / Android / iOS / WebAssembly。
+跨平台 C++ 3D Tiles 渲染器 **SDK**：一次编码，随处运行 —— Windows / Android / iOS / WebAssembly。
 
-> 当前阶段：**P0 仓库骨架**（可编译、可测试的空壳）。渲染器主体在 P1 起逐步接入。
+> 当前阶段：**P1 依赖接入**（SDK 静态库 + SDL 示例程序）。渲染器主体在 P2 起逐步实现。
+
+## 架构（ADR-0003）
+
+最终交付物是 **SDK**，不是独立 App：
+
+- **`tiles_renderer`（静态库 SDK）**：对外 API 只接受平台原生窗口句柄
+  （HWND / `ANativeWindow*` / `UIView*` / canvas selector / X11 `Window`…）+ 宽高，
+  负责渲染（Filament）与 3D Tiles 加载/调度（cesium-native）。**零 SDL 依赖。**
+- **`tiles_demo`（SDL3 示例程序）**：用 SDL3 建窗口、收输入，提取原生句柄后调用 SDK；
+  是宿主 App 的参考集成，用于四平台验证。
+
+决策依据见 [docs/adr/0003-sdk-no-sdl.md](docs/adr/0003-sdk-no-sdl.md)。
 
 ## 技术栈
 
-| 分层 | 选型 | 说明 |
-|---|---|---|
-| 3D Tiles 加载 / 调度 / LOD | [cesium-native](https://github.com/CesiumGS/cesium-native) | Cesium 官方 C++ 库，不重复造轮子 |
-| 渲染 | [Filament](https://github.com/google/filament) | Google PBR 渲染器，支持 Vulkan / Metal / OpenGL / WebGL |
-| 窗口 / 输入 | [SDL3](https://github.com/libsdl-org/SDL) | 四平台窗口与输入抽象 |
-| 语言 | C++20 | |
-| 构建 | CMake ≥ 3.21 + Presets | 依赖经 `FetchContent` 声明 |
+| 分层 | 选型 | 锁定版本（P1） | 接入方式 |
+|---|---|---|---|
+| 3D Tiles 加载 / 调度 / LOD | [cesium-native](https://github.com/CesiumGS/cesium-native) | `v0.64.0` | FetchContent 源码构建（ezvcpkg 自动构建其第三方 port） |
+| 渲染 | [Filament](https://github.com/google/filament) | `v1.77.0` | 官方预构建二进制包（Linux；其余平台 P2 接线） |
+| 窗口 / 输入（仅 demo/测试） | [SDL3](https://github.com/libsdl-org/SDL) | `release-3.4.16` | FetchContent 源码构建；**不进 SDK**（ADR-0003） |
+| 语言 | C++20 | | |
+| 构建 | CMake ≥ 3.21 + Presets | | 依赖经 `FetchContent` 声明，tag 锁定 |
 
-选型依据见 [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md)。
+选型依据见 [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md)，
+工具链与版本锁定见 [docs/adr/0002-toolchain.md](docs/adr/0002-toolchain.md)。
 
 ## 目录结构
 
 ```
 3dtiles-renderer/
-├── src/                 # 入口与实现（P0: main.cpp 桩）
-├── include/tiles_renderer/  # 公共头文件（P0: version.h.in）
-├── tests/               # 测试（P0: smoke 桩；P1+ 按模块加单测）
-├── docs/adr/            # 架构决策记录
-├── .github/workflows/   # CI：四平台构建矩阵
+├── src/                     # SDK 实现（renderer.cpp）
+├── include/tiles_renderer/  # SDK 公共头文件（renderer.h、version.h.in）
+├── samples/demo/            # SDL3 示例程序（参考集成，四平台验证用）
+├── tests/                   # 测试（smoke；P2+ 按模块加单测）
+├── docs/adr/                # 架构决策记录
+├── .github/workflows/       # CI：四平台构建矩阵
 ├── CMakeLists.txt
-└── CMakePresets.json    # linux / windows / android / ios / wasm
+└── CMakePresets.json        # linux / windows / android / ios / wasm
 ```
 
 ## 构建
+
+### 开发工具链（P1 已搭建，见 docs/adr/0002-toolchain.md）
+
+```bash
+source ~/toolchains/env.sh   # ninja 1.12.1 / clang 23.1.2 / emcc 6.0.10 / NDK r27d / VCPKG_DISABLE_METRICS=1
+```
+
+| 工具 | 版本 | 位置 |
+|---|---|---|
+| Ninja | 1.12.1 | `~/toolchains/bin` |
+| LLVM / Clang | 23.1.2 | `~/toolchains/llvm` |
+| Emscripten SDK | 6.0.10 | `~/toolchains/emsdk` |
+| Android NDK | r27d | `~/toolchains/android-ndk-r27d`（`ANDROID_NDK_HOME`） |
 
 ### 前置要求
 
@@ -46,8 +73,7 @@
 ```bash
 cmake --preset linux
 cmake --build --preset linux
-./build/linux/tiles_renderer
-ctest --preset linux
+ctest --preset linux       # smoke 测试链接 SDK 静态库并运行
 ```
 
 ### 其他平台
@@ -62,16 +88,27 @@ cmake --preset wasm      # 需 emcc；缺失时给出警告并以降级桩配置
 > P0 策略：SDK 缺失时**只警告、不硬失败**，保证任何机器都能 configure 成功。
 > 真正的交叉工具链在 P1 接入（见路线图）。
 
-### 打开第三方依赖（P1 用，P0 默认关闭）
+### 打开第三方依赖（P1 已接入，默认仍关闭以保持零下载可配置）
 
 ```bash
+source ~/toolchains/env.sh   # 必须：禁用 vcpkg 遥测，否则 configure 会被拦截
 cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON
+cmake --build --preset linux -j2   # 2 核机器请用 -j2
+./build/linux/tiles_demo           # SDL3 建窗口 → 取原生句柄 → 调 SDK（无头机走 dummy 驱动，跳过 SDK init）
+ctest --preset linux               # smoke + demo_runs
 ```
+
+> 首次全依赖 configure 会触发 vcpkg 构建 cesium-native 的约 15 个第三方 port，
+> 在 2 核机器上需要数十分钟，请耐心等待。SDL3 在无头机器上默认以
+> `SDL_UNIX_CONSOLE_BUILD` 构建（无 X11/Wayland 依赖）；桌面开发可用
+> `-DTILES_SDL3_NATIVE_VIDEO=ON` 打开原生视频后端。
 
 ## 路线图
 
-- **P0 仓库骨架**（本阶段）：CMake 四平台 presets、CI 矩阵、ADR、空壳 main + smoke 测试 —— ✅ 进行中
-- **P1 依赖接入**：FetchContent 真正拉取 cesium-native / Filament / SDL3 并链接；SDL3 空窗口能跑
+- **P0 仓库骨架**：CMake 四平台 presets、CI 矩阵、ADR、空壳 main + smoke 测试 —— ✅ 已完成
+- **P1 依赖接入**：SDK 拆分为静态库（cesium-native + Filament，零 SDL 依赖）与
+  SDL3 示例程序（`tiles_demo`）；SDL3 只进 demo 与测试 —— ✅ 已完成
+  （本机 linux 全依赖构建 + 测试通过；见 ADR-0003）
 - **P2 渲染器**：Filament PBR 管线，渲染首个 glTF 模型
 - **P3 LOD 调度**：cesium-native tileset.json 加载、视锥裁剪、瓦片缓存
 - **P4 移动端**：Android / iOS 真机优化、触摸输入
