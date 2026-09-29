@@ -146,6 +146,14 @@ public:
     // devices (mobile) should set this to fit their budget.
     static void setMaxCachedBytes(std::int64_t bytes);
 
+    // P20: ID strings of the tiles chosen for rendering by the most recent
+    // renderFrame() (ViewUpdateResult::tilesToRenderThisFrame, via
+    // cesium-native TileIdUtilities::createTileIdString). Diagnostic for
+    // frustum-culling / LOD tests and host debugging; the string format is
+    // cesium-native's and not contractual. Empty when no tileset is loaded.
+    // Must be called on the render thread, like tileStats().
+    static std::vector<std::string> selectedTileIds();
+
     static void shutdown();
 
     static const char* version();

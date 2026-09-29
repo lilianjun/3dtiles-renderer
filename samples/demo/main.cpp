@@ -52,6 +52,7 @@ struct DemoArgs {
                             // before the trajectory starts (lets async tile
                             // loading settle; not dumped, not counted)
     bool stats = false;     // P17: print per-frame TileStats to stdout
+    bool printSelected = false; // P20: print per-frame selected tile IDs
     // P18: weak-network test hooks (dev/test only, not for production use).
     // --until-loaded N renders up to N frames but stops early once the
     // tileset has settled (loading == 0 && loaded > 0 for 20 consecutive
@@ -107,6 +108,8 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             out.warmup = std::stoi(value);
         } else if (arg == "--stats") {
             out.stats = true;
+        } else if (arg == "--print-selected") {
+            out.printSelected = true;
         } else if (arg == "--until-loaded") {
             if (!needValue("--until-loaded", value)) return false;
             out.untilLoaded = std::stoi(value);
@@ -126,6 +129,7 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
                          "[--screenshot out.png] [--tileset path-or-url] "
                          "[--no-tileset] [--trajectory keys.csv] "
                          "[--frame-dir dir] [--warmup N] [--stats] "
+                         "[--print-selected] "
                          "[--until-loaded N] [--exit-on-loading] "
                          "[--zoom-out-on-loading] [--cache-budget BYTES] "
                          "[--print-rss]"
@@ -473,6 +477,18 @@ int main(int argc, char** argv) {
                               << " loaded=" << st.tilesLoaded
                               << " failed=" << st.tilesFailed
                               << " bytes=" << st.bytesLoaded << std::endl;
+                }
+                if (args.printSelected) {
+                    // P20: per-frame selected tile IDs (frustum/LOD tests).
+                    // Format: [selected] frame=N ids=<id1>,<id2>,...
+                    const auto ids =
+                        tiles_renderer::Renderer::selectedTileIds();
+                    std::cout << "[selected] frame=" << rendered << " ids=";
+                    for (size_t i = 0; i < ids.size(); ++i) {
+                        if (i > 0) std::cout << ",";
+                        std::cout << ids[i];
+                    }
+                    std::cout << std::endl;
                 }
                 ++rendered;
                 if (stopEarly) {

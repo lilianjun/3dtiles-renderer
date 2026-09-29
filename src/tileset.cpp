@@ -13,6 +13,7 @@
 #include <Cesium3DTilesSelection/IPrepareRendererResources.h>
 #include <Cesium3DTilesSelection/Tile.h>
 #include <Cesium3DTilesSelection/TileContent.h>
+#include <Cesium3DTilesSelection/TileID.h>
 #include <Cesium3DTilesSelection/Tileset.h>
 #include <Cesium3DTilesSelection/TilesetExternals.h>
 #include <Cesium3DTilesSelection/TilesetOptions.h>
@@ -1194,6 +1195,14 @@ struct TilesetRenderer::Impl {
             static_cast<int>(viewResult.tilesToRenderThisFrame.size());
         lastWorkerQueue = viewResult.workerThreadTileLoadQueueLength;
         lastMainQueue = viewResult.mainThreadTileLoadQueueLength;
+        // P20: per-tile identity of the render selection (diagnostic).
+        lastSelectedIds.clear();
+        lastSelectedIds.reserve(viewResult.tilesToRenderThisFrame.size());
+        for (const auto& pTile : viewResult.tilesToRenderThisFrame) {
+            lastSelectedIds.push_back(
+                Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
+                    pTile->getTileID()));
+        }
 
         // Use the traversal's explicit render selection to drive Scene
         // visibility (not tile.isRenderable(), which is true for every loaded
@@ -1268,6 +1277,9 @@ struct TilesetRenderer::Impl {
     int lastSelected = -1;
     std::int32_t lastWorkerQueue = -1;
     std::int32_t lastMainQueue = -1;
+    // P20: ID strings of tilesToRenderThisFrame from the last traversal
+    // (via TileIdUtilities::createTileIdString), for frustum/LOD tests.
+    std::vector<std::string> lastSelectedIds;
     // P12: why the last loadTileset() failed (empty when it succeeded).
     std::string lastError;
     // P5 rebase origin (world coordinates, double). Tile selection
@@ -1392,6 +1404,17 @@ Renderer::TileStats TilesetRenderer::tileStats() const {
     return stats;
 #else
     return Renderer::TileStats{};
+#endif
+}
+
+std::vector<std::string> TilesetRenderer::selectedTileIds() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    if (!_impl->loaded || _impl->tileset == nullptr) {
+        return {};
+    }
+    return _impl->lastSelectedIds;
+#else
+    return {};
 #endif
 }
 

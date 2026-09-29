@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "tiles_renderer/renderer.h" // P17: TileStats
 
@@ -66,6 +67,10 @@ public:
     // P17: streaming diagnostics snapshot (see renderer.h TileStats).
     // All fields are -1 when no tileset is loaded.
     Renderer::TileStats tileStats() const;
+
+    // P20: ID strings of tilesToRenderThisFrame from the last update()
+    // (diagnostic for frustum/LOD tests). Empty when no tileset is loaded.
+    std::vector<std::string> selectedTileIds() const;
 
     // P19: tile cache budget in bytes. Applies to the next loadTileset()
     // (via TilesetOptions) and live to an already-loaded tileset (via

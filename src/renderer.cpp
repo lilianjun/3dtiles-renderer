@@ -608,6 +608,20 @@ Renderer::TileStats Renderer::tileStats() {
 #endif
 }
 
+std::vector<std::string> Renderer::selectedTileIds() {
+    if (!g_initialized) {
+        return {};
+    }
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset == nullptr) {
+        return {};
+    }
+    return g_state.tileset->selectedTileIds();
+#else
+    return {};
+#endif
+}
+
 const char* Renderer::version() {
     return TILES_RENDERER_VERSION;
 }

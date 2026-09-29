@@ -9,6 +9,25 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- Frustum culling + LOD refinement verification (P20, ADR-0018):
+  `Renderer::selectedTileIds()` (render thread; ID strings of the last
+  traversal's `tilesToRenderThisFrame` via cesium-native
+  `TileIdUtilities::createTileIdString`; diagnostic, format not contractual),
+  demo `--print-selected`, ground-plane frustum fixture
+  `tests/data/p20_frustum_tileset/` (16 REPLACE children on a 512x512 slab,
+  Y-up horizontal — a Z-up "wall" fixture can't show set flips with the
+  orbit camera, which always looks at its target), tiny REPLACE LOD fixture
+  `tests/data/p20_lod_tileset/` (root ge=20 + 4 children ge=0), and new
+  `frustum_lod` ctest (`tests/frustum_lod_test.py`, <2s, bit-identical over
+  3 runs): yaw~0 vs yaw~180 select different tile sets (corner tiles flip,
+  Jaccard=0.50, max selected 13 << 17); FAR->NEAR->FAR proves REPLACE
+  (NEAR selects exactly the 4 children, root absent; loaded 2->6; FAR2 falls
+  back to root with loaded cached at 6); plus `sanitizer_frustum_lod`
+  (ASan/LSan/UBSan via `tests/run_sanitized.py`, no reports). Upstream
+  notes: cesium-native creates an empty-ID wrapper root tile above the JSON
+  root (its refine inherits the JSON root's; REPLACE drops it from the
+  render selection, ADD keeps it) — `tilesLoaded` counts it, which is why
+  the LOD fixture shows loaded=2 at FAR, not 1.
 - Camera-roam memory boundedness (P19, ADR-0017):
   `Renderer::setMaxCachedBytes()` (render thread; applies to next
   `loadTileset()` and live-mutates a loaded tileset; `<=0` restores the

@@ -307,6 +307,22 @@ if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   endif()
 endif()
 
+# P20: frustum culling + LOD refinement. Two-part test (ground-plane fixture
+# for per-tile frustum set flips; tiny REPLACE fixture for parent->child
+# selection switching). Fast (<5s); run 3x for stability during development.
+if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME frustum_lod
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/frustum_lod_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>")
+    set_tests_properties(frustum_lod PROPERTIES TIMEOUT 300)
+  else()
+    message(WARNING "[P20] Python3 not found — frustum_lod test skipped")
+  endif()
+endif()
+
 # P11: golden screenshot regression gate. Re-renders one representative
 # fixture per phase with fixed parameters and requires pixel equality
 # against the frozen goldens in tests/golden/ (see its README for the
@@ -465,6 +481,16 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
               --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
               --demo "$<TARGET_FILE:tiles_demo>")
     set_tests_properties(sanitizer_memory_roam PROPERTIES TIMEOUT 900)
+    # P20: frustum culling + LOD refinement under ASan/LSan/UBSan — shorter
+    # runs gating on sanitizer reports plus the core assertions (count-based
+    # culling for frustum, REPLACE child-selection for LOD).
+    add_test(NAME sanitizer_frustum_lod
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/frustum_lod_test.py"
+              --sanitized
+              --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
+              --demo "$<TARGET_FILE:tiles_demo>")
+    set_tests_properties(sanitizer_frustum_lod PROPERTIES TIMEOUT 600)
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"

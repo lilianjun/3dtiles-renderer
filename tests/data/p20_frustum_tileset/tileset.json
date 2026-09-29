@@ -1,0 +1,383 @@
+{
+  "asset": {
+    "version": "1.0"
+  },
+  "geometricError": 400.0,
+  "root": {
+    "boundingVolume": {
+      "box": [
+        0,
+        0,
+        0,
+        256.0,
+        0,
+        0,
+        0,
+        5,
+        0,
+        0,
+        0,
+        256.0
+      ]
+    },
+    "geometricError": 200,
+    "refine": "REPLACE",
+    "content": {
+      "uri": "root.glb"
+    },
+    "children": [
+      {
+        "boundingVolume": {
+          "box": [
+            -192.0,
+            0,
+            -192.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_0_0.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            -192.0,
+            0,
+            -64.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_0_1.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            -192.0,
+            0,
+            64.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_0_2.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            -192.0,
+            0,
+            192.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_0_3.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            -64.0,
+            0,
+            -192.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_1_0.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            -64.0,
+            0,
+            -64.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_1_1.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            -64.0,
+            0,
+            64.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_1_2.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            -64.0,
+            0,
+            192.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_1_3.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            64.0,
+            0,
+            -192.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_2_0.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            64.0,
+            0,
+            -64.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_2_1.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            64.0,
+            0,
+            64.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_2_2.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            64.0,
+            0,
+            192.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_2_3.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            192.0,
+            0,
+            -192.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_3_0.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            192.0,
+            0,
+            -64.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_3_1.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            192.0,
+            0,
+            64.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_3_2.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            192.0,
+            0,
+            192.0,
+            64.0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0,
+            64.0
+          ]
+        },
+        "geometricError": 0,
+        "content": {
+          "uri": "tile_3_3.glb"
+        }
+      }
+    ]
+  }
+}
