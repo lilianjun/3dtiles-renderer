@@ -46,6 +46,31 @@ jobs:
       - name: Test (headless, Mesa software GL)
         run: xvfb-run -a ctest --preset linux --output-on-failure
 
+  # -------------------------------------------------------- linux-asan
+  # P6: sanitizer gate — the same scenarios as the linux job, rebuilt with
+  # -fsanitize=address,undefined on our own targets only. Fails on any
+  # ASan/UBSan/LSan report. Runs as its own job so it doesn't slow the
+  # plain linux test job.
+  linux-asan:
+    name: Linux sanitizers (ASan+LSan+UBSan gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDL3 X11 video deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxext-dev libxrandr-dev \
+            libxcursor-dev libxi-dev libxinerama-dev libxss-dev libxtst-dev \
+            libc++-dev libc++abi-dev
+      - name: Install Pillow (screenshot pixel assertions)
+        run: pip3 install --user pillow
+      - name: Configure
+        run: cmake --preset linux-asan
+      - name: Build
+        run: cmake --build --preset linux-asan -j"$(nproc)"
+      - name: Test (sanitized scenarios, headless)
+        run: xvfb-run -a ctest --preset linux-asan --output-on-failure
+
   # -------------------------------------------------------------- windows
   windows:
     name: Windows (MSVC + Filament)
