@@ -44,7 +44,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Tool versions
+        run: cmake --version
       - name: Configure
+        # No -G: the preset leaves the generator unset so CMake picks the
+        # newest installed Visual Studio (MinGW cannot link Filament's
+        # MSVC-built .lib files).
         run: cmake --preset windows -DTILES_WITH_FILAMENT=ON
       - name: Build
         run: cmake --build --preset windows --config Release

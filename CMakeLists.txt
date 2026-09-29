@@ -241,10 +241,13 @@ if(TILES_WITH_FILAMENT)
       set(_filament_libs filament backend filabridge filaflat
           utils geometry smol-v ibl gltfio_core uberarchive uberzlib image zstd)
       # iOS system frameworks pulled in by Filament's drivers/platform code.
+      # (OpenGLES: Engine::create()'s backend switch also pulls the GL
+      # driver utils into the link, same as GLESv3/EGL on Android.)
       set(_filament_syslibs
           "-framework Foundation" "-framework UIKit" "-framework Metal"
           "-framework CoreGraphics" "-framework CoreVideo"
-          "-framework QuartzCore" "-framework IOKit" "-framework CFNetwork")
+          "-framework QuartzCore" "-framework IOKit" "-framework CFNetwork"
+          "-framework OpenGLES")
     endif()
   elseif(TILES_PLATFORM STREQUAL "wasm")
     message(STATUS "[P4] No C++ Filament release for Web (official web package is filament.js only) — Filament disabled on wasm (stub SDK). See docs/adr/0006-platform-backends.md.")

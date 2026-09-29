@@ -43,10 +43,8 @@
       "cacheVariables": {
         "TILES_PLATFORM": "windows"
       },
-      "description": "Windows MSVC build. Filament's windows prebuilt (.lib) is MSVC-only; do not use MinGW.",
+      "description": "Windows MSVC build. Filament's windows prebuilt (.lib) is MSVC-only; do not use MinGW. The generator is intentionally unset so CMake picks the newest installed Visual Studio.",
       "displayName": "Windows (MSVC)",
-      "generator": "Visual Studio 17 2022",
-      "architecture": "x64",
       "name": "windows"
     },
     {
