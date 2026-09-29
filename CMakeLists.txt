@@ -60,6 +60,12 @@ endif()
 
 project(tiles_renderer VERSION 0.1.0 LANGUAGES CXX)
 
+# P4: Filament's windows prebuilt is built against the /MD runtime — our
+# targets must match it, otherwise LNK2038 (RuntimeLibrary mismatch).
+if(TILES_PLATFORM STREQUAL "windows" AND MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif()
+
 # ---------------------------------------------------------------------------
 # Dependency switches.
 # P0: OFF by default so configure/build works with zero downloads.
@@ -230,10 +236,12 @@ if(TILES_WITH_FILAMENT)
     else()
       set(_filament_pkg "filament-v${TILES_FILAMENT_VERSION}-ios.tgz")
       set(_filament_xcframework ON)
+      # NOTE: zstd lives in the xcframework too (no link_directories in this
+      # layout), so it goes through _filament_libs as a full path as well.
       set(_filament_libs filament backend filabridge filaflat
-          utils geometry smol-v ibl gltfio_core uberarchive uberzlib image)
+          utils geometry smol-v ibl gltfio_core uberarchive uberzlib image zstd)
       # iOS system frameworks pulled in by Filament's drivers/platform code.
-      set(_filament_syslibs zstd
+      set(_filament_syslibs
           "-framework Foundation" "-framework UIKit" "-framework Metal"
           "-framework CoreGraphics" "-framework CoreVideo"
           "-framework QuartzCore" "-framework IOKit" "-framework CFNetwork")

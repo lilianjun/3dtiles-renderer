@@ -43,9 +43,10 @@
       "cacheVariables": {
         "TILES_PLATFORM": "windows"
       },
-      "description": "Run on Windows with VS2022. On Windows, pass -G \"Visual Studio 17 2022\" via a local preset override (P1).",
-      "displayName": "Windows (native)",
-      "generator": "Unix Makefiles",
+      "description": "Windows MSVC build. Filament's windows prebuilt (.lib) is MSVC-only; do not use MinGW.",
+      "displayName": "Windows (MSVC)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
       "name": "windows"
     },
     {
