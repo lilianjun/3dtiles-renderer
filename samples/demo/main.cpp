@@ -33,6 +33,8 @@ struct DemoArgs {
     int width = 800;
     int height = 600;
     std::string screenshot; // empty = don't save
+    std::string tileset;    // empty = built-in small tileset next to the exe
+    bool noTileset = false; // P2 mode: render the fixed clear + triangle
 };
 
 bool parseArgs(int argc, char** argv, DemoArgs& out) {
@@ -58,9 +60,14 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             out.height = std::stoi(value);
         } else if (arg == "--screenshot") {
             if (!needValue("--screenshot", out.screenshot)) return false;
+        } else if (arg == "--tileset") {
+            if (!needValue("--tileset", out.tileset)) return false;
+        } else if (arg == "--no-tileset") {
+            out.noTileset = true;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "usage: tiles_demo [--frames N] [--width W] [--height H] "
-                         "[--screenshot out.png]"
+                         "[--screenshot out.png] [--tileset path-or-url] "
+                         "[--no-tileset]"
                       << std::endl;
             return false;
         } else {
@@ -72,6 +79,19 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
     if (out.width < 1) out.width = 1;
     if (out.height < 1) out.height = 1;
     return true;
+}
+
+// Resolve the built-in P3 tileset: <exe-dir>/p3_box_tileset/tileset.json
+// (copied there by CMake). Returns "" when it cannot be determined.
+std::string builtinTilesetPath() {
+    const char* base = SDL_GetBasePath();
+    if (base == nullptr) {
+        return "";
+    }
+    std::string path = base;
+    SDL_free(const_cast<char*>(base));
+    path += "p3_box_tileset/tileset.json";
+    return path;
 }
 
 // Extract the platform-native window handle for the SDK.
@@ -157,15 +177,66 @@ int main(int argc, char** argv) {
         std::cerr << "[demo] Renderer::initialize failed" << std::endl;
         exitCode = 1;
     } else {
+        // P3: load a tileset unless --no-tileset was given. Default is the
+        // built-in tiny tileset shipped next to the demo binary.
+        float yawDeg = 30.0f, pitchDeg = 18.0f, distance = 20.0f;
+        bool tilesetLoaded = false;
+        if (!args.noTileset) {
+            const std::string tilesetPath =
+                args.tileset.empty() ? builtinTilesetPath() : args.tileset;
+            if (tilesetPath.empty()) {
+                std::cerr << "[demo] cannot determine the built-in tileset "
+                             "path (pass --tileset explicitly)"
+                          << std::endl;
+                exitCode = 1;
+            } else if (!tiles_renderer::Renderer::loadTileset(tilesetPath)) {
+                std::cerr << "[demo] failed to load tileset: " << tilesetPath
+                          << std::endl;
+                exitCode = 1;
+            } else {
+                tilesetLoaded = true;
+                std::cout << "[demo] tileset: " << tilesetPath << std::endl;
+            }
+        }
+        tiles_renderer::Renderer::setOrbitCamera(yawDeg, pitchDeg, distance);
+
         // Render N successful frames. beginFrame() is non-blocking and
         // returns false while the driver is busy, so retry with pacing like
         // a real main loop instead of counting attempts.
+        //
+        // P3: simple orbit control — drag with the left mouse button to
+        // orbit, mouse wheel to zoom.
         int rendered = 0;
+        bool dragging = false;
         const auto deadline =
-            std::chrono::steady_clock::now() + std::chrono::seconds(120);
+            std::chrono::steady_clock::now() + std::chrono::seconds(180);
         while (rendered < args.frames &&
                std::chrono::steady_clock::now() < deadline) {
-            SDL_PumpEvents();
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_EVENT_QUIT) {
+                    rendered = args.frames; // stop early
+                } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                           event.button.button == SDL_BUTTON_LEFT) {
+                    dragging = true;
+                } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+                           event.button.button == SDL_BUTTON_LEFT) {
+                    dragging = false;
+                } else if (event.type == SDL_EVENT_MOUSE_MOTION && dragging) {
+                    yawDeg -= static_cast<float>(event.motion.xrel) * 0.4f;
+                    pitchDeg += static_cast<float>(event.motion.yrel) * 0.4f;
+                    if (pitchDeg > 85.0f) pitchDeg = 85.0f;
+                    if (pitchDeg < -85.0f) pitchDeg = -85.0f;
+                    tiles_renderer::Renderer::setOrbitCamera(
+                        yawDeg, pitchDeg, distance);
+                } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+                    distance *= (event.wheel.y > 0) ? 0.9f : 1.1f;
+                    if (distance < 2.0f) distance = 2.0f;
+                    if (distance > 200.0f) distance = 200.0f;
+                    tiles_renderer::Renderer::setOrbitCamera(
+                        yawDeg, pitchDeg, distance);
+                }
+            }
             if (tiles_renderer::Renderer::renderFrame()) {
                 ++rendered;
             } else {
@@ -177,6 +248,11 @@ int main(int argc, char** argv) {
         if (rendered == 0) {
             std::cerr << "[demo] no frame rendered" << std::endl;
             exitCode = 1;
+        }
+        if (tilesetLoaded) {
+            std::cout << "[demo] tiles rendered (last frame): "
+                      << tiles_renderer::Renderer::renderedTileCount()
+                      << std::endl;
         }
 
         if (exitCode == 0 && !args.screenshot.empty()) {

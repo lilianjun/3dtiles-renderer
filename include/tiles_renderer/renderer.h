@@ -6,6 +6,7 @@
 // plus the surface size, and the SDK owns rendering from there.
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace tiles_renderer {
@@ -53,6 +54,22 @@ public:
     // Intended for testing/debugging (screenshots), not per-frame use.
     static bool readPixels(std::vector<std::uint8_t>& outRgba,
                            std::uint32_t& outWidth, std::uint32_t& outHeight);
+
+    // P3: load a 3D Tiles tileset (local filesystem path or file:// URL).
+    // Must be called after initialize(). Tile selection/LOD runs every frame
+    // in renderFrame() against the orbit camera set via setOrbitCamera().
+    // Returns false when not initialized or the tileset failed to load.
+    static bool loadTileset(const std::string& tilesetUrl);
+
+    // P3: orbit camera used for tile selection and the Filament view.
+    // Only takes effect while a tileset is loaded; otherwise the P2 fixed
+    // camera is kept. yaw/pitch in degrees, distance in the tileset's units.
+    static void setOrbitCamera(float yawDegrees, float pitchDegrees,
+                               float distance);
+
+    // P3: number of tiles selected for rendering by the last renderFrame()
+    // (-1 when no tileset is loaded).
+    static int renderedTileCount();
 
     static void shutdown();
 

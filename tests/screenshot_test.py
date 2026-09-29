@@ -23,6 +23,8 @@ def main() -> int:
     ap.add_argument("--frames", type=int, default=30)
     ap.add_argument("--width", type=int, default=800)
     ap.add_argument("--height", type=int, default=600)
+    ap.add_argument("--extra-args", nargs=argparse.REMAINDER, default=[],
+                    help="extra args appended to the demo command")
     args = ap.parse_args()
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
@@ -33,7 +35,7 @@ def main() -> int:
         "--width", str(args.width),
         "--height", str(args.height),
         "--screenshot", args.out,
-    ]
+    ] + args.extra_args
     if not os.environ.get("DISPLAY"):
         # No X server (plain `ctest` on a headless box): wrap ourselves.
         cmd = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24"] + cmd

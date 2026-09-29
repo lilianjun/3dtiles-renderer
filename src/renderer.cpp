@@ -7,10 +7,12 @@
 #include "tiles_renderer/renderer.h"
 
 #include "tiles_renderer/version.h"
+#include "tileset_internal.h"
 
 #include <atomic>
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <thread>
 
 #ifdef TILES_WITH_FILAMENT
@@ -18,6 +20,7 @@
 #include <filament/Camera.h>
 #include <filament/Engine.h>
 #include <filament/IndexBuffer.h>
+#include <filament/LightManager.h>
 #include <filament/Material.h>
 #include <filament/RenderableManager.h>
 #include <filament/Renderer.h>
@@ -60,6 +63,11 @@ struct FilamentState {
     filament::MaterialInstance* materialInstance = nullptr;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+    // P3: optional tileset integration (null when no tileset loaded).
+    std::unique_ptr<TilesetRenderer> tileset;
+    OrbitCamera orbit;
+    utils::Entity sunLight{};
+    bool triangleInScene = false;
 };
 
 FilamentState g_state;
@@ -70,8 +78,17 @@ void destroyFilamentState() {
         return;
     }
     // Destroy user resources first, engine last (Filament requirement).
+    if (s.sunLight) {
+        s.scene->remove(s.sunLight);
+        s.engine->destroy(s.sunLight);
+        utils::EntityManager::get().destroy(s.sunLight);
+        s.sunLight.clear();
+    }
     if (s.renderable) {
-        s.scene->remove(s.renderable);
+        if (s.triangleInScene) {
+            s.scene->remove(s.renderable);
+            s.triangleInScene = false;
+        }
         s.engine->destroy(s.renderable);
         utils::EntityManager::get().destroy(s.renderable);
         s.renderable.clear();
@@ -176,6 +193,16 @@ bool Renderer::initialize(const RendererConfig& config) {
     clearOptions.clear = true;
     s.renderer->setClearOptions(clearOptions);
 
+    // P3: a directional "sun" so PBR glTF tile content is lit. It does not
+    // affect the P2 unlit triangle material.
+    s.sunLight = utils::EntityManager::get().create();
+    filament::LightManager::Builder(filament::LightManager::Type::DIRECTIONAL)
+        .color({1.0f, 0.98f, 0.95f})
+        .intensity(100000.0f)
+        .direction({0.0f, -1.0f, 0.35f})
+        .build(*s.engine, s.sunLight);
+    s.scene->addEntity(s.sunLight);
+
     // Triangle geometry.
     s.vertexBuffer =
         filament::VertexBuffer::Builder()
@@ -216,7 +243,9 @@ bool Renderer::initialize(const RendererConfig& config) {
         .receiveShadows(false)
         .castShadows(false)
         .build(*s.engine, s.renderable);
-    s.scene->addEntity(s.renderable);
+    // P3: the P2 triangle is only added to the scene by renderFrame() when no
+    // tileset is loaded (keeps the P2 screenshot test pixel-identical).
+    s.triangleInScene = false;
 
     std::cout << "[tiles_renderer] initialized " << config.width << "x"
               << config.height << " (SDK v" << TILES_RENDERER_VERSION
@@ -249,6 +278,30 @@ bool Renderer::renderFrame() {
     FilamentState& s = g_state;
     if (s.engine == nullptr || s.renderer == nullptr || s.swapChain == nullptr) {
         return false;
+    }
+    // P3: when a tileset is loaded, drive the orbit camera and tile
+    // selection/LOD every frame, and hide the P2 triangle.
+    const bool useTileset = s.tileset != nullptr && s.tileset->isLoaded();
+    if (useTileset) {
+        constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
+        const float yaw = s.orbit.yawDegrees * kDegToRad;
+        const float pitch = s.orbit.pitchDegrees * kDegToRad;
+        const float d = s.orbit.distance;
+        const filament::math::float3 target{
+            s.orbit.targetX, s.orbit.targetY, s.orbit.targetZ};
+        const filament::math::float3 eye{
+            target.x + d * std::cos(pitch) * std::sin(yaw),
+            target.y + d * std::sin(pitch),
+            target.z + d * std::cos(pitch) * std::cos(yaw)};
+        s.camera->lookAt(eye, target, {0.0f, 1.0f, 0.0f});
+        s.tileset->update(s.width, s.height, s.orbit);
+        if (s.triangleInScene) {
+            s.scene->remove(s.renderable);
+            s.triangleInScene = false;
+        }
+    } else if (!s.triangleInScene && s.renderable) {
+        s.scene->addEntity(s.renderable);
+        s.triangleInScene = true;
     }
     if (s.renderer->beginFrame(s.swapChain)) {
         s.renderer->render(s.view);
@@ -286,17 +339,28 @@ bool Renderer::readPixels(std::vector<std::uint8_t>& outRgba,
         static_cast<std::atomic<bool>*>(user)->store(true);
     };
     bool issued = false;
-    if (s.renderer->beginFrame(s.swapChain)) {
-        issued = true;
-        s.renderer->render(s.view);
-        s.renderer->readPixels(
-            0, 0, outWidth, outHeight,
-            filament::backend::PixelBufferDescriptor(
-                outRgba.data(), outRgba.size(),
-                filament::backend::PixelBufferDescriptor::PixelDataFormat::RGBA,
-                filament::backend::PixelBufferDescriptor::PixelDataType::UBYTE,
-                onReadback, &done));
-        s.renderer->endFrame();
+    // beginFrame() is non-blocking and may return false if the driver is
+    // still busy with the previous frame. Retry briefly before giving up.
+    const auto beginDeadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!issued && std::chrono::steady_clock::now() < beginDeadline) {
+        if (s.renderer->beginFrame(s.swapChain)) {
+            issued = true;
+            s.renderer->render(s.view);
+            s.renderer->readPixels(
+                0, 0, outWidth, outHeight,
+                filament::backend::PixelBufferDescriptor(
+                    outRgba.data(), outRgba.size(),
+                    filament::backend::PixelBufferDescriptor::PixelDataFormat::
+                        RGBA,
+                    filament::backend::PixelBufferDescriptor::PixelDataType::
+                        UBYTE,
+                    onReadback, &done));
+            s.renderer->endFrame();
+        } else {
+            s.engine->pumpMessageQueues();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
     }
     if (!issued) {
         std::cerr << "[tiles_renderer] readPixels: could not start a frame"
@@ -338,10 +402,69 @@ bool Renderer::readPixels(std::vector<std::uint8_t>& outRgba,
 
 void Renderer::shutdown() {
 #ifdef TILES_WITH_FILAMENT
+    // P3: destroy the tileset first — tile teardown calls free(), which
+    // needs a live Filament engine/scene.
+    g_state.tileset.reset();
     destroyFilamentState();
 #endif
     g_initialized = false;
     std::cout << "[tiles_renderer] shutdown" << std::endl;
+}
+
+bool Renderer::loadTileset(const std::string& tilesetUrl) {
+    if (!g_initialized) {
+        std::cerr << "[tiles_renderer] loadTileset: not initialized"
+                  << std::endl;
+        return false;
+    }
+#ifdef TILES_WITH_FILAMENT
+    FilamentState& s = g_state;
+    if (s.engine == nullptr || s.scene == nullptr) {
+        return false;
+    }
+    s.tileset.reset(); // drop any previously loaded tileset first
+    auto tileset = std::make_unique<TilesetRenderer>(s.engine, s.scene);
+    if (!tileset->load(tilesetUrl)) {
+        return false;
+    }
+    s.tileset = std::move(tileset);
+    return true;
+#else
+    (void)tilesetUrl;
+    std::cerr << "[tiles_renderer] loadTileset: not available in this build"
+              << std::endl;
+    return false;
+#endif
+}
+
+void Renderer::setOrbitCamera(
+    float yawDegrees, float pitchDegrees, float distance) {
+    if (!g_initialized) {
+        return;
+    }
+#ifdef TILES_WITH_FILAMENT
+    g_state.orbit.yawDegrees = yawDegrees;
+    g_state.orbit.pitchDegrees = pitchDegrees;
+    g_state.orbit.distance = distance;
+#else
+    (void)yawDegrees;
+    (void)pitchDegrees;
+    (void)distance;
+#endif
+}
+
+int Renderer::renderedTileCount() {
+    if (!g_initialized) {
+        return -1;
+    }
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset == nullptr) {
+        return -1;
+    }
+    return g_state.tileset->renderedTileCount();
+#else
+    return -1;
+#endif
 }
 
 const char* Renderer::version() {

@@ -79,7 +79,7 @@ configure_file(
 # Public API: include/tiles_renderer/renderer.h — takes a platform-native
 # window handle + size from the host app. The SDK NEVER depends on SDL3.
 # ---------------------------------------------------------------------------
-add_library(tiles_renderer STATIC src/renderer.cpp)
+add_library(tiles_renderer STATIC src/renderer.cpp src/tileset.cpp)
 target_include_directories(tiles_renderer PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_BINARY_DIR}/generated"
@@ -136,8 +136,14 @@ if(TILES_WITH_FILAMENT)
     target_link_directories(filament_prebuilt INTERFACE
       "${filament_bin_SOURCE_DIR}/lib/x86_64")
     target_link_libraries(filament_prebuilt INTERFACE
+      # The static archives reference each other cyclically (e.g. gltfio ->
+      # filament/geometry); group them so the linker rescans until resolved.
+      "-Wl,--start-group"
       filament backend bluegl bluevk filabridge filaflat
-      utils geometry smol-v ibl zstd c++ c++abi)
+      utils geometry smol-v ibl
+      gltfio gltfio_core uberarchive uberzlib image
+      "-Wl,--end-group"
+      zstd c++ c++abi)
     # PUBLIC: consumers of this static SDK library need the transitive link.
     target_link_libraries(tiles_renderer PUBLIC filament_prebuilt)
     target_compile_definitions(tiles_renderer PRIVATE TILES_WITH_FILAMENT)
@@ -230,6 +236,13 @@ if(TILES_WITH_SDL3)
   target_include_directories(tiles_demo PRIVATE "${stb_SOURCE_DIR}")
   target_compile_definitions(tiles_demo PRIVATE TILES_WITH_SDL3)
   target_compile_features(tiles_demo PRIVATE cxx_std_20)
+  # P3: ship the tiny vendored tileset next to the demo binary so the demo
+  # runs a real tileset by default (see --tileset / --no-tileset).
+  add_custom_command(TARGET tiles_demo POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/p3_box_tileset"
+            "$<TARGET_FILE_DIR:tiles_demo>/p3_box_tileset"
+    COMMENT "Copying p3_box_tileset next to tiles_demo")
 endif()
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 跨平台 C++ 3D Tiles 渲染器 **SDK**：一次编码，随处运行 —— Windows / Android / iOS / WebAssembly。
 
-> 当前阶段：**P2 渲染器**（Filament 真实渲染 + 无头截图验证，见 ADR-0004）。
+> 当前阶段：**P3 数据上屏**（真实 tileset.json + GLB 经 Cesium 调度、gltfio 解码、Filament 渲染，见 ADR-0005）。
 
 ## 架构（ADR-0003）
 
@@ -105,6 +105,25 @@ xvfb-run -a ./build/linux/tiles_demo --frames 30 --width 800 --height 600 \
     --screenshot /tmp/shot.png
 ```
 
+### P3：tileset 数据上屏
+
+```bash
+# 默认加载可执行文件旁的自生成测试 tileset（tests/data/p3_box_tileset/）
+xvfb-run -a ./build/linux/tiles_demo --frames 60 \
+    --tileset tests/data/p3_box_tileset/tileset.json \
+    --screenshot /tmp/p3.png
+# --no-tileset 回到 P2 红三角模式；鼠标拖拽 orbit、滚轮缩放
+```
+
+测试数据由 `tests/data/gen_p3_tileset.py` 自生成（root 灰 10m 盒 +
+child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
+`tileset_screenshot` 测试断言 3 tiles 上屏、截图含橙色与青色像素。
+
+> **边界（诚实说明）**：当前仅支持**本地路径**（`LocalFileAssetAccessor`，
+> HTTP/HTTPS 未实现）；内容仅验证过**裸 GLB**（b3dm/i3dm 待办）；
+> tile transform 直接 double→float，无 ECEF rebase（真实地理坐标待办）。
+> 详见 ADR-0005。
+
 > 首次全依赖 configure 会触发 vcpkg 构建 cesium-native 的约 15 个第三方 port，
 > 在 2 核机器上需要数十分钟，请耐心等待。SDL3 的 X11 视频后端需要
 > `-DTILES_SDL3_NATIVE_VIDEO=ON`（及 `libx11-dev libxext-dev libxrandr-dev
@@ -121,7 +140,10 @@ xvfb-run -a ./build/linux/tiles_demo --frames 30 --width 800 --height 600 \
   红色三角形最小场景；`renderFrame()->bool`、`readPixels()` 回调截图；
   `xvfb-run` 无头像素断言；`nm` 回归 SDK 零 SDL —— ✅ 已完成
   （本机 linux 全依赖构建 + 3/3 测试通过；见 ADR-0004）
-- **P3 LOD 调度**：cesium-native tileset.json 加载、视锥裁剪、瓦片缓存
+- **P3 数据上屏**：cesium-native tileset.json 加载 + `updateViewGroup`/`loadTiles`
+  调度、gltfio ubershader 解码 GLB、Filament PBR 渲染；自生成测试 tileset
+  （灰/橙/青三盒）；`ViewUpdateResult` 驱动可见性；`xvfb-run` 像素断言 —— ✅ 已完成
+  （本机 linux 全依赖构建 + 4/4 测试通过；SDK 零 SDL；见 ADR-0005）
 - **P4 移动端**：Android / iOS 真机优化、触摸输入
 - **P5 WASM**：Emscripten 发布、浏览器内运行
 
