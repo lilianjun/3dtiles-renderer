@@ -9,6 +9,25 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- P25: KTX2 (`KHR_texture_basisu` / `image/ktx2`) texture support, truly
+  verified (ADR-0024). Deterministic UASTC fixture
+  (`tests/data/gen_p25_ktx2.py`, fixed `toktx 4.4.2 --uastc` payload as
+  base64 — the UASTC decode is lossless for this flat-color checkerboard,
+  0/4096 texels differ from the PNG twin). New CTest `ktx2`:
+  KTX2-textured box renders and matches its PNG twin (measured max/mean
+  diff 0.0/0.0000, tolerance max ≤ 16 / mean < 2.0); corrupt KTX2 fails
+  gracefully (exit 0, 0 tiles). New `sanitizer_ktx2` gate. Root cause of
+  the initial crash found and fixed: cesium-native's vcpkg `libktx.a`
+  vendors an incompatible `basist::` basisu copy that collided with
+  Filament's `libbasis_transcoder.a` (heap corruption; proven by
+  link-order experiment). On cesium builds KTX2 is now decoded by a new
+  internal provider (`src/ktx2_libktx_provider.cpp`) using the same
+  `libktx` cesium links (transcode to RGBA32 — GPU block compression is
+  future work); `ktxreader`/`basis_transcoder` are not linked there.
+  Non-cesium platforms use Filament's `createKtx2Provider` (no conflict
+  possible, transcoder proven correct standalone). Also documented:
+  uncompressed KTX2 can never pass cesium-native v0.64.0's ImageDecoder
+  (`KTX2 loading failed with error: Operation succeeded.`).
 - P24: upstream issue draft for the P19 `TreeTraversalState` pinning
   finding (`docs/upstream/issue-traversal-pinning.md`, not yet filed):
   re-verified on master that an 800 KB `maximumCachedBytes` budget is

@@ -379,6 +379,53 @@ if(TILES_WITH_FILAMENT)
       message(WARNING "[P15] libstb.a not in the Filament package — glTF "
                       "textures will not decode on ${TILES_PLATFORM}.")
     endif()
+    # P25: KTX2 (KHR_texture_basisu / image/ktx2) texture decoding.
+    #
+    # Symbol-collision hazard (verified 2026-09-29, see ADR-0024): Filament's
+    # ktxreader is backed by Filament's bundled basisu (libbasis_transcoder.a,
+    # namespace basist::), while cesium-native's vcpkg libktx.a vendors its
+    # own incompatible basist:: copy. Linking both makes the static linker
+    # resolve filament's ktxreader against cesium's basisu -> heap corruption
+    # (standalone probe of filament's transcoder is fine; linking cesium's
+    # libktx.a first segfaults on the same file).
+    #
+    # Therefore:
+    #  - On cesium builds (Linux): do NOT link ktxreader/basis_transcoder.
+    #    KTX2 is decoded by our own provider (src/ktx2_libktx_provider.cpp)
+    #    using the same libktx cesium-native already links, so exactly one
+    #    basist:: exists in the binary. Defines TILES_WITH_KTX2_LIBKTX.
+    #  - Elsewhere (no cesium, hence no libktx, hence no conflict): use
+    #    filament's createKtx2Provider via the ktxreader/basis_transcoder
+    #    archives, same existence-check pattern as stb. Defines
+    #    TILES_WITH_KTX2_PROVIDER.
+    if(TILES_WITH_CESIUM_NATIVE)
+      target_compile_definitions(tiles_renderer PRIVATE TILES_WITH_KTX2_LIBKTX)
+      target_sources(tiles_renderer PRIVATE src/ktx2_libktx_provider.cpp)
+      # ktx.h include dir is added after TILES_VCPKG_INSTALLED_DIR is
+      # resolved further below.
+    else()
+      if(_filament_xcframework)
+        set(_ktxreader_lib_path
+          "${filament_bin_SOURCE_DIR}/lib/libktxreader.xcframework/ios-arm64/libktxreader.a")
+        set(_basis_lib_path
+          "${filament_bin_SOURCE_DIR}/lib/libbasis_transcoder.xcframework/ios-arm64/libbasis_transcoder.a")
+      else()
+        set(_ktxreader_lib_path
+          "${filament_bin_SOURCE_DIR}/${_filament_libdir}/libktxreader.a")
+        set(_basis_lib_path
+          "${filament_bin_SOURCE_DIR}/${_filament_libdir}/libbasis_transcoder.a")
+      endif()
+      if(EXISTS "${_ktxreader_lib_path}" AND EXISTS "${_basis_lib_path}")
+        # ktxreader references basis_transcoder: keep this order for linkers
+        # without --start-group (iOS full-path layout).
+        list(APPEND _filament_libs ktxreader basis_transcoder)
+        target_compile_definitions(tiles_renderer PRIVATE TILES_WITH_KTX2_PROVIDER)
+      else()
+        message(WARNING "[P25] libktxreader.a / libbasis_transcoder.a not in "
+                        "the Filament package — KTX2 textures will render "
+                        "black on ${TILES_PLATFORM}.")
+      endif()
+    endif()
     add_library(filament_prebuilt INTERFACE)
     target_include_directories(filament_prebuilt INTERFACE
       "${filament_bin_SOURCE_DIR}/include")
@@ -678,6 +725,20 @@ elseif(TILES_WITH_CESIUM_NATIVE)
     "configs; find_package(tiles_renderer) consumers will need cesium-native's "
     "vcpkg dependencies resolvable another way. Set TILES_VCPKG_INSTALLED_DIR "
     "to override.")
+endif()
+
+# P25: the libktx-backed KTX2 provider (cesium builds only, see the
+# TILES_WITH_KTX2_LIBKTX block in the Filament section) needs ktx.h from
+# cesium-native's vcpkg tree.
+if(TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  if(TILES_VCPKG_INSTALLED_DIR AND EXISTS
+      "${TILES_VCPKG_INSTALLED_DIR}/include/ktx.h")
+    target_include_directories(tiles_renderer PRIVATE
+      "${TILES_VCPKG_INSTALLED_DIR}/include")
+  else()
+    message(WARNING "[P25] ktx.h not found under "
+      "${TILES_VCPKG_INSTALLED_DIR}/include — KTX2 provider cannot build.")
+  endif()
 endif()
 
 # vcpkg imported targets reference per-config DEBUG library paths, but this

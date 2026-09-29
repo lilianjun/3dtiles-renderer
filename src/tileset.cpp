@@ -52,6 +52,9 @@
 #include <gltfio/ResourceLoader.h>
 #ifdef TILES_WITH_STB_PROVIDER
 #include <gltfio/TextureProvider.h> // createStbProvider (P15: glTF textures)
+#ifdef TILES_WITH_KTX2_LIBKTX
+#include "ktx2_provider_internal.h" // P25: libktx-backed KTX2 provider
+#endif
 #endif
 #include <gltfio/materials/uberarchive.h>
 #include <utils/Entity.h>
@@ -924,6 +927,22 @@ public:
         _resourceLoader->addTextureProvider("image/png", _textureProvider);
         _resourceLoader->addTextureProvider("image/jpeg", _textureProvider);
 #endif
+#ifdef TILES_WITH_KTX2_LIBKTX
+        // P25: KTX2 via our own provider backed by cesium-native's libktx
+        // (see src/ktx2_libktx_provider.cpp for why filament's
+        // createKtx2Provider cannot be used on cesium builds: basist::
+        // symbol collision between Filament's and libktx's bundled basisu).
+        _ktx2Provider = tiles::createLibktxKtx2Provider(engine);
+        _resourceLoader->addTextureProvider("image/ktx2", _ktx2Provider);
+#elif defined(TILES_WITH_KTX2_PROVIDER)
+        // P25: KTX2 (KHR_texture_basisu) textures go through gltfio's
+        // createKtx2Provider (ktxreader + basisu transcoder, both in the
+        // Filament prebuilt package). Without it, image/ktx2 logs
+        // "Missing texture provider" and renders black — the same
+        // silent-black mode P15 fixed for PNG/JPEG.
+        _ktx2Provider = filament::gltfio::createKtx2Provider(engine);
+        _resourceLoader->addTextureProvider("image/ktx2", _ktx2Provider);
+#endif
     }
 
     ~FilamentPrepareResources() override {
@@ -935,6 +954,9 @@ public:
         delete _resourceLoader;
 #ifdef TILES_WITH_STB_PROVIDER
         delete _textureProvider;
+#endif
+#if defined(TILES_WITH_KTX2_PROVIDER) || defined(TILES_WITH_KTX2_LIBKTX)
+        delete _ktx2Provider;
 #endif
     }
 
@@ -1112,6 +1134,11 @@ private:
     // P15: stb image decoder feeding gltfio's ResourceLoader (PNG/JPEG).
     // Must outlive _resourceLoader; destroyed after it above.
     filament::gltfio::TextureProvider* _textureProvider = nullptr;
+#endif
+#if defined(TILES_WITH_KTX2_PROVIDER) || defined(TILES_WITH_KTX2_LIBKTX)
+    // P25: KTX2 (KHR_texture_basisu) decoder feeding gltfio's
+    // ResourceLoader. Same lifetime rule as _textureProvider above.
+    filament::gltfio::TextureProvider* _ktx2Provider = nullptr;
 #endif
     // P5 rebase origin (world coordinates, double); subtracted from every
     // tile translation in double precision before the float32 conversion.

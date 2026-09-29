@@ -378,6 +378,25 @@ if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   endif()
 endif()
 
+# P25: KTX2 (KHR_texture_basisu) texture support gate. Deterministic
+# UASTC fixture (tests/data/gen_p25_ktx2.py): the KTX2-textured box must
+# render and match its PNG twin within a tight tolerance (the embedded
+# UASTC decodes losslessly for this flat-color checkerboard), and a
+# corrupt KTX2 must fail gracefully (exit 0, no crash/hang).
+if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME ktx2
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/ktx2_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --out "${CMAKE_BINARY_DIR}/screenshots/p25_ktx2")
+    set_tests_properties(ktx2 PROPERTIES TIMEOUT 900)
+  else()
+    message(WARNING "[P25] Python3 not found — ktx2 test skipped")
+  endif()
+endif()
+
 # P11: golden screenshot regression gate. Re-renders one representative
 # fixture per phase with fixed parameters and requires pixel equality
 # against the frozen goldens in tests/golden/ (see its README for the
@@ -576,6 +595,16 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
               --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
               --demo "$<TARGET_FILE:tiles_demo>")
     set_tests_properties(sanitizer_tileset_failfast PROPERTIES TIMEOUT 900)
+    # P25: KTX2 texture support under ASan/LSan/UBSan — the libktx-backed
+    # provider (transcode + upload + shutdown) plus the corrupt-input path,
+    # with the core KTX2-vs-PNG assertions.
+    add_test(NAME sanitizer_ktx2
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/ktx2_test.py"
+              --sanitized
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --out "${CMAKE_BINARY_DIR}/screenshots/p25_ktx2_asan")
+    set_tests_properties(sanitizer_ktx2 PROPERTIES TIMEOUT 900)
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"
