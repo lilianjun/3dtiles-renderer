@@ -397,6 +397,26 @@ if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   endif()
 endif()
 
+# P26: image-based lighting gate. Renders the deterministic p15_metal
+# fixture with the default procedural IBL and with --no-ibl, and asserts
+# the metal brightens dramatically with IBL on, shows sky-reflection
+# character, and the dielectric stays sane (brighter, not blown out).
+# No hard-coded pixel values: all assertions are on/off comparisons or
+# sane-range checks.
+if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME ibl
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/ibl_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --outdir "${CMAKE_BINARY_DIR}/screenshots/p26_ibl")
+    set_tests_properties(ibl PROPERTIES TIMEOUT 900)
+  else()
+    message(WARNING "[P26] Python3 not found — ibl test skipped")
+  endif()
+endif()
+
 # P11: golden screenshot regression gate. Re-renders one representative
 # fixture per phase with fixed parameters and requires pixel equality
 # against the frozen goldens in tests/golden/ (see its README for the
@@ -605,6 +625,13 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
               --demo "$<TARGET_FILE:tiles_demo>"
               --out "${CMAKE_BINARY_DIR}/screenshots/p25_ktx2_asan")
     set_tests_properties(sanitizer_ktx2 PROPERTIES TIMEOUT 900)
+    add_test(NAME sanitizer_ibl
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/ibl_test.py"
+              --sanitized
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --outdir "${CMAKE_BINARY_DIR}/screenshots/p26_ibl_asan")
+    set_tests_properties(sanitizer_ibl PROPERTIES TIMEOUT 900)
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"

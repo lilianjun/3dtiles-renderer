@@ -9,6 +9,10 @@ render-pipeline regression fails loudly instead of drifting silently.
 All 800x600 PNG, rendered with `tiles_demo` under `xvfb` + Mesa software GL
 (via `stb_image_write`, deterministic encoding). Frozen 2026-09-29 from
 renders each phase's own pixel assertions had already accepted.
+Re-frozen 2026-09-29 (P26): the 9 lit entries re-rendered with the default
+procedural IBL now on — every changed image human-reviewed (geometry pixel
+counts identical, only lighting changed); `p2_demo` and `p8_pnts` (unlit)
+are unchanged. See ADR-0025.
 
 | golden | phase | fixture | frames | what it proves |
 |---|---|---|---|---|

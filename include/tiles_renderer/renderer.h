@@ -154,6 +154,18 @@ public:
     // Must be called on the render thread, like tileStats().
     static std::vector<std::string> selectedTileIds();
 
+    // P26: toggle the default image-based lighting (procedural environment,
+    // see docs/adr/ADR-0025.md). On by default; pass false to render with
+    // the P3 directional sun only (pre-P26 look). Takes effect immediately
+    // (next renderFrame) and is cheap: the environment is built once at
+    // initialize() and toggling only attaches/detaches the IndirectLight
+    // from the scene. The intensity is fixed at Filament's default (30000);
+    // there is intentionally no brightness knob in this version.
+    // Must be called on the render thread, like every Renderer method
+    // except version(). No-op (returns silently) when IBL could not be
+    // built at initialize() or the platform has no Filament backend.
+    static void setIblEnabled(bool enabled);
+
     static void shutdown();
 
     static const char* version();

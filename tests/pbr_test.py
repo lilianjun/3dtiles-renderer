@@ -7,10 +7,13 @@ pixels (via gltfio's ubershader + the scene's directional sun):
 
   metal  - metallic=0 vs metallic=1 (same base color/roughness): the metal
            box must be dramatically darker (no diffuse under no-IBL) and the
-           two regions must differ significantly.
+           two regions must differ significantly. Rendered with --no-ibl:
+           the assertion is about the PBR model under the directional sun;
+           the default IBL would mask it with ambient (see ibl_test.py).
   rough  - metallic boxes, roughness=0.08 vs 0.9: the mirror-smooth metal is
            ~black (nothing to reflect), the rough metal shows a broad
-           specular sheen on its top face.
+           specular sheen on its top face. Rendered with --no-ibl for the
+           same reason (with IBL on, the mirror reflects the environment).
   normal - hand-made normal map vs flat normals: shading must differ.
   alpha  - same red box OPAQUE vs BLEND(0.5): the blend render must differ
            strongly, its lit top face must darken toward the interior color
@@ -42,10 +45,14 @@ BG = np.array([26, 51, 115])  # demo clear color
 LX, RX = 340, 460  # left/right region split (dead zone in the middle)
 
 
-def render_demo(demo, tileset, out, frames, width, height):
+def render_demo(demo, tileset, out, frames, width, height, no_ibl=False):
     cmd = [demo, "--frames", str(frames),
            "--width", str(width), "--height", str(height),
            "--tileset", tileset, "--screenshot", out]
+    if no_ibl:
+        # P26: pin the pre-P26 scene (directional sun only) for the checks
+        # whose assertions are no-IBL statements about the PBR model.
+        cmd.append("--no-ibl")
     if not os.environ.get("DISPLAY"):
         cmd = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24"] + cmd
     print("+", " ".join(cmd), flush=True)
@@ -100,19 +107,25 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
     failures = []
 
-    def render(name, tileset):
+    def render(name, tileset, no_ibl=False):
         out = os.path.join(args.outdir, "p15_%s.png" % name)
         (res, err) = render_demo(args.demo, tileset, out,
-                                 args.frames, args.width, args.height)
+                                 args.frames, args.width, args.height,
+                                 no_ibl=no_ibl)
         if err is not None:
             failures.append("%s: %s" % (name, err))
             return None, None
         return res
 
     # --- metal: dielectric vs metal ---
-    print("=== metal: metallic=0 vs metallic=1 ===", flush=True)
+    # P26: rendered with --no-ibl. This check's assertions are statements
+    # about the PBR material model under the directional sun ("Metal has no
+    # diffuse"), which the default IBL would mask with ambient; the IBL
+    # on/off behavior itself is covered by ibl_test.py.
+    print("=== metal: metallic=0 vs metallic=1 (no IBL) ===", flush=True)
     rendered, img = render("metal", os.path.join(DATA, "p15_metal",
-                                                 "tileset.json"))
+                                                 "tileset.json"),
+                           no_ibl=True)
     if img is not None:
         if rendered != 2:
             failures.append("metal: expected 2 tiles, got %d" % rendered)
@@ -136,9 +149,14 @@ def main():
                             % left.max_lum)
 
     # --- rough: metal, roughness 0.08 vs 0.9 ---
-    print("=== rough: roughness=0.08 vs 0.9 (metal) ===", flush=True)
+    # P26: rendered with --no-ibl, like the metal check: the assertions are
+    # statements about the specular lobe under the directional sun, and the
+    # "smooth metal is ~black" assertion only holds without an environment
+    # to reflect (with IBL on, the mirror shows the sky — see ibl_test.py).
+    print("=== rough: roughness=0.08 vs 0.9 (metal, no IBL) ===", flush=True)
     rendered, img = render("rough", os.path.join(DATA, "p15_rough",
-                                                 "tileset.json"))
+                                                 "tileset.json"),
+                           no_ibl=True)
     if img is not None:
         if rendered != 2:
             failures.append("rough: expected 2 tiles, got %d" % rendered)
@@ -213,15 +231,21 @@ def main():
                 failures.append("alpha: blend top not between opaque red "
                                 "and interior (%.1f vs %.1f)" % (rb, ro))
         # Interior faces become visible through the transparent shell.
-        def midred(img):
-            box = nonbg(img)
-            return (((img[:, :, 0] > 40) & (img[:, :, 1] < 60)
-                     & (img[:, :, 2] < 80) & box).sum())
-        mo, mb = midred(img_o), midred(img_b)
-        print("mid-red px: opaque=%d blend=%d" % (mo, mb), flush=True)
-        if not mb > 1.5 * mo:
+        # P26: the old dim-red pixel count broke under IBL (interiors are
+        # now ambient-lit, brighter and bluer). This metric measures the
+        # transparency mechanics instead, which are lighting-independent:
+        # inside the box silhouette, the blend render must differ strongly
+        # from the opaque render over a large pixel set. Verified identical
+        # (10292 px) with IBL on and off; a BLEND-rendered-as-opaque
+        # failure would give ~0.
+        diff_map = np.sqrt(((img_b - img_o) ** 2).sum(axis=2))
+        silhouette = nonbg(img_o) | nonbg(img_b)
+        far_bg = np.sqrt(((img_b - BG) ** 2).sum(axis=2)) > 30
+        interior_px = int(((diff_map > 40) & silhouette & far_bg).sum())
+        print("interior revealed px: %d" % interior_px, flush=True)
+        if not interior_px > 5000:
             failures.append("alpha: interior not revealed by BLEND "
-                            "(%d vs %d)" % (mb, mo))
+                            "(%d px)" % interior_px)
 
     # --- sided: plane facing away from the camera ---
     print("=== sided: single vs double ===", flush=True)

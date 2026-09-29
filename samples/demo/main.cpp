@@ -53,6 +53,8 @@ struct DemoArgs {
                             // loading settle; not dumped, not counted)
     bool stats = false;     // P17: print per-frame TileStats to stdout
     bool printSelected = false; // P20: print per-frame selected tile IDs
+    bool noIbl = false;     // P26: disable the default image-based lighting
+                            // (renders with the P3 directional sun only)
     // P18: weak-network test hooks (dev/test only, not for production use).
     // --until-loaded N renders up to N frames but stops early once the
     // tileset has settled (loading == 0 && loaded > 0 for 20 consecutive
@@ -117,6 +119,8 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             out.stats = true;
         } else if (arg == "--print-selected") {
             out.printSelected = true;
+        } else if (arg == "--no-ibl") {
+            out.noIbl = true;
         } else if (arg == "--until-loaded") {
             if (!needValue("--until-loaded", value)) return false;
             out.untilLoaded = std::stoi(value);
@@ -154,7 +158,8 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
                          "[--until-loaded N] [--exit-on-loading] "
                          "[--zoom-out-on-loading] [--cache-budget BYTES] "
                          "[--print-rss] "
-                         "[--switch-tileset PATH --switch-at-frame N]..."
+                         "[--switch-tileset PATH --switch-at-frame N]... "
+                         "[--no-ibl]"
                       << std::endl;
             return false;
         } else {
@@ -271,6 +276,10 @@ int main(int argc, char** argv) {
         std::cerr << "[demo] Renderer::initialize failed" << std::endl;
         exitCode = 1;
     } else {
+        // P26: IBL toggle for A/B pixel tests (default is on).
+        if (args.noIbl) {
+            tiles_renderer::Renderer::setIblEnabled(false);
+        }
         // P19: RSS helper (Linux /proc/self/statm; dev/test only).
         auto readRssKb = []() -> long {
 #ifdef __linux__

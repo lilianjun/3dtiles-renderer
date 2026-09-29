@@ -9,6 +9,24 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- P26: image-based lighting (IBL), on by default (ADR-0025). A Filament
+  `IndirectLight` driven by a small procedural environment generated
+  deterministically at initialize(): 64x64x6 RGBA8 cubemap (analytic
+  sky-gradient + sun, GPU mipmaps) for specular reflections, plus 3-band
+  spherical harmonics of the same function for diffuse irradiance.
+  Fixes the P15 gap where metals were black except for the sun's specular
+  lobe (measured on `p15_metal`: metal mean 5.6 → 55.2, roughness-0.08
+  metal 0.0 → 57.7, nothing blown out). New minimal public API
+  `Renderer::setIblEnabled(bool)` (false = pre-P26 sun-only look) and demo
+  flag `--no-ibl`. New CTest `ibl` (on/off A/B: metal brightens >3x,
+  shows sky-reflection character, dielectric stays sane, geometry
+  unchanged) and `sanitizer_ibl` gate. Goldens re-frozen for the
+  intentional lighting change (9/11 entries; unlit `p2_demo`/`p8_pnts`
+  unchanged). `pbr_test.py` metal/rough checks now pin `--no-ibl` since
+  their assertions are no-IBL statements about the PBR model. Honest
+  tradeoff: box-filtered GPU mips (not cmgen GGX prefiltering), LDR
+  environment, no intensity knob yet; other platforms compile the same
+  core-API path but have no pixel verification.
 - P25: KTX2 (`KHR_texture_basisu` / `image/ktx2`) texture support, truly
   verified (ADR-0024). Deterministic UASTC fixture
   (`tests/data/gen_p25_ktx2.py`, fixed `toktx 4.4.2 --uastc` payload as
