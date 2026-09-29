@@ -185,6 +185,34 @@ cesium-native `CurlAssetAccessor` 的 handle 缓存泄漏），自有代码泄�
 > libxcursor-dev libxi-dev libxtst-dev`）；这是渲染验证（Xvfb + 截图测试）
 > 的必需开关，默认关闭以保持纯头文件/控制台可配置。
 
+## SDK 安装与外部集成（P13）
+
+```bash
+source ~/toolchains/env.sh
+cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON
+cmake --build --preset linux -j2
+cmake --install build/linux --prefix /opt/tiles_renderer   # 或任意 prefix
+```
+
+安装内容：`libtiles_renderer.a`、公共头（含生成的 `version.h`）、
+`tiles_rendererConfig.cmake`（`find_package(tiles_renderer)` 用），以及
+cesium-native / Filament / vcpkg 第三方库的头文件与静态库——外部项目只需：
+
+```cmake
+find_package(tiles_renderer CONFIG REQUIRED)
+target_link_libraries(myapp PRIVATE tiles_renderer::tiles_renderer)
+```
+
+`Renderer::version()` 的版本号唯一来源是顶层 `project(VERSION)`（当前
+`0.1.0`），`CHANGELOG.md` 按 Keep a Changelog 记录各阶段真实变更。
+
+发布边界（诚实版）：**源码集成发行，不提供预编译二进制包**。消费方从
+源码构建 SDK 后再安装；安装产物不可跨平台搬运。Filament 官方预编译库用
+clang/libc++ 构建，Linux 消费方链接时会带上 `c++`/`c++abi`（与消费方自己
+的 libstdc++ 共存，见 `CMakeLists.txt` 注释）；安装的是 release 第三方
+库，`debug/` 指向 release 树做兼容（不承诺 debug 信息保真）。
+`docs/integration.md` 有四平台宿主集成指南。
+
 ## 路线图
 
 - **P0 仓库骨架**：CMake 四平台 presets、CI 矩阵、ADR、空壳 main + smoke 测试 —— ✅ 已完成
@@ -252,6 +280,16 @@ cesium-native `CurlAssetAccessor` 的 handle 缓存泄漏），自有代码泄�
   故障注入加损坏 glb/缺失 subtree/非法 subdivisionScheme 优雅失败；
   `sanitizer_11` 进 linux-asan 门禁—— ✅ 已完成
   （见 ADR-0011）
+
+- **P13 SDK 安装打包**：`cmake --install` 安装公共头 +
+  `libtiles_renderer.a` + `tiles_rendererConfig.cmake`
+ （`find_package(tiles_renderer)` → `tiles_renderer::tiles_renderer`）；
+  cesium-native 自带 config 与 vcpkg 第三方包 config 一并安装，
+  Filament 预编译 archives/headers 随 SDK 安装并由 config 绝对路径引用；
+  外部最小项目验证 configure+link+`version()` 输出 `0.1.0`；
+  `CHANGELOG.md`（Keep a Changelog，P0–P13 真实记录）；
+  发行策略：源码 FetchContent 集成、不提供预编译二进制包—— ✅ 已完成
+  （普通 ctest 15/15，SDK 零 SDL）
 
 ## AI 协作
 

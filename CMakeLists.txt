@@ -209,6 +209,12 @@ if(TILES_WITH_CESIUM_NATIVE)
   message(STATUS "[P1] Fetching cesium-native @ v0.64.0 ...")
   # Skip cesium-native's own (large) test suite — we only need its libraries.
   set(CESIUM_TESTS_ENABLED OFF CACHE BOOL "" FORCE)
+  # P13: let cesium-native install its static libs + headers + CMake config
+  # into the same prefix as ours, so find_package(tiles_renderer) can
+  # find_dependency(cesium-native). These only add install() rules; the
+  # build itself is unchanged.
+  set(CESIUM_INSTALL_STATIC_LIBS ON CACHE BOOL "" FORCE)
+  set(CESIUM_INSTALL_HEADERS ON CACHE BOOL "" FORCE)
   FetchContent_Declare(
     cesium_native
     GIT_REPOSITORY https://github.com/CesiumGS/cesium-native.git
@@ -476,5 +482,164 @@ include(CTest)
 if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
+
+# ---------------------------------------------------------------------------
+# P13: installable SDK.
+#
+# Installs:
+#   <prefix>/lib[/<multiarch>]/libtiles_renderer.a
+#   <prefix>/include/tiles_renderer/{renderer.h,version.h}
+#   <prefix>/lib[/<multiarch>]/cmake/tiles_renderer/tiles_rendererConfig{,Version}.cmake
+# plus, when wired in, cesium-native's own install (libs + headers +
+# cesium-nativeConfig.cmake, via CESIUM_INSTALL_* above) and Filament's
+# prebuilt archives + headers.
+#
+# Distribution policy (honest): the SDK is distributed as SOURCE, built
+# with pinned third-party versions fetched at configure time
+# (docs/adr/0002-toolchain.md). There is no prebuilt binary distribution;
+# `cmake --install` from an SDK build tree is the supported way to obtain
+# an installable SDK. Consumers then use find_package(tiles_renderer).
+# ---------------------------------------------------------------------------
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+# SDK static library + public headers (hand-written + generated version.h).
+install(TARGETS tiles_renderer
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/tiles_renderer"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/generated/tiles_renderer/version.h"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/tiles_renderer")
+
+# Filament prebuilt archives + headers, installed next to the SDK so the
+# installed SDK links standalone. Only archive file NAMES are passed to
+# the config template (it prepends ${PACKAGE_PREFIX_DIR} itself); syslibs
+# stay as plain names, exactly as in the build-tree link — except zstd,
+# which is rewritten to Filament's shipped archive when present (see below).
+set(TILES_FILAMENT_LIBNAMES "")
+set(TILES_FILAMENT_USE_GROUP "OFF")
+set(TILES_FILAMENT_SYSLIBS "")
+if(TILES_WITH_FILAMENT AND _filament_pkg AND filament_bin_SOURCE_DIR)
+  foreach(_lib IN LISTS _filament_libs)
+    if(_filament_xcframework)
+      set(_arc
+        "${filament_bin_SOURCE_DIR}/lib/lib${_lib}.xcframework/ios-arm64/lib${_lib}.a")
+    else()
+      set(_arc
+        "${filament_bin_SOURCE_DIR}/${_filament_libdir}/lib${_lib}.a")
+    endif()
+    install(FILES "${_arc}" DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+    list(APPEND TILES_FILAMENT_LIBNAMES "lib${_lib}.a")
+  endforeach()
+  if(_filament_use_group)
+    set(TILES_FILAMENT_USE_GROUP "ON")
+  endif()
+  set(TILES_FILAMENT_SYSLIBS "${_filament_syslibs}")
+  # zstd: Filament's linux/android packages ship libzstd.a, but it is listed
+  # as a bare syslib (-lzstd), which external consumers may not resolve
+  # (no zstd on their default link path). Prefer the shipped archive by
+  # absolute path when present.
+  if(NOT _filament_xcframework)
+    set(_zstd_arc "${filament_bin_SOURCE_DIR}/${_filament_libdir}/libzstd.a")
+    if(EXISTS "${_zstd_arc}")
+      install(FILES "${_zstd_arc}" DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+      list(APPEND TILES_FILAMENT_LIBNAMES "libzstd.a")
+      list(REMOVE_ITEM TILES_FILAMENT_SYSLIBS "zstd")
+    endif()
+    unset(_zstd_arc)
+  endif()
+  install(DIRECTORY "${filament_bin_SOURCE_DIR}/include/"
+          DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+endif()
+
+# --- vcpkg package CMake configs (for cesium-native's find_dependency) ---
+# cesium-native installs its own CMake config, which in turn
+# find_dependency()s ~17 vcpkg packages in CONFIG mode. Their
+# *-config.cmake files live in the vcpkg installed tree and are
+# prefix-relative (relocatable), so install the whole share/ dir next to
+# our own files; find_package(<pkg> CONFIG) then resolves them under the
+# same prefix via the standard <prefix>/share/<pkg>*/ search path.
+set(TILES_VCPKG_INSTALLED_DIR "" CACHE PATH
+    "Override: vcpkg 'installed' dir holding cesium-native's dep configs (auto-detected from ezvcpkg)")
+if(TILES_WITH_CESIUM_NATIVE AND NOT TILES_VCPKG_INSTALLED_DIR)
+  set(_want_triplet "")
+  if(TILES_PLATFORM STREQUAL "linux")
+    set(_want_triplet "x64-linux")
+  elseif(TILES_PLATFORM STREQUAL "windows")
+    set(_want_triplet "x64-windows")
+  elseif(TILES_PLATFORM STREQUAL "android")
+    if(ANDROID_ABI STREQUAL "arm64-v8a")
+      set(_want_triplet "arm64-android")
+    elseif(ANDROID_ABI STREQUAL "x86_64")
+      set(_want_triplet "x64-android")
+    endif()
+  elseif(TILES_PLATFORM STREQUAL "ios")
+    set(_want_triplet "arm64-ios")
+  endif()
+  file(GLOB _vcpkg_roots "$ENV{HOME}/.ezvcpkg/*/installed/*")
+  foreach(_r IN LISTS _vcpkg_roots) # pass 1: triplet match
+    if(_want_triplet AND _r MATCHES "/${_want_triplet}/$"
+        AND EXISTS "${_r}/share/ada/ada-config.cmake")
+      set(TILES_VCPKG_INSTALLED_DIR "${_r}")
+      break()
+    endif()
+  endforeach()
+  if(NOT TILES_VCPKG_INSTALLED_DIR)
+    foreach(_r IN LISTS _vcpkg_roots) # pass 2: any populated vcpkg tree
+      if(EXISTS "${_r}/share/ada/ada-config.cmake")
+        set(TILES_VCPKG_INSTALLED_DIR "${_r}")
+        break()
+      endif()
+    endforeach()
+  endif()
+  unset(_vcpkg_roots)
+  unset(_want_triplet)
+endif()
+if(TILES_VCPKG_INSTALLED_DIR)
+  install(DIRECTORY "${TILES_VCPKG_INSTALLED_DIR}/share/"
+          DESTINATION "${CMAKE_INSTALL_DATADIR}")
+  # cesium's own install() rules miss a few headers that its config chain
+  # needs — Findmodp_b64.cmake wants modp_b64.h, and httplibConfig.cmake
+  # set_and_check()s include/httplib.h. Compensate with an explicit list
+  # (verified by scanning the vcpkg configs' set_and_check references).
+  set(_tiles_extra_headers
+      modp_b64.h modp_stdint.h httplib.h)
+  foreach(_h IN LISTS _tiles_extra_headers)
+    if(EXISTS "${TILES_VCPKG_INSTALLED_DIR}/include/${_h}")
+      install(FILES "${TILES_VCPKG_INSTALLED_DIR}/include/${_h}"
+              DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+    else()
+      message(WARNING "[P13] expected vcpkg header '${_h}' not found under "
+        "${TILES_VCPKG_INSTALLED_DIR}/include — consumer find_package may fail")
+    endif()
+  endforeach()
+  unset(_tiles_extra_headers)
+elseif(TILES_WITH_CESIUM_NATIVE)
+  message(WARNING "[P13] vcpkg installed dir not found — skipping vcpkg CMake "
+    "configs; find_package(tiles_renderer) consumers will need cesium-native's "
+    "vcpkg dependencies resolvable another way. Set TILES_VCPKG_INSTALLED_DIR "
+    "to override.")
+endif()
+
+# vcpkg imported targets reference per-config DEBUG library paths, but this
+# SDK installs release third-party libs only. Fix up <prefix>/debug at
+# install time so the DEBUG imported locations resolve (see
+# cmake/tiles_debug_compat.cmake; debug-info fidelity is not claimed).
+if(TILES_VCPKG_INSTALLED_DIR)
+  install(SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/tiles_debug_compat.cmake")
+endif()
+
+configure_package_config_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/tiles_rendererConfig.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/tiles_rendererConfig.cmake"
+  INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/tiles_renderer")
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/tiles_rendererConfigVersion.cmake"
+  VERSION "${PROJECT_VERSION}"
+  COMPATIBILITY SameMajorVersion)
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/tiles_rendererConfig.cmake"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/tiles_rendererConfigVersion.cmake"
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/tiles_renderer")
 
 message(STATUS "[P0] Configured tiles_renderer ${PROJECT_VERSION} for platform '${TILES_PLATFORM}'")

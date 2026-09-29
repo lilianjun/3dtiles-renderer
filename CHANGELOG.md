@@ -1,0 +1,192 @@
+# Changelog
+
+All notable changes to this project are documented here, in
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) style.
+Each entry corresponds to a real merged phase (P0–P13); nothing is
+aspirational. Platform abbreviations: L = Linux, W = Windows,
+A = Android, i = iOS, wasm = WebAssembly.
+
+## [Unreleased]
+
+## [0.1.0] — 2026-09-29 (P13: SDK install & packaging)
+
+### Added
+- `cmake --install` support: installs the `tiles_renderer` static library,
+  public headers (including the generated `version.h`), and a
+  `tiles_rendererConfig.cmake` / `tiles_rendererConfigVersion.cmake` pair, so
+  external projects can `find_package(tiles_renderer CONFIG REQUIRED)` and
+  link `tiles_renderer::tiles_renderer`. Verified end-to-end with a minimal
+  external consumer that configures, links, and prints
+  `Renderer::version()` → `0.1.0`.
+- Cesium Native's own CMake config is co-installed (`share/cesium-native`),
+  plus the vcpkg package configs its `find_dependency()` chain needs, so the
+  consumer's `find_package` resolves the full static-link closure from the
+  same prefix. Filament's prebuilt archives and headers are installed next to
+  the SDK; the config references them by absolute install path
+  (`--start-group`/`--end-group` preserved on GNU toolchains).
+- Install-time compatibility fixups (`cmake/tiles_debug_compat.cmake`):
+  `<prefix>/debug` symlinks to the prefix and vcpkg debug-suffixed archive
+  names (`libfmtd.a`, …) link to their release counterparts, because this SDK
+  ships release third-party libs only. Debug-info fidelity is not claimed.
+- `TILES_VCPKG_INSTALLED_DIR` cache variable to override vcpkg-tree
+  auto-detection for exotic setups.
+
+### Packaging boundaries (honest)
+- **Source-integrated distribution.** There is no prebuilt binary
+  distribution: consumers build the SDK from source (FetchContent pulls
+  Cesium Native v0.64.0 and Filament v1.77.0) and install from that build
+  tree. The installed config must not be relocated across platforms.
+- `version()` remains generated from the single CMake `project(VERSION)`.
+
+## [0.1.0] — 2026-09-29 (P12: public API audit + host integration guide)
+
+### Added
+- `Renderer::resize(w, h)`: rebuilds the swapchain on the same native window
+  handle (previously only shutdown + re-init could change size).
+- `Renderer::lastError()`: human-readable reason for the last `loadTileset`
+  failure (previously bool-only).
+- `docs/integration.md`: host integration guide for all four platforms
+  (native handle ownership, render-thread affinity, lifecycle).
+- `tests/host_integration_check.cpp`: 28 checks covering the documented
+  API contract.
+
+### Decisions (ADR-0012)
+- Thread model documented: every public API except `version()` must be
+  called on the same render thread.
+- Deliberately NOT added: a free `lookAt` camera API and `unloadTileset`.
+
+## [0.1.0] — 2026-09-29 (P11: golden screenshot regression)
+
+### Added
+- `tests/golden/`: 8 frozen reference screenshots covering P2/P3/P5/P7/P8/
+  P9/P10 render paths.
+- `golden_regression` test: strict pixel equality against the frozen
+  baseline; `GOLDEN_MAX_DIFF_FRAC` escape hatch defaults to 0.
+- Reverse-verified: flipping 1 pixel fails the gate; restoring passes.
+
+## [0.1.0] — 2026-09-29 (P10: 3D Tiles 1.1)
+
+### Added
+- Bare `.glb` tile content (no 1.0 wrapper) via `BinaryToGltfConverter`.
+- Implicit `QUADTREE` subdivision with hand-written JSON subtree tiles
+  (constant availability); 5 tiles verified on screen.
+
+### Notes
+- `OCTREE` not exercised (same family), subtree bitstream availability not
+  covered, S2 and other extensions untested.
+
+## [0.1.0] — 2026-09-29 (P9: cmpt composite)
+
+### Added
+- `cmpt` composite tiles via cesium-native `CmptToGltfConverter` (recursive
+  split + `Model::merge`); zero SDK code changes — P5/P7/P8 paths cover it.
+  Deterministic self-generated cmpt (b3dm + pnts + i3dm in one tile)
+  verified on screen; corrupt cmpt inputs fail gracefully.
+
+### Fixed (third-party)
+- Found and reproduced a cesium-native crash: `CmptToGltfConverter`
+  structural failure leaves an empty model with only a warning, then
+  `TilesetJsonLoader` unconditionally dereferences `*result.model`
+  (SIGSEGV). Filed upstream as `CesiumGS/cesium-native#1457`; the SDK
+  treats converter failure as tile-skip, never a crash.
+
+## [0.1.0] — 2026-09-29 (P8: pnts point cloud)
+
+### Added
+- `pnts` point clouds rendered as native Filament `POINTS` primitives
+  (gltfio + ubershader path, no SDK code changes). Pixel-verified: 420
+  tri-color points land on exactly the right pixels with exact colors.
+  Deterministic self-generated data (incl. 60k-point stress, rebase
+  near/far, RTC reference); corrupt pnts skipped gracefully.
+
+## [0.1.0] — 2026-09-29 (P7: i3dm instancing)
+
+### Added
+- `i3dm` instanced meshes via `I3dmToGltfConverter`
+  (`EXT_mesh_gpu_instancing`). Filament v1.77 gltfio parses but does not
+  execute GPU instancing, so the render bridge CPU-expands instances into
+  ordinary glTF nodes (correctness first, N draw calls — ADR-0008).
+
+### Fixed
+- Three real bugs found during bring-up: i3dm header is 32 bytes (not 28),
+  multi-buffer merging, and converter up-axis conjugate compensation.
+- Pixel assertions: rebase near/far bit-identical, RTC vs no-RTC
+  bit-identical; corrupt i3dm skipped gracefully.
+
+## [0.1.0] — 2026-09-29 (P6: sanitizer gate + robustness)
+
+### Added
+- `linux-asan` preset (`-fsanitize=address,undefined`, own targets only;
+  `-fno-sanitize=vptr` — prebuilt third-party libs ship without RTTI, so
+  vptr reports are false positives).
+- 6 sanitizer scenarios + fault injection (missing path, corrupt
+  tileset.json, corrupt glb all fail gracefully) + API lifecycle tests.
+- `registerAllTileContentTypes` made `std::call_once`; `renderer.cpp` now
+  really calls `engine->destroy(renderer)` with a corrected teardown order.
+- CI runs the sanitizer gate as its own job (not local-only).
+
+### Notes
+- One documented suppression: cesium-native v0.64.0 `CurlAssetAccessor`
+  leaks a cache handle (third-party, upstream).
+
+## [0.1.0] — 2026-09-29 (P5: HTTP, b3dm, rebase)
+
+### Added
+- `http(s)://` tileset loading via CesiumCurl (tested against a local
+  `http.server`; no external network dependency).
+- `b3dm` batched meshes via `Model` → `writeGlb` → gltfio conversion path.
+- ECEF local-origin rebase: translating by ~123456789 m renders
+  bit-identical pixels (kills float32 jitter for far-from-origin data).
+
+## [0.1.0] — 2026-09-29 (P4: four-platform wiring)
+
+### Added
+- Swapchain wiring for Android/Vulkan (`ANativeWindow`), Windows/Vulkan
+  (`HWND`), iOS/Metal (`UIView`); Filament v1.77.0 prebuilt packages per
+  platform. Squash-merged via PR #1 with CI 5/5 green.
+- Fixed a CI trigger misconfiguration (`main` → `master`).
+
+### Notes (ADR-0006)
+- WASM is a stub: Filament ships only filament.js, no C++ library.
+- Honest boundary: only Linux headless rendering is pixel-verified;
+  Android/Windows/iOS have no real-device verification.
+
+## [0.1.0] — 2026-09-29 (P3: real tileset on screen)
+
+### Added
+- Real tileset scheduling (`Tileset::updateViewGroup` + `loadTiles`) and
+  the full `IPrepareRendererResources` → gltfio `AssetLoader`/ubershader →
+  Filament scene pipeline. Two root causes in the scheduling path fixed.
+- Deterministic self-generated tileset (`tests/data/gen_p3_tileset.py`,
+  no network); 3 colored boxes on screen.
+
+### Notes (ADR-0005)
+- Local paths only, bare GLB only, no ECEF→ENU rebase (P5 closed these).
+
+## [0.1.0] — 2026-09-29 (P2: real Filament rendering on Linux)
+
+### Changed
+- `initialize`/`renderFrame` went from stub to real implementation:
+  Filament Engine (OpenGL) + X11 swapchain + Scene/View/Camera with
+  ordered shutdown. Headless verification (xvfb + Mesa software rendering):
+  deep-blue clear + solid-red unlit triangle, pixel-verified.
+
+### Notes (ADR-0004)
+- Software rendering validates correctness only, never performance.
+
+## [0.1.0] — 2026-09-29 (P1: SDK/demo split)
+
+### Changed
+- Split into `tiles_renderer` (static SDK, **zero SDL dependency** —
+  ADR-0003) and `tiles_demo` (SDL3 host). The SDK takes a native window
+  handle (`HWND` / `ANativeWindow` / `UIView` / canvas); the host app owns
+  the window and the lifecycle.
+- SDK links Cesium Native v0.64.0 + Filament v1.77.0; the demo links
+  SDL3 3.4.16. Verified with `nm`: zero SDL symbols in the SDK archive.
+
+## [0.1.0] — 2026-09-29 (P0: scaffold)
+
+### Added
+- Repository scaffold: CMake presets for linux/windows/android/ios/wasm,
+  GitHub Actions CI matrix, `src` skeleton, smoke test, ADR-001
+  (Cesium Native + Filament stack decision).
