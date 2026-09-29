@@ -183,6 +183,25 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
   endif()
 endif()
 
+# P10: 3D Tiles 1.1 — bare-glb content (3DTILES_content_gltf) and implicit
+# QUADTREE (3DTILES_implicit_tiling) with a hand-written JSON subtree.
+# cesium-native handles both with no SDK code change; the test asserts
+# real pixels for both scenarios.
+if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME tiles11_screenshot
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tiles11_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --outdir "${CMAKE_BINARY_DIR}/screenshots/p10_11"
+              --frames 90 --width 800 --height 600)
+    set_tests_properties(tiles11_screenshot PROPERTIES TIMEOUT 1200)
+  else()
+    message(WARNING "[P10] Python3 not found — 1.1 screenshot test skipped")
+  endif()
+endif()
+
 # P6: lifecycle + fault-injection tests. Meaningful with or without
 # sanitizers (they assert graceful failure instead of crashes); the
 # sanitizer_* variants below additionally gate on ASan/LSan/UBSan reports.
@@ -256,6 +275,12 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
       COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
               --frames 60
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p9_cmpt_tileset/tileset.json")
+    # P10 scene: 3D Tiles 1.1 implicit quadtree (subtree JSON +
+    # per-tile glb content through BinaryToGltfConverter; no SDK change).
+    add_test(NAME sanitizer_11
+      COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
+              --frames 60
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p10_11_implicit/tileset.json")
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"
@@ -275,7 +300,7 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
     endif()
     set_tests_properties(
       sanitizer_demo sanitizer_tileset sanitizer_b3dm sanitizer_i3dm
-      sanitizer_pnts sanitizer_cmpt sanitizer_http
+      sanitizer_pnts sanitizer_cmpt sanitizer_11 sanitizer_http
       sanitizer_faults
       PROPERTIES TIMEOUT 900)
   else()

@@ -18,6 +18,12 @@ Driven through tiles_demo; the exit-code contract is:
   K. cmpt with wrong magic     -> exit 0 (bad tile skipped, no crash)
   L. cmpt tilesLength larger than the actual inner tiles
                               -> exit 0 (bad tile skipped, no crash)
+  M. 1.1 tileset with corrupt bare-glb content
+                              -> exit 0 (bad tile skipped, no crash)
+  N. 1.1 implicit tileset with a missing subtree file
+                              -> exit 0 (subtree load fails, no crash)
+  O. 1.1 implicit tileset with an illegal subdivisionScheme
+                              -> exit 0 (no implicit loader, no crash)
 
 A crash (segfault/abort, e.g. exit -11/-6) fails the test. When the demo
 binary was built with -DTILES_SANITIZE=ON, wrap this script in
@@ -309,6 +315,64 @@ def main():
             failures += 1
         else:
             print("PASS: case %s (corrupt cmpt skipped, no crash)" % case)
+
+    # M/N/O: 3D Tiles 1.1 bad inputs (P10).
+    eleven_dir = os.path.join(workdir, "bad_11")
+    shutil.rmtree(eleven_dir, ignore_errors=True)
+    os.makedirs(eleven_dir)
+    p10data = os.path.join(HERE, "data")
+    # M: corrupt bare-glb content in a 1.1 tileset (bad magic).
+    m_dir = os.path.join(eleven_dir, "m")
+    os.makedirs(m_dir)
+    with open(os.path.join(p10data, "p10_11_glb", "box.glb"), "rb") as f:
+        good_glb = f.read()
+    with open(os.path.join(m_dir, "box.glb"), "wb") as f:
+        f.write(b"xxxx" + good_glb[4:])
+    with open(os.path.join(m_dir, "tileset.json"), "w") as f:
+        _json.dump({
+            "asset": {"version": "1.1"},
+            "root": {
+                "boundingVolume": {"box": [0, 0, 0, 8, 0, 0, 0, 5, 0,
+                                           0, 0, 5]},
+                "geometricError": 0.0,
+                "content": {"uri": "box.glb"},
+            },
+        }, f)
+    # N: implicit tileset whose subtree file is missing.
+    n_dir = os.path.join(eleven_dir, "n")
+    shutil.copytree(os.path.join(p10data, "p10_11_implicit", "tiles"),
+                    os.path.join(n_dir, "tiles"))
+    shutil.copy(os.path.join(p10data, "p10_11_implicit", "tileset.json"),
+                os.path.join(n_dir, "tileset.json"))
+    # O: implicit tileset with an illegal subdivisionScheme.
+    o_dir = os.path.join(eleven_dir, "o")
+    shutil.copytree(os.path.join(p10data, "p10_11_implicit", "tiles"),
+                    os.path.join(o_dir, "tiles"))
+    shutil.copytree(os.path.join(p10data, "p10_11_implicit", "subtrees"),
+                    os.path.join(o_dir, "subtrees"))
+    with open(os.path.join(p10data, "p10_11_implicit",
+                           "tileset.json")) as f:
+        o_ts = _json.load(f)
+    o_ts["root"]["extensions"]["3DTILES_implicit_tiling"][
+        "subdivisionScheme"] = "HEXAGON"
+    with open(os.path.join(o_dir, "tileset.json"), "w") as f:
+        _json.dump(o_ts, f)
+    for case in ("M", "N", "O"):
+        ts_path = os.path.join(eleven_dir, case.lower(), "tileset.json")
+        shot = os.path.join(workdir, "bad_11_%s.png" % case)
+        rc = run_demo(args.demo, ["--frames", "30", "--tileset", ts_path,
+                                  "--screenshot", shot])
+        if rc is None:
+            failures += 1
+        elif crashed(rc):
+            print("FAIL: case %s crashed (exit %d)" % (case, rc))
+            failures += 1
+        elif rc != 0:
+            print("FAIL: case %s: expected exit 0 (bad input skipped), "
+                  "got %d" % (case, rc))
+            failures += 1
+        else:
+            print("PASS: case %s (1.1 bad input skipped, no crash)" % case)
 
     if failures:
         print("FAIL: fault_test (%d case(s) failed)" % failures)

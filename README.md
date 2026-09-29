@@ -150,15 +150,15 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
   （这是通用 local-origin rebase，不是严格旋转 ENU 基；详见 ADR-0005。）
 
 > **边界（诚实说明）**：i3dm 见 P7（ADR-0008）；pnts 见 P8（ADR-0009）；
-> cmpt 见 P9（ADR-0010）；
+> cmpt 见 P9（ADR-0010）；3D Tiles 1.1 见 P10（ADR-0011）；
 > 代理/证书走系统默认；rebase 不是完整 ENU 姿态变换。
-> 详见 ADR-0005、ADR-0008、ADR-0009、ADR-0010。
+> 详见 ADR-0005、ADR-0008、ADR-0009、ADR-0010、ADR-0011。
 
 ### P6：内存与资源健壮性（见 ADR-0007）
 
 ```bash
-# 1) 普通回归（12/12）：smoke、demo、截图、tileset、http、b3dm、rebase、
-#    i3dm、pnts、cmpt、lifecycle、fault_inputs
+# 1) 普通回归（13/13）：smoke、demo、截图、tileset、http、b3dm、rebase、
+#    i3dm、pnts、cmpt、tiles11、lifecycle、fault_inputs
 cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON -DTILES_SDL3_NATIVE_VIDEO=ON
 cmake --build --preset linux -j2
 xvfb-run -a ctest --preset linux -I 1,9 --output-on-failure
@@ -239,6 +239,18 @@ cesium-native `CurlAssetAccessor` 的 handle 缓存泄漏），自有代码泄�
   故障注入加截断/坏 magic/tilesLength 不符 cmpt 优雅失败；
   `sanitizer_cmpt` 进 linux-asan 门禁—— ✅ 已完成
   （sanitizer 21/21、普通 12/12，SDK 零 SDL；见 ADR-0010）
+
+- **P10 3D Tiles 1.1 真实支持**：`asset.version: "1.1"` tileset——裸 `.glb`
+  tile content（`3DTILES_content_gltf`）经 magic `"glTF"` 走
+  `BinaryToGltfConverter` 进同一 render bridge；implicit QUADTREE
+  （`3DTILES_implicit_tiling`，subtreeLevels/availableLevels 2）经
+  cesium-native `ImplicitQuadtreeLoader` 加载手写 JSON subtree
+  （constant availability）并按 `{level}_{x}_{y}` 模板取 tile content——
+  均无需 SDK 代码改动；`tiles11_screenshot` 断言裸 glb 双色盒子与
+  implicit 5 tiles（红/绿/蓝/黄/品红）上屏；
+  故障注入加损坏 glb/缺失 subtree/非法 subdivisionScheme 优雅失败；
+  `sanitizer_11` 进 linux-asan 门禁—— ✅ 已完成
+  （见 ADR-0011）
 
 ## AI 协作
 
