@@ -9,6 +9,7 @@
 #include <unordered_set>
 
 #ifdef TILES_WITH_CESIUM_NATIVE
+#include <Cesium3DTilesSelection/BoundingVolume.h>
 #include <Cesium3DTilesSelection/IPrepareRendererResources.h>
 #include <Cesium3DTilesSelection/Tile.h>
 #include <Cesium3DTilesSelection/TileContent.h>
@@ -22,6 +23,9 @@
 #include <CesiumAsync/IAssetRequest.h>
 #include <CesiumAsync/IAssetResponse.h>
 #include <CesiumAsync/ThreadPool.h>
+#include <CesiumCurl/CurlAssetAccessor.h>
+#include <CesiumGltf/ExtensionCesiumRTC.h>
+#include <CesiumGltfWriter/GltfWriter.h>
 #include <CesiumUtility/CreditSystem.h>
 #endif
 
@@ -188,6 +192,53 @@ private:
 };
 
 // ---------------------------------------------------------------------------
+// RoutingAssetAccessor: http(s) URLs go through cesium-native's
+// CurlAssetAccessor (libcurl, own worker threads); everything else
+// (plain paths, file://) is served from the local filesystem.
+// ---------------------------------------------------------------------------
+class RoutingAssetAccessor : public CesiumAsync::IAssetAccessor {
+public:
+    RoutingAssetAccessor()
+        : _pCurl(std::make_shared<CesiumCurl::CurlAssetAccessor>()),
+          _pLocal(std::make_shared<LocalFileAssetAccessor>()) {}
+
+    CesiumAsync::Future<std::shared_ptr<CesiumAsync::IAssetRequest>> get(
+        const CesiumAsync::AsyncSystem& asyncSystem, const std::string& url,
+        const std::vector<THeader>& headers) override {
+        if (isHttp(url)) {
+            return _pCurl->get(asyncSystem, url, headers);
+        }
+        return _pLocal->get(asyncSystem, url, headers);
+    }
+
+    CesiumAsync::Future<std::shared_ptr<CesiumAsync::IAssetRequest>> request(
+        const CesiumAsync::AsyncSystem& asyncSystem, const std::string& verb,
+        const std::string& url, const std::vector<THeader>& headers,
+        const std::span<const std::byte>& contentPayload) override {
+        if (isHttp(url)) {
+            return _pCurl->request(
+                asyncSystem, verb, url, headers, contentPayload);
+        }
+        return _pLocal->request(
+            asyncSystem, verb, url, headers, contentPayload);
+    }
+
+    void tick() noexcept override {
+        _pCurl->tick();
+        _pLocal->tick();
+    }
+
+private:
+    static bool isHttp(const std::string& url) {
+        return url.compare(0, 7, "http://") == 0 ||
+               url.compare(0, 8, "https://") == 0;
+    }
+
+    std::shared_ptr<CesiumCurl::CurlAssetAccessor> _pCurl;
+    std::shared_ptr<LocalFileAssetAccessor> _pLocal;
+};
+
+// ---------------------------------------------------------------------------
 // Per-tile render data, created in prepareInMainThread and freed in free().
 // The glb bytes are kept alive for the asset's lifetime (gltfio references
 // the caller's buffer).
@@ -197,6 +248,57 @@ struct TileRenderData {
     filament::gltfio::FilamentAsset* asset = nullptr;
     bool inScene = false;
 };
+
+// ---------------------------------------------------------------------------
+// Load-thread result handed from prepareInLoadThread to prepareInMainThread.
+// glbBytes: the tile content as binary glb (copied raw, or re-serialized
+// from a converted CesiumGltf::Model). rtcCenter: b3dm RTC_CENTER in tile-
+// local coordinates (double); applied to the transform in double precision
+// in prepareInMainThread instead of being baked into float glTF nodes.
+// ---------------------------------------------------------------------------
+struct LoadThreadData {
+    std::vector<std::uint8_t> glbBytes;
+    glm::dvec3 rtcCenter{0.0, 0.0, 0.0};
+};
+
+// Serialize a cesium-native glTF Model (e.g. produced by the b3dm/i3dm
+// converters) back to binary glb so gltfio can load it. A present
+// CESIUM_RTC extension is extracted into rtcCenter (double) and stripped,
+// because gltfio does not understand it and float glTF nodes cannot hold
+// ECEF-scale centers. Returns nullptr on failure.
+LoadThreadData* modelToGlb(const CesiumGltf::Model& inModel) {
+    CesiumGltf::Model model = inModel; // copy: we strip the RTC extension
+    glm::dvec3 rtcCenter{0.0, 0.0, 0.0};
+    if (const auto* pRtc =
+            model.getExtension<CesiumGltf::ExtensionCesiumRTC>();
+        pRtc != nullptr && pRtc->center.size() == 3) {
+        rtcCenter = glm::dvec3(
+            pRtc->center[0], pRtc->center[1], pRtc->center[2]);
+        model.extensions.erase(CesiumGltf::ExtensionCesiumRTC::ExtensionName);
+        model.removeExtensionUsed(CesiumGltf::ExtensionCesiumRTC::ExtensionName);
+        model.removeExtensionRequired(
+            CesiumGltf::ExtensionCesiumRTC::ExtensionName);
+    }
+    std::span<const std::byte> bufferData;
+    if (!model.buffers.empty()) {
+        const auto& bytes = model.buffers[0].cesium.data;
+        bufferData = std::span<const std::byte>(bytes.data(), bytes.size());
+    }
+    CesiumGltfWriter::GltfWriter writer;
+    CesiumGltfWriter::GltfWriterResult result = writer.writeGlb(model, bufferData);
+    if (!result.errors.empty()) {
+        std::cerr << "[tiles_renderer] modelToGlb: writeGlb failed: "
+                  << result.errors.front() << std::endl;
+        return nullptr;
+    }
+    auto* pData = new LoadThreadData();
+    pData->rtcCenter = rtcCenter;
+    pData->glbBytes.assign(
+        reinterpret_cast<const std::uint8_t*>(result.gltfBytes.data()),
+        reinterpret_cast<const std::uint8_t*>(result.gltfBytes.data()) +
+            result.gltfBytes.size());
+    return pData;
+}
 
 // ---------------------------------------------------------------------------
 // FilamentPrepareResources: IPrepareRendererResources implementation that
@@ -235,26 +337,37 @@ public:
         Cesium3DTilesSelection::TileLoadResult&& tileLoadResult,
         const glm::dmat4& /*transform*/,
         const std::any& /*rendererOptions*/) override {
-        void* pBytes = nullptr;
+        LoadThreadData* pData = nullptr;
         const auto& result = tileLoadResult;
-        if (result.pCompletedRequest != nullptr &&
+
+        // Case A: cesium-native already converted the content to a
+        // CesiumGltf::Model (b3dm / i3dm / ... via GltfConverters).
+        // Serialize it back to glb bytes for gltfio.
+        if (const auto* pModel =
+                std::get_if<CesiumGltf::Model>(&result.contentKind);
+            pModel != nullptr) {
+            pData = modelToGlb(*pModel);
+        }
+
+        // Case B: raw glb bytes straight from the completed request.
+        if (pData == nullptr && result.pCompletedRequest != nullptr &&
             result.pCompletedRequest->response() != nullptr) {
             const auto data = result.pCompletedRequest->response()->data();
             if (data.size() >= 4) {
                 std::uint32_t magic = 0;
                 std::memcpy(&magic, data.data(), 4);
                 if (magic == kGltfMagic) {
-                    auto* pVec = new std::vector<std::uint8_t>(
-                        data.size());
-                    std::memcpy(
-                        pVec->data(), data.data(), data.size());
-                    pBytes = pVec;
+                    pData = new LoadThreadData();
+                    pData->glbBytes.assign(
+                        reinterpret_cast<const std::uint8_t*>(data.data()),
+                        reinterpret_cast<const std::uint8_t*>(data.data()) +
+                            data.size());
                 }
             }
         }
         Cesium3DTilesSelection::TileLoadResultAndRenderResources out;
         out.result = std::move(tileLoadResult);
-        out.pRenderResources = pBytes;
+        out.pRenderResources = pData;
         return asyncSystem.createResolvedFuture<
             Cesium3DTilesSelection::TileLoadResultAndRenderResources>(
             std::move(out));
@@ -262,14 +375,16 @@ public:
 
     void* prepareInMainThread(
         Cesium3DTilesSelection::Tile& tile, void* pLoadThreadResult) override {
-        auto* pBytes =
-            static_cast<std::vector<std::uint8_t>*>(pLoadThreadResult);
-        if (pBytes == nullptr) {
+        auto* pLoad =
+            static_cast<LoadThreadData*>(pLoadThreadResult);
+        if (pLoad == nullptr || pLoad->glbBytes.empty()) {
+            delete pLoad;
             return nullptr; // not glb content (or load failed)
         }
         auto* pData = new TileRenderData();
-        pData->glbBytes = std::move(*pBytes);
-        delete pBytes;
+        pData->glbBytes = std::move(pLoad->glbBytes);
+        const glm::dvec3 rtcCenter = pLoad->rtcCenter;
+        delete pLoad;
 
         pData->asset = _assetLoader->createAsset(
             pData->glbBytes.data(),
@@ -290,13 +405,25 @@ public:
             return nullptr;
         }
 
-        // Apply the tile's transform to the glTF root (identity for the P3
-        // test tileset; non-identity for real tilesets).
-        const glm::dmat4& t = tile.getTransform();
+        // Compose the tile's world transform in double precision:
+        //   world = tileTransform * translate(rtcCenter) - localOrigin
+        // The b3dm RTC_CENTER (if any) is applied here in double precision
+        // instead of being baked into the float glTF node, and localOrigin
+        // (P5 rebase) keeps huge ECEF-style coordinates renderable in
+        // float32. Both are no-ops for the small local test tilesets.
+        glm::dmat4 worldT = tile.getTransform();
+        if (rtcCenter != glm::dvec3(0.0)) {
+            glm::dmat4 rtcT(1.0);
+            rtcT[3][0] = rtcCenter.x;
+            rtcT[3][1] = rtcCenter.y;
+            rtcT[3][2] = rtcCenter.z;
+            worldT = worldT * rtcT;
+        }
+        worldT[3] -= glm::dvec4(_localOrigin, 0.0);
         filament::math::mat4f m;
         for (int c = 0; c < 4; ++c) {
             for (int r = 0; r < 4; ++r) {
-                m[c][r] = static_cast<float>(t[c][r]);
+                m[c][r] = static_cast<float>(worldT[c][r]);
             }
         }
         auto& transformManager = _engine->getTransformManager();
@@ -308,11 +435,15 @@ public:
         return pData;
     }
 
+    // P5 rebase origin (world coordinates, double). Set once per tileset
+    // after the root tile loads; defaults to (0,0,0) = no rebase.
+    void setLocalOrigin(const glm::dvec3& origin) { _localOrigin = origin; }
+
     void free(
         Cesium3DTilesSelection::Tile& /*tile*/, void* pLoadThreadResult,
         void* pMainThreadResult) noexcept override {
-        // Case 1: prepareInMainThread never ran — drop the raw bytes.
-        delete static_cast<std::vector<std::uint8_t>*>(pLoadThreadResult);
+        // Case 1: prepareInMainThread never ran — drop the load-thread data.
+        delete static_cast<LoadThreadData*>(pLoadThreadResult);
         // Case 2: full render data — remove from scene, destroy asset.
         auto* pData = static_cast<TileRenderData*>(pMainThreadResult);
         if (pData == nullptr) {
@@ -363,6 +494,9 @@ private:
     filament::gltfio::MaterialProvider* _materialProvider = nullptr;
     filament::gltfio::AssetLoader* _assetLoader = nullptr;
     filament::gltfio::ResourceLoader* _resourceLoader = nullptr;
+    // P5 rebase origin (world coordinates, double); subtracted from every
+    // tile translation in double precision before the float32 conversion.
+    glm::dvec3 _localOrigin{0.0, 0.0, 0.0};
 };
 
 #endif // TILES_WITH_CESIUM_NATIVE && TILES_WITH_FILAMENT
@@ -403,7 +537,7 @@ struct TilesetRenderer::Impl {
             contentTypesRegistered = true;
         }
 
-        auto pAccessor = std::make_shared<LocalFileAssetAccessor>();
+        auto pAccessor = std::make_shared<RoutingAssetAccessor>();
         auto pPrepare =
             std::make_shared<FilamentPrepareResources>(engine, scene);
         // Keep an AsyncSystem handle: TilesetExternals takes a copy (it is a
@@ -437,10 +571,51 @@ struct TilesetRenderer::Impl {
             tileset.reset();
             return false;
         }
+        // P5 rebase: pick the tileset's world-space center as the local
+        // origin so huge coordinates (e.g. ECEF) survive the float32 render
+        // transform. For small local tilesets this is ~(0,0,0) = no-op.
+        localOrigin = computeLocalOrigin(*tileset->getRootTile());
+        hasOrigin = true;
+        pPrepare->setLocalOrigin(localOrigin);
         std::cout << "[tiles_renderer] tileset loaded: " << urlOrPath
+                  << " (local origin: " << localOrigin.x << ", "
+                  << localOrigin.y << ", " << localOrigin.z << ")"
                   << std::endl;
         loaded = true;
         return true;
+    }
+
+    // World-space center of the root tile's bounding volume (double).
+    // Used as the rebase origin; falls back to (0,0,0) with a warning for
+    // volume types we don't know how to center.
+    static glm::dvec3 computeLocalOrigin(
+        const Cesium3DTilesSelection::Tile& root) {
+        using namespace Cesium3DTilesSelection;
+        const BoundingVolume& bv = root.getBoundingVolume();
+        if (const auto* pBox =
+                std::get_if<CesiumGeometry::OrientedBoundingBox>(&bv);
+            pBox != nullptr) {
+            return pBox->getCenter();
+        }
+        if (const auto* pSphere =
+                std::get_if<CesiumGeometry::BoundingSphere>(&bv);
+            pSphere != nullptr) {
+            return pSphere->getCenter();
+        }
+        if (const auto* pRegion =
+                std::get_if<CesiumGeospatial::BoundingRegion>(&bv);
+            pRegion != nullptr) {
+            return pRegion->getBoundingBox().getCenter();
+        }
+        if (const auto* pLoose = std::get_if<
+                CesiumGeospatial::BoundingRegionWithLooseFittingHeights>(&bv);
+            pLoose != nullptr) {
+            return pLoose->getBoundingRegion().getBoundingBox().getCenter();
+        }
+        std::cerr << "[tiles_renderer] computeLocalOrigin: unsupported "
+                     "bounding volume type; rebase disabled"
+                  << std::endl;
+        return glm::dvec3(0.0);
     }
 
     void updateTiles(
@@ -456,10 +631,14 @@ struct TilesetRenderer::Impl {
             return;
         }
 
-        // Orbit camera -> cesium ViewState.
+        // Orbit camera -> cesium ViewState. The orbit target is the tileset's
+        // rebase origin (double precision); rendering shows the same tiles
+        // rebased around (0,0,0) — see FilamentPrepareResources.
         const double yaw = cam.yawDegrees * kPi / 180.0;
         const double pitch = cam.pitchDegrees * kPi / 180.0;
-        const glm::dvec3 target(cam.targetX, cam.targetY, cam.targetZ);
+        const glm::dvec3 target =
+            hasOrigin ? localOrigin
+                      : glm::dvec3(cam.targetX, cam.targetY, cam.targetZ);
         const glm::dvec3 eye(
             target.x + cam.distance * std::cos(pitch) * std::sin(yaw),
             target.y + cam.distance * std::sin(pitch),
@@ -548,6 +727,11 @@ struct TilesetRenderer::Impl {
     std::unique_ptr<Cesium3DTilesSelection::Tileset> tileset;
     bool loaded = false;
     int renderedCount = -1;
+    // P5 rebase origin (world coordinates, double). Tile selection
+    // (ViewState) orbits this point in full double precision; rendering
+    // subtracts it in double precision before the float32 conversion.
+    glm::dvec3 localOrigin{0.0, 0.0, 0.0};
+    bool hasOrigin = false;
 #else
     Impl(filament::Engine*, filament::Scene*) {}
 #endif

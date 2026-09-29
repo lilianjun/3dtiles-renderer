@@ -132,10 +132,25 @@ xvfb-run -a ./build/linux/tiles_demo --frames 60 \
 child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
 `tileset_screenshot` 测试断言 3 tiles 上屏、截图含橙色与青色像素。
 
-> **边界（诚实说明）**：当前仅支持**本地路径**（`LocalFileAssetAccessor`，
-> HTTP/HTTPS 未实现）；内容仅验证过**裸 GLB**（b3dm/i3dm 待办）；
-> tile transform 直接 double→float，无 ECEF rebase（真实地理坐标待办）。
-> 详见 ADR-0005。
+**P5 补齐三个 P3 缺口**（见 ADR-0005）：
+
+- **HTTP/HTTPS**：`RoutingAssetAccessor` — `http(s)://` 走 cesium-native
+  `CesiumCurl`（libcurl），本地路径/`file://` 行为不变；
+  `http_tileset_screenshot` 用本地 `python3 -m http.server` 验证。
+- **b3dm**：`B3dmToGltfConverter` 产出的 `CesiumGltf::Model` 经
+  `CesiumGltfWriter::writeGlb` 重新序列化后交给 gltfio；
+  b3dm 的 `RTC_CENTER`（`CESIUM_RTC` 扩展）以双精度参与 transform 计算；
+  `b3dm_tileset_screenshot` 断言 b3dm 橙色瓦片上屏。
+  i3dm 仍为 TODO（同路径理论可用，但无测试数据覆盖）。
+- **ECEF→local-origin rebase**：tileset 加载后取 root bounding volume 中心
+  为双精度原点；瓦片**选择**（Cesium ViewState）在真实世界坐标（double）
+  进行，**渲染**时每 tile transform 减去原点再转 float32，Filament 相机
+  围绕 (0,0,0)。`rebase_tileset_screenshot` 用 root 平移 123456789.0 m 的
+  `far` tileset 验证：rebase 后与 `near` 的橙色质心偏差 ≤ 25 px。
+  （这是通用 local-origin rebase，不是严格旋转 ENU 基；详见 ADR-0005。）
+
+> **边界（诚实说明）**：i3dm 未实现（待办）；代理/证书走系统默认；
+> rebase 不是完整 ENU 姿态变换。详见 ADR-0005。
 
 > 首次全依赖 configure 会触发 vcpkg 构建 cesium-native 的约 15 个第三方 port，
 > 在 2 核机器上需要数十分钟，请耐心等待。SDL3 的 X11 视频后端需要
@@ -166,7 +181,8 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
   windows/ios 编译靠 CI；运行验证仅 linux 无头；见 ADR-0006）
 - **P5 真机与 Web**：Android APK / iOS app 真机冒烟、Windows 实机、
   浏览器运行；Filament for Web 源码构建或 filament.js 桥接；
-  P3 遗留（HTTP(S)、b3dm/i3dm、ECEF→ENU rebase）
+  P3 遗留（i3dm、完整 ENU 姿态变换）—— HTTP(S)、b3dm、local-origin rebase
+  已在本阶段完成并验证（见 ADR-0005）
 
 ## AI 协作
 

@@ -173,6 +173,9 @@ if(TILES_WITH_CESIUM_NATIVE)
   # PUBLIC: consumers of this static SDK library need the transitive link.
   # Link the tile-selection core; its link interface pulls the rest transitively.
   target_link_libraries(tiles_renderer PUBLIC Cesium3DTilesSelection)
+  # P5: CesiumCurl (libcurl asset accessor) for http(s):// tileset URLs,
+  # CesiumGltfWriter to re-serialize converted models (b3dm/i3dm) to glb.
+  target_link_libraries(tiles_renderer PUBLIC CesiumCurl CesiumGltfWriter)
   target_compile_definitions(tiles_renderer PRIVATE TILES_WITH_CESIUM_NATIVE)
 endif()
 

@@ -336,8 +336,11 @@ bool Renderer::renderFrame() {
         const float yaw = s.orbit.yawDegrees * kDegToRad;
         const float pitch = s.orbit.pitchDegrees * kDegToRad;
         const float d = s.orbit.distance;
-        const filament::math::float3 target{
-            s.orbit.targetX, s.orbit.targetY, s.orbit.targetZ};
+        // P5: tiles are rendered rebased around the tileset's local origin
+        // (world - localOrigin, in double precision), so the Filament camera
+        // always orbits (0,0,0) here. Tile *selection* still uses the true
+        // world-space origin (see TilesetRenderer::update).
+        const filament::math::float3 target{0.0f, 0.0f, 0.0f};
         const filament::math::float3 eye{
             target.x + d * std::cos(pitch) * std::sin(yaw),
             target.y + d * std::sin(pitch),

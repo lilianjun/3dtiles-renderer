@@ -50,6 +50,8 @@ def main():
     ap.add_argument("--width", type=int, default=800)
     ap.add_argument("--height", type=int, default=600)
     ap.add_argument("--out", required=True)
+    # P5: comma-separated subset of "orange,teal" to require (default: both).
+    ap.add_argument("--expect", default="orange,teal")
     args = ap.parse_args()
 
     cmd = [args.demo, "--frames", str(args.frames),
@@ -112,15 +114,18 @@ def main():
         print("FAIL: clear-color background nearly absent "
               "(camera framing wrong?)")
         return 1
-    # Both LOD children must contribute visible pixels: this is what makes
-    # the P3 image provably different from the P2 clear+red-triangle image.
-    if n_orange < 200:
+    expect = {c.strip() for c in args.expect.split(",") if c.strip()}
+    # Each expected child tile must contribute visible pixels: this is what
+    # makes the P3 image provably different from the P2 clear+red-triangle
+    # image.
+    if "orange" in expect and n_orange < 200:
         print(f"FAIL: too few orange (child_a) pixels: {n_orange}")
         return 1
-    if n_teal < 200:
+    if "teal" in expect and n_teal < 200:
         print(f"FAIL: too few teal (child_b) pixels: {n_teal}")
         return 1
-    print("PASS: tileset rendered (orange + teal tiles visible)")
+    print("PASS: tileset rendered (expected tiles visible: %s)"
+          % ",".join(sorted(expect)))
     return 0
 
 

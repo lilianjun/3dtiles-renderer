@@ -55,7 +55,8 @@ public:
     static bool readPixels(std::vector<std::uint8_t>& outRgba,
                            std::uint32_t& outWidth, std::uint32_t& outHeight);
 
-    // P3: load a 3D Tiles tileset (local filesystem path or file:// URL).
+    // P3: load a 3D Tiles tileset (local filesystem path, file:// URL, or
+    // P5: http(s):// URL — served by cesium-native's CurlAssetAccessor).
     // Must be called after initialize(). Tile selection/LOD runs every frame
     // in renderFrame() against the orbit camera set via setOrbitCamera().
     // Returns false when not initialized or the tileset failed to load.

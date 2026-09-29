@@ -61,3 +61,44 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
     message(WARNING "[P3] Python3 not found — tileset_screenshot test skipped")
   endif()
 endif()
+
+# P5: fill the three P3 gaps, each with its own headless pixel assertion.
+if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    # Gap 1 — HTTP(S) loading: serve the p3 tileset over a local HTTP server
+    # (no external network) and reuse tileset_test.py's assertions.
+    add_test(NAME http_tileset_screenshot
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --out "${CMAKE_BINARY_DIR}/screenshots/p5_http.png"
+              --frames 60 --width 800 --height 600)
+    set_tests_properties(http_tileset_screenshot PROPERTIES TIMEOUT 900)
+
+    # Gap 2 — b3dm: child_a is a real b3dm (BATCH_LENGTH=1); the converter
+    # path (b3dm -> CesiumGltf::Model -> glb -> gltfio) must render orange.
+    add_test(NAME b3dm_tileset_screenshot
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p5_b3dm_tileset/tileset.json"
+              --out "${CMAKE_BINARY_DIR}/screenshots/p5_b3dm.png"
+              --frames 60 --width 800 --height 600)
+    set_tests_properties(b3dm_tileset_screenshot PROPERTIES TIMEOUT 900)
+
+    # Gap 3 — ECEF-style rebase: the `far` tileset's root tile is translated
+    # by 123456789 m; without the rebase nothing would be visible. The test
+    # renders `near` and `far` and requires the orange centroid to match.
+    add_test(NAME rebase_tileset_screenshot
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/rebase_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --near-out "${CMAKE_BINARY_DIR}/screenshots/p5_rebase_near.png"
+              --far-out "${CMAKE_BINARY_DIR}/screenshots/p5_rebase_far.png"
+              --frames 60 --width 800 --height 600)
+    set_tests_properties(rebase_tileset_screenshot PROPERTIES TIMEOUT 900)
+  else()
+    message(WARNING "[P5] Python3 not found — P5 screenshot tests skipped")
+  endif()
+endif()
