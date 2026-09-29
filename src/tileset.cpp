@@ -29,6 +29,7 @@
 #include <CesiumGltf/AccessorView.h>
 #include <CesiumGltfWriter/GltfWriter.h>
 #include <CesiumUtility/CreditSystem.h>
+#include <rapidjson/document.h> // P23: pre-flight tileset.json validation
 // P22-hotfix: glm and curl are only available when cesium-native is built
 // (glm arrives via cesium-native's vcpkg tree; curl via its vcpkg ports).
 // The Windows/Android/iOS/WASM CI configs build the SDK WITHOUT
@@ -455,6 +456,102 @@ private:
     std::shared_ptr<NonThrowingCurlAccessor> _pCurl;
     std::shared_ptr<LocalFileAssetAccessor> _pLocal;
 };
+
+// ---------------------------------------------------------------------------
+// P23: fail-fast pre-flight for the root tileset.json.
+//
+// P22's build-then-commit waits (bounded, 30s) for the replacement
+// tileset's root tile before committing. For a corrupt-but-present
+// tileset.json that wait always ran to the full 30s: the bytes arrive
+// fine, cesium-native's TilesetJsonLoader fails the parse in a worker
+// thread, and nothing distinguishes "still loading" from "load failed" —
+// getRootTile() stays nullptr either way.
+//
+// Fix: validate the root document BEFORE constructing the Tileset.
+//   * local file: read + rapidjson parse (synchronous, ~ms).
+//   * http(s): one blocking fetch through the same RoutingAssetAccessor
+//     the Tileset will use (same curl timeouts, never throws — a network
+//     failure surfaces as synthetic 599), then the same parse.
+// The check mirrors what the loader needs: a parseable JSON object with
+// a "root" object member. Anything weaker (garbage bytes, truncated
+// JSON, valid JSON that isn't a tileset) fails here in milliseconds
+// instead of spinning the 30s root-wait. Slow networks are unaffected:
+// the pre-flight fetch uses the same generous timeouts as tile loading,
+// so a slow-but-valid root still passes (P18's slow_http_server scenario
+// keeps working).
+// ---------------------------------------------------------------------------
+bool preflightTilesetRoot(
+    const std::string& url,
+    const std::string& localPath,
+    RoutingAssetAccessor& accessor,
+    CesiumAsync::AsyncSystem& asyncSystem,
+    std::string& errorOut) {
+    std::vector<std::byte> bytes;
+    if (!localPath.empty()) {
+        std::ifstream in(localPath, std::ios::binary);
+        if (!in) {
+            errorOut = "file not found: " + localPath;
+            return false;
+        }
+        in.seekg(0, std::ios::end);
+        const auto size = in.tellg();
+        if (size < 0) {
+            errorOut = "cannot read file: " + localPath;
+            return false;
+        }
+        in.seekg(0, std::ios::beg);
+        bytes.resize(static_cast<std::size_t>(size));
+        if (!bytes.empty()) {
+            in.read(reinterpret_cast<char*>(bytes.data()), size);
+        }
+    } else {
+        // HTTP(S): blocking fetch through the same accessor. The curl
+        // path never throws (network failure -> synthetic 599), but guard
+        // anyway — loadTileset must not let exceptions escape.
+        std::shared_ptr<CesiumAsync::IAssetRequest> pRequest;
+        try {
+            pRequest = accessor.get(asyncSystem, url, {}).wait();
+        } catch (const std::exception& e) {
+            errorOut = std::string("failed to fetch tileset.json: ") + e.what();
+            return false;
+        } catch (...) {
+            errorOut = "failed to fetch tileset.json: unknown error";
+            return false;
+        }
+        const CesiumAsync::IAssetResponse* pResponse =
+            pRequest ? pRequest->response() : nullptr;
+        if (pResponse == nullptr) {
+            errorOut = "failed to fetch tileset.json: empty response";
+            return false;
+        }
+        const std::uint16_t code = pResponse->statusCode();
+        if (code < 200 || code >= 300) {
+            errorOut = "failed to fetch tileset.json: HTTP " +
+                       std::to_string(code);
+            return false;
+        }
+        const auto data = pResponse->data();
+        bytes.assign(data.begin(), data.end());
+    }
+    if (bytes.empty()) {
+        errorOut = "tileset.json is empty";
+        return false;
+    }
+    rapidjson::Document doc;
+    doc.Parse(
+        reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    if (doc.HasParseError()) {
+        errorOut = "tileset.json is not valid JSON (parse error at byte " +
+                   std::to_string(doc.GetErrorOffset()) + ")";
+        return false;
+    }
+    if (!doc.IsObject() || !doc.HasMember("root") ||
+        !doc["root"].IsObject()) {
+        errorOut = "tileset.json is not a 3D Tiles tileset (missing \"root\")";
+        return false;
+    }
+    return true;
+}
 
 // ---------------------------------------------------------------------------
 // Per-tile render data, created in prepareInMainThread and freed in free().
@@ -1081,6 +1178,21 @@ struct TilesetRenderer::Impl {
         auto newTaskProcessor = std::make_shared<SimpleTaskProcessor>();
         auto newAsyncSystem =
             std::make_optional<CesiumAsync::AsyncSystem>(newTaskProcessor);
+        // P23: fail-fast pre-flight — validate the root tileset.json BEFORE
+        // constructing the Tileset, so a corrupt-but-present document fails
+        // in milliseconds instead of spinning the 30s root-wait below. A
+        // failed pre-flight changes nothing: the live tileset (if any) is
+        // untouched, exactly like any other failed load (P22).
+        std::string preflightError;
+        if (!preflightTilesetRoot(
+                url, localPath, *pAccessor, *newAsyncSystem, preflightError)) {
+            // No "loadTileset: " prefix here: Renderer::loadTileset adds it
+            // (same convention as the "file not found" probe above).
+            lastError = preflightError;
+            std::cerr << "[tiles_renderer] loadTileset: " << lastError
+                      << std::endl;
+            return false;
+        }
         Cesium3DTilesSelection::TilesetExternals externals{
             pAccessor, pPrepare, *newAsyncSystem,
             std::make_shared<CesiumUtility::CreditSystem>()};

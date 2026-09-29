@@ -26,6 +26,20 @@ A = Android, i = iOS, wasm = WebAssembly.
   P20 push before anyone noticed. Verified locally by compiling the SDK
   in both CI-equivalent configs (cesium OFF + Filament ON;
   cesium OFF + Filament OFF).
+- `loadTileset` fail-fast on corrupt tileset.json (P23, ADR-0022):
+  the root document is now validated *before* the cesium `Tileset` is
+  constructed (local: read + rapidjson parse; http(s): one blocking fetch
+  through the same `RoutingAssetAccessor`, then the same parse). A
+  corrupt-but-present tileset.json (garbage bytes, truncated JSON, valid
+  JSON without `"root"`) used to burn the full 30s root-wait before
+  failing; it now fails in milliseconds with a specific `lastError()`
+  ("not valid JSON (parse error at byte N)" /
+  "not a 3D Tiles tileset (missing \"root\")" /
+  "failed to fetch tileset.json: HTTP 404"...). Slow networks are not
+  mis-killed — the pre-flight fetch uses the same generous curl timeouts
+  as tile loading. The 30s bounded wait remains as a fallback for deep
+  semantic failures the pre-flight can't see. P22's build-then-commit
+  guarantee is unchanged: a failed load changes nothing.
 - `loadTileset` re-entry safety (P22, ADR-0020): a second `loadTileset()`
   is now build-then-commit — the replacement tileset is fully loaded
   (root tile arrived) before it replaces the live one. Previously
@@ -38,6 +52,15 @@ A = Android, i = iOS, wasm = WebAssembly.
   (repeatable, test/dev only).
 
 ### Added
+- Corrupt-tileset fail-fast test (P23): new `tileset_failfast` ctest
+  (`tests/tileset_failfast_test.py`, 4 scenarios x 3 reps) plus
+  `sanitizer_tileset_failfast` (ASan/LSan/UBSan, no reports). Scenarios:
+  garbage-bytes tileset.json, valid-JSON-not-a-tileset, truncated JSON,
+  corrupt document over slow HTTP (0.3s/response — proves the P18 slow
+  path isn't mis-killed). Each asserts fail-fast (<5s wall from switch
+  frame to `[switch]` log), a specific `lastError()` fragment, the live
+  tileset undisturbed (selected IDs + healthy stats), and an end
+  screenshot bit-identical to a no-switch reference run.
 - Tileset switch safety test (P22): new `tileset_switch` ctest
   (`tests/tileset_switch_test.py`, 4 scenarios x 3 reps, ~20s) plus
   `sanitizer_tileset_switch` (ASan/LSan/UBSan, no reports). Scenarios:

@@ -26,6 +26,9 @@ initialize(config)          // once, on the render thread
 - `loadTileset` accepts a local path, `file://` URL, or `http(s)://`
   URL. It blocks (bounded, ~30 s) until the root tile metadata arrives,
   so call it off the time-critical path or show a loading indicator.
+  A corrupt tileset.json fails fast (milliseconds, not 30 s — P23,
+  ADR-0022); the 30 s bound remains only for deep semantic failures the
+  pre-flight can't see and for unresponsive servers.
   Loading a second tileset replaces the first; there is no separate
   unload — `shutdown()` drops everything. Replacement is atomic: a
   *failed* `loadTileset` changes nothing — the previously loaded tileset
@@ -191,4 +194,6 @@ tiles_renderer::Renderer::initialize(cfg);   // stub: config check only
 4. Check `lastError()` whenever a `bool` API returns `false`.
 5. Keep the WASM canvas-selector string alive for the SDK's lifetime.
 6. `loadTileset` blocks up to ~30 s on first metadata — don't call it
-   on the UI thread without a loading state.
+   on the UI thread without a loading state. (A corrupt tileset.json
+   fails in milliseconds instead — P23; the 30 s is the bound for deep
+   semantic failures / unresponsive servers.)

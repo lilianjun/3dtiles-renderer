@@ -358,6 +358,26 @@ if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   endif()
 endif()
 
+# P23: corrupt-tileset.json fail-fast gate. Corrupt-but-present root
+# documents must fail loadTileset() in milliseconds (pre-flight
+# validation), never spin the 30s root-wait; the live tileset keeps
+# rendering and the end screenshot is bit-identical to a no-switch run.
+# Scenarios: garbage bytes, valid-JSON-not-a-tileset, truncated JSON,
+# corrupt over slow HTTP (0.3s/response — also proves the P18 slow path
+# is not mis-killed by the pre-flight).
+if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME tileset_failfast
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_failfast_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>")
+    set_tests_properties(tileset_failfast PROPERTIES TIMEOUT 900)
+  else()
+    message(WARNING "[P23] Python3 not found — tileset_failfast test skipped")
+  endif()
+endif()
+
 # P11: golden screenshot regression gate. Re-renders one representative
 # fixture per phase with fixed parameters and requires pixel equality
 # against the frozen goldens in tests/golden/ (see its README for the
@@ -546,6 +566,16 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
               --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
               --demo "$<TARGET_FILE:tiles_demo>")
     set_tests_properties(sanitizer_tileset_switch PROPERTIES TIMEOUT 900)
+    # P23: corrupt-tileset.json fail-fast under ASan/LSan/UBSan — the
+    # pre-flight fetch/parse path plus the failed-switch teardown, with
+    # the core fail-fast + scene-undisturbed assertions.
+    add_test(NAME sanitizer_tileset_failfast
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_failfast_test.py"
+              --sanitized
+              --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
+              --demo "$<TARGET_FILE:tiles_demo>")
+    set_tests_properties(sanitizer_tileset_failfast PROPERTIES TIMEOUT 900)
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"

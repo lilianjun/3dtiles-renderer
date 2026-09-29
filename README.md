@@ -157,7 +157,7 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
 ### P6：内存与资源健壮性（见 ADR-0007）
 
 ```bash
-# 1) 普通回归（23/23）：smoke、demo、截图、tileset、http、b3dm、rebase、
+# 1) 普通回归（24/24）：smoke、demo、截图、tileset、http、b3dm、rebase、
 #    i3dm、pnts、cmpt、tiles11、golden_regression、lifecycle、fault_inputs、
 #    host_integration（P12：宿主视角 API 集成检查）、
 #    pbr_materials_screenshot（P15：PBR 材质管线验证）、
@@ -169,17 +169,22 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
 #    add_region（P21：ADD 精化 root 不退场 vs REPLACE 对比门禁 +
 #    region 地理包围体加载/渲染，~3s）、
 #    tileset_switch（P22：loadTileset 再入/切换安全：干净切换像素证明 +
-#    失败重试不破坏现 tileset + 同路径重载 + 慢网加载中切换，~20s）
+#    失败重试不破坏现 tileset + 同路径重载 + 慢网加载中切换，~20s）、
+#    tileset_failfast（P23：损坏 tileset.json 毫秒级失败、旧场景像素无扰动 +
+#    慢网不误杀）、
+#    tileset_failfast（P23：损坏 tileset.json 毫秒级失败、旧场景像素无扰动 +
+#    慢网不误杀）
 cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON -DTILES_SDL3_NATIVE_VIDEO=ON
 cmake --build --preset linux -j2
 xvfb-run -a ctest --preset linux -I 1,9 --output-on-failure
 
-# 2) sanitizer 门禁（19/19）：ASan + LSan + UBSan，只插桩自有 targets
+# 2) sanitizer 门禁（20/20）：ASan + LSan + UBSan，只插桩自有 targets
 #    （P18 新增 sanitizer_weaknet_abort：加载中途 teardown，门禁无报告；
 #     P19 新增 sanitizer_memory_roam：150 帧漫游内存有界，门禁无报告；
 #     P20 新增 sanitizer_frustum_lod：视锥/LOD 场景门禁无报告；
 #     P21 新增 sanitizer_add_region：ADD/region 场景门禁无报告；
-#     P22 新增 sanitizer_tileset_switch：切换 teardown 路径门禁无报告）
+#     P22 新增 sanitizer_tileset_switch：切换 teardown 路径门禁无报告；
+#     P23 新增 sanitizer_tileset_failfast：损坏 tileset 预检路径门禁无报告）
 cmake --preset linux-asan          # Debug + TILES_SANITIZE=ON，构建目录 build/linux-asan
 cmake --build --preset linux-asan -j2
 xvfb-run -a ctest --preset linux-asan -R sanitizer_ --output-on-failure
