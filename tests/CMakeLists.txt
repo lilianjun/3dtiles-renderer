@@ -20,5 +20,23 @@ add_test(NAME smoke COMMAND tiles_renderer_smoke)
 # The SDL demo must at least start and exit cleanly (headless CI uses SDL's
 # dummy video driver; the demo handles the missing native handle gracefully).
 if(TARGET tiles_demo)
-  add_test(NAME demo_runs COMMAND tiles_demo)
+  add_test(NAME demo_runs COMMAND tiles_demo --frames 5)
+endif()
+
+# P2: headless render + screenshot assertion (Linux + SDL demo only).
+# The python script wraps itself in xvfb-run when no X display is present,
+# so this test works under both plain `ctest` and `xvfb-run ctest`.
+if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux")
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME demo_screenshot
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/screenshot_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --out "${CMAKE_BINARY_DIR}/screenshots/p2_demo.png"
+              --frames 30 --width 800 --height 600)
+    set_tests_properties(demo_screenshot PROPERTIES TIMEOUT 900)
+  else()
+    message(WARNING "[P2] Python3 not found — demo_screenshot test skipped")
+  endif()
 endif()

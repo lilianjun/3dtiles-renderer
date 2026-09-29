@@ -129,14 +129,42 @@ if(TILES_WITH_FILAMENT)
     target_include_directories(filament_prebuilt INTERFACE
       "${filament_bin_SOURCE_DIR}/include")
     # Static libs; the linker pulls only referenced objects.
+    # Note: the official Filament release binaries are built with clang/libc++,
+    # so consumers also link the libc++ runtime (+ zstd used by MaterialParser).
+    # Our own objects stay on libstdc++; no std:: types cross the Filament API
+    # boundary (Engine::Config etc. are POD), so the two runtimes coexist.
     target_link_directories(filament_prebuilt INTERFACE
       "${filament_bin_SOURCE_DIR}/lib/x86_64")
     target_link_libraries(filament_prebuilt INTERFACE
       filament backend bluegl bluevk filabridge filaflat
-      utils geometry smol-v ibl)
+      utils geometry smol-v ibl zstd c++ c++abi)
     # PUBLIC: consumers of this static SDK library need the transitive link.
     target_link_libraries(tiles_renderer PUBLIC filament_prebuilt)
     target_compile_definitions(tiles_renderer PRIVATE TILES_WITH_FILAMENT)
+
+    # P2: compile the unlit demo material with matc and embed the .filamat
+    # blob as a C++ header, so the SDK stays free of runtime data files.
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    set(TILES_MATC "${filament_bin_SOURCE_DIR}/bin/matc")
+    set(TILES_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/unlit_color.mat")
+    set(TILES_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_color.filamat")
+    set(TILES_FILAMAT_H
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_color_filamat.h")
+    add_custom_command(
+      OUTPUT "${TILES_FILAMAT}"
+      COMMAND "${TILES_MATC}" -a opengl -o "${TILES_FILAMAT}" "${TILES_MAT_SRC}"
+      DEPENDS "${TILES_MAT_SRC}"
+      COMMENT "matc: compiling unlit_color.mat (OpenGL)")
+    add_custom_command(
+      OUTPUT "${TILES_FILAMAT_H}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+              "${TILES_FILAMAT}" "${TILES_FILAMAT_H}" unlit_color_filamat
+      DEPENDS "${TILES_FILAMAT}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+      COMMENT "Embedding unlit_color.filamat as C++ header")
+    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}")
+    add_dependencies(tiles_renderer tiles_materials)
   else()
     message(STATUS
       "[P1] Filament prebuilt binaries for platform '${TILES_PLATFORM}' "
@@ -148,12 +176,19 @@ endif()
 # (docs/adr/0003-sdk-no-sdl.md)
 if(TILES_WITH_SDL3)
   message(STATUS "[P1] Fetching SDL3 @ release-3.4.16 (demo + tests only) ...")
-  # Headless-friendly: SDL3's X11 check hard-fails when X11 dev packages are
-  # only partially installed (typical on devservers/CI). Native video backends
-  # are unnecessary for the P1 demo; desktop devs can re-enable with
-  # -DTILES_SDL3_NATIVE_VIDEO=ON.
-  option(TILES_SDL3_NATIVE_VIDEO "SDL3: enable native video backends (X11/Wayland)" OFF)
-  if(NOT TILES_SDL3_NATIVE_VIDEO)
+  # Headless-friendly default: SDL3's X11 check hard-fails when X11 dev
+  # packages are only partially installed (typical on devservers/CI).
+  # Native video backends are unnecessary for a pure link check; pass
+  # -DTILES_SDL3_NATIVE_VIDEO=ON (with X11 dev packages installed) for real
+  # windowing, e.g. rendering validation under xvfb.
+  option(TILES_SDL3_NATIVE_VIDEO "SDL3: enable native video backends (X11)" OFF)
+  if(TILES_SDL3_NATIVE_VIDEO)
+    # Real X11 windowing. Requires: libx11-dev libxext-dev libxrandr-dev
+    # libxcursor-dev libxi-dev (Wayland stays off: fewer host dependencies).
+    set(SDL_X11 ON CACHE BOOL "" FORCE)
+    set(SDL_WAYLAND OFF CACHE BOOL "" FORCE)
+    set(SDL_UNIX_CONSOLE_BUILD OFF CACHE BOOL "" FORCE)
+  else()
     # Console/headless build: no X11/Wayland dev packages required at all.
     set(SDL_X11 OFF CACHE BOOL "" FORCE)
     set(SDL_WAYLAND OFF CACHE BOOL "" FORCE)
@@ -177,8 +212,22 @@ endif()
 # validation. Only built when SDL3 is enabled.
 # ---------------------------------------------------------------------------
 if(TILES_WITH_SDL3)
+  # stb_image_write (demo PNG screenshots). stb is tagless: pin a commit.
+  # stb ships no CMakeLists, so populate without add_subdirectory.
+  FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        2c980bb59875b0d32144a71867fbdebb2f77cd20
+    GIT_SHALLOW    TRUE
+  )
+  FetchContent_GetProperties(stb)
+  if(NOT stb_POPULATED)
+    FetchContent_Populate(stb)
+  endif()
+
   add_executable(tiles_demo samples/demo/main.cpp)
   target_link_libraries(tiles_demo PRIVATE tiles_renderer SDL3::SDL3-static)
+  target_include_directories(tiles_demo PRIVATE "${stb_SOURCE_DIR}")
   target_compile_definitions(tiles_demo PRIVATE TILES_WITH_SDL3)
   target_compile_features(tiles_demo PRIVATE cxx_std_20)
 endif()

@@ -2,7 +2,7 @@
 
 跨平台 C++ 3D Tiles 渲染器 **SDK**：一次编码，随处运行 —— Windows / Android / iOS / WebAssembly。
 
-> 当前阶段：**P1 依赖接入**（SDK 静态库 + SDL 示例程序）。渲染器主体在 P2 起逐步实现。
+> 当前阶段：**P2 渲染器**（Filament 真实渲染 + 无头截图验证，见 ADR-0004）。
 
 ## 架构（ADR-0003）
 
@@ -21,7 +21,7 @@
 | 分层 | 选型 | 锁定版本（P1） | 接入方式 |
 |---|---|---|---|
 | 3D Tiles 加载 / 调度 / LOD | [cesium-native](https://github.com/CesiumGS/cesium-native) | `v0.64.0` | FetchContent 源码构建（ezvcpkg 自动构建其第三方 port） |
-| 渲染 | [Filament](https://github.com/google/filament) | `v1.77.0` | 官方预构建二进制包（Linux；其余平台 P2 接线） |
+| 渲染 | [Filament](https://github.com/google/filament) | `v1.77.0` | 官方预构建二进制包（Linux 已真实渲染；Win/Android/iOS/WASM 接线为 TODO，见 ADR-0004） |
 | 窗口 / 输入（仅 demo/测试） | [SDL3](https://github.com/libsdl-org/SDL) | `release-3.4.16` | FetchContent 源码构建；**不进 SDK**（ADR-0003） |
 | 语言 | C++20 | | |
 | 构建 | CMake ≥ 3.21 + Presets | | 依赖经 `FetchContent` 声明，tag 锁定 |
@@ -92,16 +92,24 @@ cmake --preset wasm      # 需 emcc；缺失时给出警告并以降级桩配置
 
 ```bash
 source ~/toolchains/env.sh   # 必须：禁用 vcpkg 遥测，否则 configure 会被拦截
-cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON
+cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON -DTILES_SDL3_NATIVE_VIDEO=ON
 cmake --build --preset linux -j2   # 2 核机器请用 -j2
-./build/linux/tiles_demo           # SDL3 建窗口 → 取原生句柄 → 调 SDK（无头机走 dummy 驱动，跳过 SDK init）
-ctest --preset linux               # smoke + demo_runs
+xvfb-run -a ctest --preset linux --output-on-failure   # smoke + demo_runs + demo_screenshot
+```
+
+`demo_screenshot` 会渲染 30 帧并保存 `build/linux/screenshots/p2_demo.png`
+（深蓝背景 + 红色三角形），用 Pillow 做像素级断言。`tiles_demo` 也支持手动截图：
+
+```bash
+xvfb-run -a ./build/linux/tiles_demo --frames 30 --width 800 --height 600 \
+    --screenshot /tmp/shot.png
 ```
 
 > 首次全依赖 configure 会触发 vcpkg 构建 cesium-native 的约 15 个第三方 port，
-> 在 2 核机器上需要数十分钟，请耐心等待。SDL3 在无头机器上默认以
-> `SDL_UNIX_CONSOLE_BUILD` 构建（无 X11/Wayland 依赖）；桌面开发可用
-> `-DTILES_SDL3_NATIVE_VIDEO=ON` 打开原生视频后端。
+> 在 2 核机器上需要数十分钟，请耐心等待。SDL3 的 X11 视频后端需要
+> `-DTILES_SDL3_NATIVE_VIDEO=ON`（及 `libx11-dev libxext-dev libxrandr-dev
+> libxcursor-dev libxi-dev libxtst-dev`）；这是渲染验证（Xvfb + 截图测试）
+> 的必需开关，默认关闭以保持纯头文件/控制台可配置。
 
 ## 路线图
 
@@ -109,7 +117,10 @@ ctest --preset linux               # smoke + demo_runs
 - **P1 依赖接入**：SDK 拆分为静态库（cesium-native + Filament，零 SDL 依赖）与
   SDL3 示例程序（`tiles_demo`）；SDL3 只进 demo 与测试 —— ✅ 已完成
   （本机 linux 全依赖构建 + 测试通过；见 ADR-0003）
-- **P2 渲染器**：Filament PBR 管线，渲染首个 glTF 模型
+- **P2 渲染器**：Filament 真实渲染（Linux/OpenGL + X11 swapchain），深蓝背景 +
+  红色三角形最小场景；`renderFrame()->bool`、`readPixels()` 回调截图；
+  `xvfb-run` 无头像素断言；`nm` 回归 SDK 零 SDL —— ✅ 已完成
+  （本机 linux 全依赖构建 + 3/3 测试通过；见 ADR-0004）
 - **P3 LOD 调度**：cesium-native tileset.json 加载、视锥裁剪、瓦片缓存
 - **P4 移动端**：Android / iOS 真机优化、触摸输入
 - **P5 WASM**：Emscripten 发布、浏览器内运行
