@@ -72,11 +72,15 @@
 namespace tiles_renderer {
 namespace {
 
-#ifdef TILES_WITH_FILAMENT
-
 // P19: cache budget set before any tileset is loaded is stashed here and
 // applied in loadTileset() before the cesium Tileset is constructed.
+// P22-hotfix: this is a plain std::int64_t with no Filament dependency, so
+// it lives OUTSIDE the TILES_WITH_FILAMENT guard — setMaxCachedBytes()
+// references it unconditionally, and the WASM stub build (Filament OFF)
+// failed with "use of undeclared identifier" (P22 CI).
 std::int64_t g_pendingMaxCachedBytes = -1;
+
+#ifdef TILES_WITH_FILAMENT
 
 // P2 demo geometry: a single triangle. Static storage so the Filament buffer
 // descriptors never dangle.

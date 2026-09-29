@@ -29,6 +29,15 @@
 #include <CesiumGltf/AccessorView.h>
 #include <CesiumGltfWriter/GltfWriter.h>
 #include <CesiumUtility/CreditSystem.h>
+// P22-hotfix: glm and curl are only available when cesium-native is built
+// (glm arrives via cesium-native's vcpkg tree; curl via its vcpkg ports).
+// The Windows/Android/iOS/WASM CI configs build the SDK WITHOUT
+// cesium-native, so these includes must stay inside this guard — an
+// unconditional include here broke all four platforms (C1083 /
+// 'glm/gtc/matrix_transform.hpp' file not found, P22 CI).
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <curl/curl.h>
 #endif
 
 #ifdef TILES_WITH_FILAMENT
@@ -54,9 +63,6 @@
 #include <cstring>
 #include <iterator>
 
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <curl/curl.h>
 #include <fstream>
 #include <functional>
 #include <iostream>

@@ -9,6 +9,23 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Fixed
+- Windows/Android/iOS/WASM CI compile (P22 follow-up hotfix): the
+  `#include <glm/...>` / `#include <curl/curl.h>` in `src/tileset.cpp`
+  were unconditional, but those CI configs build the SDK *without*
+  cesium-native (glm/curl only arrive via cesium-native's vcpkg tree),
+  so all four platforms failed at `tileset.cpp:57` with C1083 /
+  "'glm/gtc/matrix_transform.hpp' file not found". The includes are now
+  inside `#ifdef TILES_WITH_CESIUM_NATIVE` (their only TU usage already
+  was). Also fixed `src/renderer.cpp`: `g_pendingMaxCachedBytes` was
+  defined inside `#ifdef TILES_WITH_FILAMENT` but used unconditionally
+  by `setMaxCachedBytes()` — the WASM stub build (Filament OFF) failed
+  with "use of undeclared identifier". Root-cause note: the P19 hotfix
+  for the same glm symptom placed its include-dir glob inside
+  `if(TILES_WITH_CESIUM_NATIVE)`, which is OFF on those four platforms,
+  so it never actually fixed them — and its CI run was cancelled by the
+  P20 push before anyone noticed. Verified locally by compiling the SDK
+  in both CI-equivalent configs (cesium OFF + Filament ON;
+  cesium OFF + Filament OFF).
 - `loadTileset` re-entry safety (P22, ADR-0020): a second `loadTileset()`
   is now build-then-commit — the replacement tileset is fully loaded
   (root tile arrived) before it replaces the live one. Previously
