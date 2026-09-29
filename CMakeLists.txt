@@ -83,6 +83,11 @@ option(TILES_WITH_SDL3          "Fetch and build SDL3 (demo + tests only; never 
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# MSVC reports __cplusplus as 199711L unless /Zc:__cplusplus is given —
+# our smoke test (and any standard-conformant check) needs the real value.
+if(MSVC)
+  add_compile_options(/Zc:__cplusplus)
+endif()
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ---------------------------------------------------------------------------
