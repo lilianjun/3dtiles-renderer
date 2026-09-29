@@ -20,6 +20,9 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#ifdef __linux__
+#include <unistd.h> // P19: sysconf for --print-rss
+#endif
 #include <vector>
 
 #include "tiles_renderer/renderer.h"
@@ -61,6 +64,10 @@ struct DemoArgs {
     // far out (deselecting child tiles) and keep rendering. Exercises
     // request cancellation/drain for tiles that fall out of selection.
     bool zoomOutOnLoading = false;
+    // P19: tile cache budget in bytes (0 = default 512MB); --print-rss
+    // prints process RSS (KB) after init and after the last frame.
+    std::int64_t cacheBudget = 0;
+    bool printRss = false;
 };
 
 bool parseArgs(int argc, char** argv, DemoArgs& out) {
@@ -109,13 +116,19 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             out.exitOnLoading = true;
         } else if (arg == "--zoom-out-on-loading") {
             out.zoomOutOnLoading = true;
+        } else if (arg == "--cache-budget") {
+            if (!needValue("--cache-budget", value)) return false;
+            out.cacheBudget = std::stoll(value);
+        } else if (arg == "--print-rss") {
+            out.printRss = true;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "usage: tiles_demo [--frames N] [--width W] [--height H] "
                          "[--screenshot out.png] [--tileset path-or-url] "
                          "[--no-tileset] [--trajectory keys.csv] "
                          "[--frame-dir dir] [--warmup N] [--stats] "
                          "[--until-loaded N] [--exit-on-loading] "
-                         "[--zoom-out-on-loading]"
+                         "[--zoom-out-on-loading] [--cache-budget BYTES] "
+                         "[--print-rss]"
                       << std::endl;
             return false;
         } else {
@@ -225,6 +238,35 @@ int main(int argc, char** argv) {
         std::cerr << "[demo] Renderer::initialize failed" << std::endl;
         exitCode = 1;
     } else {
+        // P19: RSS helper (Linux /proc/self/statm; dev/test only).
+        auto readRssKb = []() -> long {
+#ifdef __linux__
+            FILE* f = std::fopen("/proc/self/statm", "r");
+            if (f == nullptr) {
+                return -1;
+            }
+            long size = 0, resident = 0;
+            if (std::fscanf(f, "%ld %ld", &size, &resident) != 2) {
+                resident = -1;
+            }
+            std::fclose(f);
+            if (resident < 0) {
+                return -1;
+            }
+            return resident * (sysconf(_SC_PAGESIZE) / 1024);
+#else
+            return -1; // unsupported platform
+#endif
+        };
+        if (args.printRss) {
+            std::cout << "[rss] start=" << readRssKb() << "KB" << std::endl;
+        }
+        // P19: tile cache budget (0 = leave the SDK default alone).
+        if (args.cacheBudget > 0) {
+            tiles_renderer::Renderer::setMaxCachedBytes(args.cacheBudget);
+            std::cout << "[demo] cache budget: " << args.cacheBudget << " bytes"
+                      << std::endl;
+        }
         // P3: load a tileset unless --no-tileset was given. Default is the
         // built-in tiny tileset shipped next to the demo binary.
         float yawDeg = 30.0f, pitchDeg = 18.0f, distance = 20.0f;
@@ -474,6 +516,9 @@ int main(int argc, char** argv) {
                 std::cout << "[demo] screenshot: " << args.screenshot << " ("
                           << sw << "x" << sh << ")" << std::endl;
             }
+        }
+        if (args.printRss) {
+            std::cout << "[rss] end=" << readRssKb() << "KB" << std::endl;
         }
         tiles_renderer::Renderer::shutdown();
     }

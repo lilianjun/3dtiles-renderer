@@ -74,6 +74,10 @@ namespace {
 
 #ifdef TILES_WITH_FILAMENT
 
+// P19: cache budget set before any tileset is loaded is stashed here and
+// applied in loadTileset() before the cesium Tileset is constructed.
+std::int64_t g_pendingMaxCachedBytes = -1;
+
 // P2 demo geometry: a single triangle. Static storage so the Filament buffer
 // descriptors never dangle.
 constexpr filament::math::float3 kTriangleVerts[3] = {
@@ -498,6 +502,8 @@ bool Renderer::loadTileset(const std::string& tilesetUrl) {
     }
     s.tileset.reset(); // drop any previously loaded tileset first
     auto tileset = std::make_unique<TilesetRenderer>(s.engine, s.scene);
+    // P19: apply a budget set before load (no-op when never set).
+    tileset->setMaxCachedBytes(g_pendingMaxCachedBytes);
     if (!tileset->load(tilesetUrl)) {
         setLastError("loadTileset: " + tileset->lastError());
         return false;
@@ -604,6 +610,20 @@ Renderer::TileStats Renderer::tileStats() {
 
 const char* Renderer::version() {
     return TILES_RENDERER_VERSION;
+}
+
+void Renderer::setMaxCachedBytes(std::int64_t bytes) {
+    if (!g_initialized) {
+        return;
+    }
+    // Stash: applies to the next loadTileset() even when no tileset is
+    // loaded yet. Forward live when one is.
+    g_pendingMaxCachedBytes = bytes;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setMaxCachedBytes(bytes);
+    }
+#endif
 }
 
 } // namespace tiles_renderer

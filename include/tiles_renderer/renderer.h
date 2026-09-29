@@ -137,6 +137,15 @@ public:
     // written by renderFrame() and never mutates the scene.
     static TileStats tileStats();
 
+    // P19: cap the tile content cache at `bytes` bytes (LRU eviction of
+    // tiles not needed for the current view). Applies to the next
+    // loadTileset() and live to an already-loaded tileset (takes effect
+    // on the next renderFrame; no reload needed). Values <= 0 restore the
+    // cesium-native default of 512MB. Must be called on the render thread,
+    // like every Renderer method except version(). Hosts on memory-tight
+    // devices (mobile) should set this to fit their budget.
+    static void setMaxCachedBytes(std::int64_t bytes);
+
     static void shutdown();
 
     static const char* version();

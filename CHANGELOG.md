@@ -9,6 +9,22 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- Camera-roam memory boundedness (P19, ADR-0017):
+  `Renderer::setMaxCachedBytes()` (render thread; applies to next
+  `loadTileset()` and live-mutates a loaded tileset; `<=0` restores the
+  512MB Cesium default; content-cache bytes, not GPU VRAM), demo
+  `--cache-budget` / `--print-rss`, deep implicit fixture
+  `tests/data/p19_deep_tileset/` (341 tiles / ~15.6MB, levels 0-4) plus
+  3-lap trajectory `tests/data/trajectories/p19_deep.csv`, and new
+  `memory_roam` ctest (`tests/memory_roam_test.py`): 8MB budget holds
+  `tilesLoaded` at 179 and `bytesLoaded` at 7,977,744 (bit-identical over
+  3 runs) while the HTTP request log proves 253 distinct tiles with
+  ~630 hits (eviction churn); lap-end values stable within 6%; plus
+  `sanitizer_memory_roam` (150 frames under ASan/LSan/UBSan, no reports).
+  Key upstream finding documented: cesium-native v0.64.0's
+  `TreeTraversalState` pins every `beginNode`'d tile (intrusive ref) for
+  ~2 frames, so in shallow/wide trees the traversal working set — not
+  `maximumCachedBytes` — is the effective cache floor.
 - Weak-network resilience gate (P18, ADR-0016): `tests/slow_http_server.py`
   (threaded localhost HTTP with per-response delay, chunk-paced bandwidth
   cap, and per-request logging) plus `tests/weaknet_test.py` (new

@@ -1,0 +1,26 @@
+# P19: roam trajectory over tests/data/p19_roam_tileset (64x64 implicit quadtree).
+# frame,yaw,pitch,distance — 3 round trips x 48 frames = 144 frames (0..144).
+# Camera stays CLOSE (dist 18): only 1-2 of the 16 level-2 tiles are in
+# view at a time, so the yaw sweep forces real tile turnover. One pull-out
+# to dist 60 per pass selects the whole set (mass load -> eviction churn
+# under a small cache budget), then pushes back in. Yaw is monotonic;
+# the player takes the shortest angular path per segment.
+0,0,30,18
+8,90,30,18
+16,180,30,18
+24,270,30,18
+32,360,30,18
+40,360,30,60
+48,360,30,18
+56,450,30,18
+64,540,30,18
+72,630,30,18
+80,720,30,18
+88,720,30,60
+96,720,30,18
+104,810,30,18
+112,900,30,18
+120,990,30,18
+128,1080,30,18
+136,1080,30,60
+144,1080,30,18

@@ -67,6 +67,12 @@ public:
     // All fields are -1 when no tileset is loaded.
     Renderer::TileStats tileStats() const;
 
+    // P19: tile cache budget in bytes. Applies to the next loadTileset()
+    // (via TilesetOptions) and live to an already-loaded tileset (via
+    // Tileset::getOptions()); values <= 0 restore the cesium-native default
+    // (512MB). Must be called on the render thread.
+    void setMaxCachedBytes(std::int64_t bytes);
+
 private:
     struct Impl;
     std::unique_ptr<Impl> _impl;

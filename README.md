@@ -157,19 +157,21 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
 ### P6：内存与资源健壮性（见 ADR-0007）
 
 ```bash
-# 1) 普通回归（19/19）：smoke、demo、截图、tileset、http、b3dm、rebase、
+# 1) 普通回归（20/20）：smoke、demo、截图、tileset、http、b3dm、rebase、
 #    i3dm、pnts、cmpt、tiles11、golden_regression、lifecycle、fault_inputs、
 #    host_integration（P12：宿主视角 API 集成检查）、
 #    pbr_materials_screenshot（P15：PBR 材质管线验证）、
 #    trajectory_determinism（P16：确定性相机轨迹回放）、
 #    tile_stats（P17：tile 流式统计诊断）、
-#    weak_network（P18：弱网韧性：慢网/取消/中断/断网恢复，~8s）
+#    weak_network（P18：弱网韧性：慢网/取消/中断/断网恢复，~8s）、
+#    memory_roam（P19：3 圈相机漫游内存有界，驱逐验证）
 cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON -DTILES_SDL3_NATIVE_VIDEO=ON
 cmake --build --preset linux -j2
 xvfb-run -a ctest --preset linux -I 1,9 --output-on-failure
 
-# 2) sanitizer 门禁（15/15）：ASan + LSan + UBSan，只插桩自有 targets
-#    （P18 新增 sanitizer_weaknet_abort：加载中途 teardown，门禁无报告）
+# 2) sanitizer 门禁（16/16）：ASan + LSan + UBSan，只插桩自有 targets
+#    （P18 新增 sanitizer_weaknet_abort：加载中途 teardown，门禁无报告；
+#     P19 新增 sanitizer_memory_roam：150 帧漫游内存有界，门禁无报告）
 cmake --preset linux-asan          # Debug + TILES_SANITIZE=ON，构建目录 build/linux-asan
 cmake --build --preset linux-asan -j2
 xvfb-run -a ctest --preset linux-asan -R sanitizer_ --output-on-failure

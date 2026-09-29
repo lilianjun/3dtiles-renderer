@@ -1,0 +1,45 @@
+{
+  "asset": {
+    "version": "1.1"
+  },
+  "extensionsUsed": [
+    "3DTILES_implicit_tiling"
+  ],
+  "extensionsRequired": [
+    "3DTILES_implicit_tiling"
+  ],
+  "geometricError": 800.0,
+  "root": {
+    "boundingVolume": {
+      "box": [
+        0,
+        0,
+        0,
+        64.0,
+        0,
+        0,
+        0,
+        64.0,
+        0,
+        0,
+        0,
+        4.0
+      ]
+    },
+    "geometricError": 400.0,
+    "refine": "ADD",
+    "content": {
+      "uri": "tiles/{level}_{x}_{y}.glb"
+    },
+    "extensions": {
+      "3DTILES_implicit_tiling": {
+        "subdivisionScheme": "QUADTREE",
+        "subtreeLevels": 5,
+        "availableLevels": 5,
+        "subtrees": {
+          "uri": "subtrees/{level}_{x}_{y}.subtree"
+        }
+      }
+    }
+  }
+}

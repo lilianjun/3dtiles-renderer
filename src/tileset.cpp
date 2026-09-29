@@ -1026,6 +1026,10 @@ struct TilesetRenderer::Impl {
     Impl(filament::Engine* engine_, filament::Scene* scene_)
         : engine(engine_), scene(scene_) {}
 
+    // P19: pending cache budget; applied to TilesetOptions at construction
+    // and live-mutated afterwards. -1 = cesium-native default (512MB).
+    std::int64_t maxCachedBytes = -1;
+
     bool loadTileset(const std::string& urlOrPath) {
         lastError.clear();
         std::string url = urlOrPath;
@@ -1072,6 +1076,13 @@ struct TilesetRenderer::Impl {
         prepareResources = pPrepare;
 
         Cesium3DTilesSelection::TilesetOptions options;
+        // P19: honor a host-set cache budget (default: cesium-native's
+        // 512MB). unloadCachedBytes() reads _options.maximumCachedBytes
+        // every update, so this also stays live-mutable via
+        // setMaxCachedBytes().
+        if (maxCachedBytes > 0) {
+            options.maximumCachedBytes = maxCachedBytes;
+        }
         tileset = std::make_unique<Cesium3DTilesSelection::Tileset>(
             externals, url, options);
         // Wait (bounded) for the root tile metadata so load() can report
@@ -1381,6 +1392,22 @@ Renderer::TileStats TilesetRenderer::tileStats() const {
     return stats;
 #else
     return Renderer::TileStats{};
+#endif
+}
+
+void TilesetRenderer::setMaxCachedBytes(std::int64_t bytes) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->maxCachedBytes = bytes;
+    if (_impl->loaded && _impl->tileset != nullptr) {
+        // Tileset::getOptions() has a non-const overload; the content
+        // manager reads _options.maximumCachedBytes on every update, so
+        // this takes effect on the next frame without reloading.
+        // Values <= 0 restore the cesium-native default of 512MB.
+        _impl->tileset->getOptions().maximumCachedBytes =
+            bytes > 0 ? bytes : (512LL * 1024 * 1024);
+    }
+#else
+    (void)bytes;
 #endif
 }
 

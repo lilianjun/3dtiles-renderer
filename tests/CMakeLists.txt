@@ -287,6 +287,26 @@ if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
   endif()
 endif()
 
+# P19: camera-roam memory boundedness. Multi-lap yaw roam over the deep
+# implicit fixture (341 tiles, ~15.6MB) with an 8MB cache budget; proves
+# LRU eviction keeps tilesLoaded/bytesLoaded bounded while the request log
+# proves wide coverage (253 distinct tiles, 629 hits = eviction churn).
+# Not run under TILES_SANITIZE: the ASan-instrumented binary's RSS is not
+# representative (see sanitizer_memory_roam below for the sanitizer gate).
+if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME memory_roam
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/memory_roam_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>")
+    # 3 laps + warmup; comfortably under 2 minutes.
+    set_tests_properties(memory_roam PROPERTIES TIMEOUT 600)
+  else()
+    message(WARNING "[P19] Python3 not found — memory_roam test skipped")
+  endif()
+endif()
+
 # P11: golden screenshot regression gate. Re-renders one representative
 # fixture per phase with fixed parameters and requires pixel equality
 # against the frozen goldens in tests/golden/ (see its README for the
@@ -435,6 +455,16 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
               --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
               --demo "$<TARGET_FILE:tiles_demo>")
     set_tests_properties(sanitizer_weaknet_abort PROPERTIES TIMEOUT 600)
+    # P19: roam memory boundedness under ASan/LSan/UBSan — 150-frame roam
+    # with cache budget, gating on sanitizer reports plus the boundedness
+    # assertions (relaxed coverage for the shorter run).
+    add_test(NAME sanitizer_memory_roam
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/memory_roam_test.py"
+              --sanitized
+              --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
+              --demo "$<TARGET_FILE:tiles_demo>")
+    set_tests_properties(sanitizer_memory_roam PROPERTIES TIMEOUT 900)
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"
