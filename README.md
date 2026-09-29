@@ -157,10 +157,11 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
 ### P6：内存与资源健壮性（见 ADR-0007）
 
 ```bash
-# 1) 普通回归（16/16）：smoke、demo、截图、tileset、http、b3dm、rebase、
+# 1) 普通回归（17/17）：smoke、demo、截图、tileset、http、b3dm、rebase、
 #    i3dm、pnts、cmpt、tiles11、golden_regression、lifecycle、fault_inputs、
 #    host_integration（P12：宿主视角 API 集成检查）、
-#    pbr_materials_screenshot（P15：PBR 材质管线验证）
+#    pbr_materials_screenshot（P15：PBR 材质管线验证）、
+#    trajectory_determinism（P16：确定性相机轨迹回放）
 cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON -DTILES_SDL3_NATIVE_VIDEO=ON
 cmake --build --preset linux -j2
 xvfb-run -a ctest --preset linux -I 1,9 --output-on-failure
@@ -290,7 +291,7 @@ clang/libc++ 构建，Linux 消费方链接时会带上 `c++`/`c++abi`（与消�
   外部最小项目验证 configure+link+`version()` 输出 `0.1.0`；
   `CHANGELOG.md`（Keep a Changelog，P0–P13 真实记录）；
   发行策略：源码 FetchContent 集成、不提供预编译二进制包—— ✅ 已完成
-  （普通 ctest 16/16，SDK 零 SDL）
+  （普通 ctest 17/17，SDK 零 SDL）
 
 ## AI 协作
 

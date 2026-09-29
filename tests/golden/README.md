@@ -20,6 +20,9 @@ renders each phase's own pixel assertions had already accepted.
 | `p9_cmpt.png` | P9 | `tests/data/p9_cmpt_tileset` | 60 | cmpt: b3dm + pnts + i3dm in one frame |
 | `p10_11_glb.png` | P10 | `tests/data/p10_11_glb` | 90 | 1.1 bare-glb content (`3DTILES_content_gltf`) |
 | `p10_11_implicit.png` | P10 | `tests/data/p10_11_implicit` | 90 | 1.1 implicit QUADTREE, 5 tiles |
+| `p16_traj_f00.png` | P16 | `p3_box_tileset` + `trajectories/p16_orbit_push.csv` | traj frame 0 | deterministic replay: first frame |
+| `p16_traj_f05.png` | P16 | `p3_box_tileset` + `trajectories/p16_orbit_push.csv` | traj frame 5 | deterministic replay: middle frame |
+| `p16_traj_f11.png` | P16 | `p3_box_tileset` + `trajectories/p16_orbit_push.csv` | traj frame 11 | deterministic replay: last frame |
 
 Total size ~192 KB. Kept small on purpose: only the single most
 representative render per phase (rebase/RTC/many-instance variants stay in
@@ -28,7 +31,7 @@ their phase tests, not here).
 ## Comparison policy
 
 - **Local gate: strict equality (0 differing pixels).** Re-rendering is
-  bit-identical run to run on this stack (verified for all 8 entries at
+  bit-identical run to run on this stack (verified for all 11 entries at
   freeze time: same md5 across runs).
 - **CI escape hatch:** env `GOLDEN_MAX_DIFF_FRAC`, default 0, hard ceiling
   0.001 (0.1%). Exists for GL stacks that are not bit-identical across

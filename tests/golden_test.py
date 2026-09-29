@@ -53,6 +53,19 @@ MANIFEST = [
     ("p10_11_implicit", "p10_11_implicit", 90),
 ]
 
+# P16: trajectory goldens — golden name, tileset dir, trajectory CSV under
+# tests/data/trajectories, logical frame index to freeze. All three come
+# from ONE demo run per trajectory (--frame-dir); the frozen frames are
+# first/middle/last of the 12-frame p16_orbit_push trajectory.
+# Determinism of these frames across runs is gated separately by
+# trajectory_determinism (bit-identical), so the golden gate only guards
+# against pipeline regressions here.
+TRAJECTORY_GOLDENS = [
+    ("p16_traj_f00", "p3_box_tileset", "p16_orbit_push.csv", 0),
+    ("p16_traj_f05", "p3_box_tileset", "p16_orbit_push.csv", 5),
+    ("p16_traj_f11", "p3_box_tileset", "p16_orbit_push.csv", 11),
+]
+
 WIDTH, HEIGHT = 800, 600
 MAX_ALLOWED_FRAC = 0.001  # hard ceiling for the escape hatch
 
@@ -76,6 +89,46 @@ def render_demo(demo, tileset_dir, out, frames):
     if not os.path.exists(out):
         return "demo exited 0 but wrote no screenshot"
     return None
+
+
+def render_trajectory(demo, tileset_dir, traj_csv, frame_index, out):
+    """Render one trajectory and extract a single logical frame as PNG.
+
+    Runs the demo once with --trajectory + --frame-dir into a temp dir,
+    then copies frame_<index>.png to `out`. Returns None on success or an
+    error string. Results are cached per (tileset, trajectory) so multiple
+    frozen frames from the same run need only one demo invocation.
+    """
+    key = (tileset_dir, traj_csv)
+    if key not in render_trajectory.cache:
+        work = tempfile.mkdtemp(prefix="golden_traj_")
+        render_trajectory.cache[key] = work
+        cmd = [demo,
+               "--tileset", os.path.join(DATA, tileset_dir, "tileset.json"),
+               "--trajectory",
+               os.path.join(DATA, "trajectories", traj_csv),
+               "--frame-dir", work,
+               "--width", str(WIDTH), "--height", str(HEIGHT)]
+        if not os.environ.get("DISPLAY"):
+            cmd = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24"] + cmd
+        print("+", " ".join(cmd), flush=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        if proc.returncode != 0:
+            render_trajectory.cache[key] = None
+            return "demo exited %d\n%s\n%s" % (
+                proc.returncode, proc.stdout[-2000:], proc.stderr[-2000:])
+    work = render_trajectory.cache[key]
+    if work is None:
+        return "cached trajectory render failed"
+    src = os.path.join(work, "frame_%04d.png" % frame_index)
+    if not os.path.exists(src):
+        return "trajectory produced no %s" % src
+    with open(src, "rb") as fsrc, open(out, "wb") as fdst:
+        fdst.write(fsrc.read())
+    return None
+
+
+render_trajectory.cache = {}
 
 
 def diff_fraction(a_path, b_path):
@@ -127,13 +180,37 @@ def main():
                 failures.append(
                     "%s: %s (%.4f%% of pixels) exceeds allowed %.4f%%"
                     % (name, detail, frac * 100, tol * 100))
+        # P16: trajectory goldens — frozen logical frames of a deterministic
+        # replay (bit-identity across runs is gated by trajectory_determinism).
+        for name, tileset_dir, traj_csv, frame_index in TRAJECTORY_GOLDENS:
+            golden = os.path.join(GOLDEN_DIR, name + ".png")
+            if not os.path.exists(golden):
+                failures.append("%s: golden file missing: %s" % (name, golden))
+                continue
+            out = os.path.join(work, name + ".png")
+            err = render_trajectory(args.demo, tileset_dir, traj_csv,
+                                    frame_index, out)
+            if err is not None:
+                failures.append("%s: render failed: %s" % (name, err))
+                continue
+            frac, detail = diff_fraction(out, golden)
+            if frac is None:
+                failures.append("%s: %s" % (name, detail))
+                continue
+            status = "IDENTICAL" if frac == 0 else detail
+            print("[golden] %-16s %s" % (name, status), flush=True)
+            if frac > tol:
+                failures.append(
+                    "%s: %s (%.4f%% of pixels) exceeds allowed %.4f%%"
+                    % (name, detail, frac * 100, tol * 100))
 
     if failures:
         print("\nGOLDEN FAILURES:", flush=True)
         for f in failures:
             print("  -", f, flush=True)
         return 1
-    print("\nAll %d goldens match." % len(MANIFEST), flush=True)
+    print("\nAll %d goldens match." % (len(MANIFEST) + len(TRAJECTORY_GOLDENS)),
+          flush=True)
     return 0
 
 

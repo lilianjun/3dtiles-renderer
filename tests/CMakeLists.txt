@@ -222,6 +222,27 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
   endif()
 endif()
 
+# P16: deterministic camera trajectory replay (ADR-0014). The demo drives
+# setOrbitCamera per logical frame from a CSV keyframe trajectory (smoothstep
+# interpolation, no wall clock); the test runs the same 12-frame trajectory
+# twice and requires every frame PNG bit-identical, with both child tiles
+# in view on first/middle/last frames.
+# Pixel-strict like golden_regression: not registered under TILES_SANITIZE.
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
+   AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME trajectory_determinism
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/trajectory_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --workdir "${CMAKE_BINARY_DIR}/trajectory_tmp")
+    set_tests_properties(trajectory_determinism PROPERTIES TIMEOUT 1200)
+  else()
+    message(WARNING "[P16] Python3 not found — trajectory_determinism test skipped")
+  endif()
+endif()
+
 # P11: golden screenshot regression gate. Re-renders one representative
 # fixture per phase with fixed parameters and requires pixel equality
 # against the frozen goldens in tests/golden/ (see its README for the
@@ -345,6 +366,13 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
       COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
               --frames 60
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p15_tex/tileset.json")
+    # P16 scene: trajectory replay (CSV keyframes -> per-frame orbit camera)
+    # with per-frame PNG dumps, exercising the new demo code paths.
+    add_test(NAME sanitizer_trajectory
+      COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json"
+              --trajectory "${CMAKE_CURRENT_SOURCE_DIR}/data/trajectories/p16_orbit_push.csv"
+              --frame-dir "${CMAKE_BINARY_DIR}/sanitizer_traj_tmp")
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"
@@ -372,7 +400,7 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
     set_tests_properties(
       sanitizer_demo sanitizer_tileset sanitizer_b3dm sanitizer_i3dm
       sanitizer_pnts sanitizer_cmpt sanitizer_11 sanitizer_pbr sanitizer_http
-      sanitizer_faults
+      sanitizer_trajectory sanitizer_faults
       PROPERTIES TIMEOUT 900)
   else()
     message(WARNING "[P6] Python3 not found — sanitizer scenario tests skipped")

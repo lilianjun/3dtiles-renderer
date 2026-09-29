@@ -9,6 +9,16 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- Deterministic camera trajectory replay (P16, ADR-0014): the demo drives
+  `setOrbitCamera` per logical frame from a CSV keyframe trajectory
+  (`tests/data/trajectories/p16_orbit_push.csv`, smoothstep interpolation,
+  no wall clock). The player lives in the demo layer (`samples/demo/`,
+  header-only, no SDL/SDK dependency) — camera control is the host's job,
+  not the SDK's (ADR-0003/0012). New `trajectory_determinism` ctest runs the
+  12-frame orbit + push-in trajectory twice and requires every frame PNG
+  bit-identical; golden gains `p16_traj_f00/f05/f11` (first/middle/last
+  frames). `tiles_demo --trajectory <csv> [--frame-dir <dir>] [--warmup N]`
+  also serves as an on-device smoke recorder later.
 - PBR material pipeline verification (P15, ADR-0013): deterministic fixtures
   (`tests/data/gen_p15_pbr_tileset.py`, no network) covering metallic 0 vs 1,
   roughness 0.08 vs 0.9, hand-made normal map vs flat normals,

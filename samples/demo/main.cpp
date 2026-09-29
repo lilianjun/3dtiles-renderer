@@ -16,12 +16,15 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "tiles_renderer/renderer.h"
 #include "tiles_renderer/version.h"
+#include "trajectory.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -30,11 +33,21 @@ namespace {
 
 struct DemoArgs {
     int frames = 30;
+    bool framesExplicit = false; // set when --frames was passed
     int width = 800;
     int height = 600;
     std::string screenshot; // empty = don't save
     std::string tileset;    // empty = built-in small tileset next to the exe
     bool noTileset = false; // P2 mode: render the fixed clear + triangle
+    // P16: deterministic camera trajectory replay (ADR-0014). When set, the
+    // orbit camera is driven per successful frame from the CSV keyframes;
+    // --frames defaults to the trajectory length. Mouse orbit is disabled
+    // in this mode so the replay stays bit-identical.
+    std::string trajectory; // empty = fixed camera mode
+    std::string frameDir;   // empty = don't dump per-frame PNGs
+    int warmup = 60;        // successful frames at the first keyframe camera
+                            // before the trajectory starts (lets async tile
+                            // loading settle; not dumped, not counted)
 };
 
 bool parseArgs(int argc, char** argv, DemoArgs& out) {
@@ -52,6 +65,7 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
         if (arg == "--frames") {
             if (!needValue("--frames", value)) return false;
             out.frames = std::stoi(value);
+            out.framesExplicit = true;
         } else if (arg == "--width") {
             if (!needValue("--width", value)) return false;
             out.width = std::stoi(value);
@@ -64,10 +78,18 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             if (!needValue("--tileset", out.tileset)) return false;
         } else if (arg == "--no-tileset") {
             out.noTileset = true;
+        } else if (arg == "--trajectory") {
+            if (!needValue("--trajectory", out.trajectory)) return false;
+        } else if (arg == "--frame-dir") {
+            if (!needValue("--frame-dir", out.frameDir)) return false;
+        } else if (arg == "--warmup") {
+            if (!needValue("--warmup", value)) return false;
+            out.warmup = std::stoi(value);
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "usage: tiles_demo [--frames N] [--width W] [--height H] "
                          "[--screenshot out.png] [--tileset path-or-url] "
-                         "[--no-tileset]"
+                         "[--no-tileset] [--trajectory keys.csv] "
+                         "[--frame-dir dir] [--warmup N]"
                       << std::endl;
             return false;
         } else {
@@ -198,38 +220,75 @@ int main(int argc, char** argv) {
                 std::cout << "[demo] tileset: " << tilesetPath << std::endl;
             }
         }
+        // P16: trajectory replay (ADR-0014). The player maps a logical frame
+        // index -> orbit camera; the frame index advances only on successful
+        // renderFrame() calls, so the replay never depends on wall clock.
+        // Mouse orbit is disabled in this mode to keep it bit-identical.
+        bool trajectoryMode = !args.trajectory.empty();
+        std::optional<trajectory::Player> player;
+        if (trajectoryMode) {
+            player = trajectory::Player::loadCsv(args.trajectory);
+            std::cout << "[demo] trajectory: " << args.trajectory << " ("
+                      << player->keyframeCount() << " keyframes, "
+                      << player->lastFrame() + 1 << " frames)" << std::endl;
+            if (!args.framesExplicit) {
+                args.frames = player->lastFrame() + 1;
+            }
+            if (!args.frameDir.empty()) {
+                // Best-effort mkdir; failure surfaces at first PNG write.
+                std::error_code ec;
+                std::filesystem::create_directories(args.frameDir, ec);
+            }
+        }
         tiles_renderer::Renderer::setOrbitCamera(yawDeg, pitchDeg, distance);
 
-        // Render N successful frames. beginFrame() is non-blocking and
-        // returns false while the driver is busy, so retry with pacing like
-        // a real main loop instead of counting attempts.
-        //
-        // P3: simple orbit control — drag with the left mouse button to
-        // orbit, mouse wheel to zoom.
-        int rendered = 0;
-        bool dragging = false;
+        auto dumpFramePng = [&](int frameIndex) -> bool {
+            char suffix[32];
+            std::snprintf(suffix, sizeof(suffix), "frame_%04d.png", frameIndex);
+            const std::string name =
+                args.frameDir + "/" + std::string(suffix);
+            std::vector<std::uint8_t> rgba;
+            std::uint32_t sw = 0, sh = 0;
+            if (!tiles_renderer::Renderer::readPixels(rgba, sw, sh)) {
+                std::cerr << "[demo] readPixels failed at frame " << frameIndex
+                          << std::endl;
+                return false;
+            }
+            if (!stbi_write_png(name.c_str(), static_cast<int>(sw),
+                                static_cast<int>(sh), 4, rgba.data(),
+                                static_cast<int>(sw) * 4)) {
+                std::cerr << "[demo] failed to write " << name << std::endl;
+                return false;
+            }
+            return true;
+        };
+
+        // Render one successful frame; returns false on deadline expiry.
+        // readPixels per frame is heavier than the API intends for production
+        // use, but this is a dev/test tool exporting a trajectory, not a
+        // shipping frame loop.
         const auto deadline =
             std::chrono::steady_clock::now() + std::chrono::seconds(180);
-        while (rendered < args.frames &&
-               std::chrono::steady_clock::now() < deadline) {
+        bool dragging = false;
+        auto pumpEvents = [&](bool allowOrbit) {
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
                 if (event.type == SDL_EVENT_QUIT) {
-                    rendered = args.frames; // stop early
-                } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+                    return false;
+                } else if (allowOrbit && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                            event.button.button == SDL_BUTTON_LEFT) {
                     dragging = true;
-                } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+                } else if (allowOrbit && event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
                            event.button.button == SDL_BUTTON_LEFT) {
                     dragging = false;
-                } else if (event.type == SDL_EVENT_MOUSE_MOTION && dragging) {
+                } else if (allowOrbit && event.type == SDL_EVENT_MOUSE_MOTION && dragging) {
                     yawDeg -= static_cast<float>(event.motion.xrel) * 0.4f;
                     pitchDeg += static_cast<float>(event.motion.yrel) * 0.4f;
                     if (pitchDeg > 85.0f) pitchDeg = 85.0f;
                     if (pitchDeg < -85.0f) pitchDeg = -85.0f;
                     tiles_renderer::Renderer::setOrbitCamera(
                         yawDeg, pitchDeg, distance);
-                } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+                } else if (allowOrbit && event.type == SDL_EVENT_MOUSE_WHEEL) {
                     distance *= (event.wheel.y > 0) ? 0.9f : 1.1f;
                     if (distance < 2.0f) distance = 2.0f;
                     if (distance > 200.0f) distance = 200.0f;
@@ -237,7 +296,58 @@ int main(int argc, char** argv) {
                         yawDeg, pitchDeg, distance);
                 }
             }
+            return std::chrono::steady_clock::now() < deadline;
+        };
+
+        // P16 warmup: hold the first-keyframe camera so async tile loading
+        // settles before the recorded trajectory starts. Not dumped, not
+        // counted toward the trajectory frame index.
+        int rendered = 0;
+        if (trajectoryMode && args.warmup > 0) {
+            const auto pose = player->at(0);
+            tiles_renderer::Renderer::setOrbitCamera(
+                static_cast<float>(pose.yawDeg),
+                static_cast<float>(pose.pitchDeg),
+                static_cast<float>(pose.distance));
+            int warmed = 0;
+            bool alive = true;
+            while (warmed < args.warmup && alive) {
+                alive = pumpEvents(false);
+                if (tiles_renderer::Renderer::renderFrame()) {
+                    ++warmed;
+                } else {
+                    SDL_Delay(4);
+                }
+            }
+            std::cout << "[demo] trajectory warmup: " << warmed << "/"
+                      << args.warmup << " frames" << std::endl;
+            if (warmed < args.warmup) {
+                std::cerr << "[demo] warmup hit the deadline" << std::endl;
+                exitCode = 1;
+            }
+        }
+
+        // Render N successful frames. beginFrame() is non-blocking and
+        // returns false while the driver is busy, so retry with pacing like
+        // a real main loop instead of counting attempts.
+        //
+        // P3: simple orbit control — drag with the left mouse button to
+        // orbit, mouse wheel to zoom. (Disabled in trajectory mode.)
+        bool alive = exitCode == 0;
+        while (rendered < args.frames && alive) {
+            alive = pumpEvents(!trajectoryMode);
+            if (trajectoryMode) {
+                const auto pose = player->at(rendered);
+                tiles_renderer::Renderer::setOrbitCamera(
+                    static_cast<float>(pose.yawDeg),
+                    static_cast<float>(pose.pitchDeg),
+                    static_cast<float>(pose.distance));
+            }
             if (tiles_renderer::Renderer::renderFrame()) {
+                if (!args.frameDir.empty() && !dumpFramePng(rendered)) {
+                    exitCode = 1;
+                    break;
+                }
                 ++rendered;
             } else {
                 SDL_Delay(4);

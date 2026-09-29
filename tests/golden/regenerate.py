@@ -56,6 +56,9 @@ def main():
     for name, _, _ in golden_test.MANIFEST:
         p = os.path.join(HERE, name + ".png")
         before[name] = md5(p) if os.path.exists(p) else "<missing>"
+    for name, _, _, _ in golden_test.TRAJECTORY_GOLDENS:
+        p = os.path.join(HERE, name + ".png")
+        before[name] = md5(p) if os.path.exists(p) else "<missing>"
 
     import tempfile
     with tempfile.TemporaryDirectory(prefix="golden_regen_") as work:
@@ -68,11 +71,22 @@ def main():
             dst = os.path.join(HERE, name + ".png")
             with open(out, "rb") as fsrc, open(dst, "wb") as fdst:
                 fdst.write(fsrc.read())
+        for name, tileset_dir, traj_csv, frame_index in \
+                golden_test.TRAJECTORY_GOLDENS:
+            out = os.path.join(work, name + ".png")
+            err = golden_test.render_trajectory(args.demo, tileset_dir,
+                                                traj_csv, frame_index, out)
+            if err is not None:
+                print("RENDER FAILED for %s: %s" % (name, err), flush=True)
+                return 1
+            dst = os.path.join(HERE, name + ".png")
+            with open(out, "rb") as fsrc, open(dst, "wb") as fdst:
+                fdst.write(fsrc.read())
 
     print("%-16s %-32s %-32s %s" % ("golden", "before", "after", "changed"),
           flush=True)
     changed = 0
-    for name, _, _ in golden_test.MANIFEST:
+    for name in before:
         after = md5(os.path.join(HERE, name + ".png"))
         ch = "YES" if after != before[name] else "no"
         changed += (after != before[name])

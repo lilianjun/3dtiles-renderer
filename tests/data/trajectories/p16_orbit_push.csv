@@ -1,0 +1,10 @@
+# P16: orbit + push-in trajectory over the P3 box tileset (tests/data/p3_box_tileset).
+# frame,yaw,pitch,distance — 12 logical frames (0..11).
+# Gentle 75-degree orbit around the sunlit side while pushing in from 24 to
+# 18 units. Both child tiles (orange + teal) stay in view on every frame.
+# Played by tiles_demo --trajectory; frozen frames f00/f05/f11 live in
+# tests/golden/ (see docs/adr/0014-trajectory-replay.md).
+0,20,16,24
+4,45,18,22
+8,70,22,20
+11,95,24,18
