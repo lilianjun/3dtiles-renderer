@@ -243,6 +243,30 @@ if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
   endif()
 endif()
 
+# P17: tile streaming diagnostics (ADR-0015). Drives tiles_demo --stats and
+# asserts: healthy tileset -> loaded > 0, failed == 0, loaded monotonic,
+# renderedTileCount() consistent with selected; corrupt glb -> failed > 0
+# with graceful exit 0; and querying stats never perturbs pixels
+# (screenshots with/without --stats are bit-identical).
+# Pixel-strict like golden_regression: not registered under TILES_SANITIZE
+# (see the sanitizer_stats scenario below for the ASan lane).
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
+   AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME tile_stats
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/stats_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json"
+              --outdir "${CMAKE_BINARY_DIR}/screenshots/p17_stats"
+              --frames 90 --width 800 --height 600)
+    set_tests_properties(tile_stats PROPERTIES TIMEOUT 1200)
+  else()
+    message(WARNING "[P17] Python3 not found — tile_stats test skipped")
+  endif()
+endif()
+
 # P11: golden screenshot regression gate. Re-renders one representative
 # fixture per phase with fixed parameters and requires pixel equality
 # against the frozen goldens in tests/golden/ (see its README for the
@@ -373,6 +397,13 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json"
               --trajectory "${CMAKE_CURRENT_SOURCE_DIR}/data/trajectories/p16_orbit_push.csv"
               --frame-dir "${CMAKE_BINARY_DIR}/sanitizer_traj_tmp")
+    # P17 scene: tile streaming diagnostics — the new TileStats tree walk
+    # (Done/Failed counting) plus the demo's --stats print path, all under
+    # ASan/LSan/UBSan. Pixel comparison stays in the plain tile_stats test.
+    add_test(NAME sanitizer_stats
+      COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
+              --frames 60 --stats
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"

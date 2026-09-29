@@ -588,6 +588,20 @@ int Renderer::renderedTileCount() {
 #endif
 }
 
+Renderer::TileStats Renderer::tileStats() {
+    if (!g_initialized) {
+        return TileStats{}; // all -1
+    }
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset == nullptr) {
+        return TileStats{}; // all -1
+    }
+    return g_state.tileset->tileStats();
+#else
+    return TileStats{};
+#endif
+}
+
 const char* Renderer::version() {
     return TILES_RENDERER_VERSION;
 }

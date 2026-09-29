@@ -48,6 +48,7 @@ struct DemoArgs {
     int warmup = 60;        // successful frames at the first keyframe camera
                             // before the trajectory starts (lets async tile
                             // loading settle; not dumped, not counted)
+    bool stats = false;     // P17: print per-frame TileStats to stdout
 };
 
 bool parseArgs(int argc, char** argv, DemoArgs& out) {
@@ -85,11 +86,13 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
         } else if (arg == "--warmup") {
             if (!needValue("--warmup", value)) return false;
             out.warmup = std::stoi(value);
+        } else if (arg == "--stats") {
+            out.stats = true;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "usage: tiles_demo [--frames N] [--width W] [--height H] "
                          "[--screenshot out.png] [--tileset path-or-url] "
                          "[--no-tileset] [--trajectory keys.csv] "
-                         "[--frame-dir dir] [--warmup N]"
+                         "[--frame-dir dir] [--warmup N] [--stats]"
                       << std::endl;
             return false;
         } else {
@@ -347,6 +350,18 @@ int main(int argc, char** argv) {
                 if (!args.frameDir.empty() && !dumpFramePng(rendered)) {
                     exitCode = 1;
                     break;
+                }
+                if (args.stats) {
+                    // P17: per-frame streaming diagnostics (dev/test HUD).
+                    // Format is stable for tests/stats_test.py to parse.
+                    const auto st =
+                        tiles_renderer::Renderer::tileStats();
+                    std::cout << "[stats] frame=" << rendered
+                              << " selected=" << st.selectedTiles
+                              << " loading=" << st.tilesLoading
+                              << " loaded=" << st.tilesLoaded
+                              << " failed=" << st.tilesFailed
+                              << " bytes=" << st.bytesLoaded << std::endl;
                 }
                 ++rendered;
             } else {

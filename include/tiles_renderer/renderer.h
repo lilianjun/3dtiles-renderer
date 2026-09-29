@@ -92,6 +92,44 @@ public:
     // (-1 when no tileset is loaded).
     static int renderedTileCount();
 
+    // P17: streaming diagnostics. A snapshot of the tile pipeline taken by
+    // the most recent renderFrame(). All fields are -1 when no tileset is
+    // loaded.
+    //
+    // Field semantics:
+    //   selectedTiles — tiles chosen for rendering by the last traversal
+    //                   (ViewUpdateResult::tilesToRenderThisFrame). This can
+    //                   be larger than renderedTileCount(): the root tile is
+    //                   often selected but has no renderable content of its
+    //                   own.
+    //   tilesLoading  — tiles sitting in cesium-native's worker + main
+    //                   thread load queues: claimed by the traversal, content
+    //                   not yet in flight/done.
+    //   tilesLoaded   — tiles whose content finished loading
+    //                   (TileLoadState::Done). Counts only truly finished
+    //                   tiles, not tiles merely referenced but still loading.
+    //   tilesFailed   — tiles that failed to load (Failed or
+    //                   FailedTemporarily). Computed by walking the
+    //                   instantiated tile tree, so it costs O(known tiles);
+    //                   fine for diagnostics, don't call it every frame on a
+    //                   huge tileset.
+    //   bytesLoaded   — tile + raster content bytes currently held
+    //                   (cesium-native getTotalDataBytes). Content bytes, NOT
+    //                   a GPU memory estimate (see ADR-0015 for why FPS and
+    //                   GPU memory are deliberately not reported).
+    struct TileStats {
+        std::int64_t selectedTiles = -1;
+        std::int64_t tilesLoading = -1;
+        std::int64_t tilesLoaded = -1;
+        std::int64_t tilesFailed = -1;
+        std::int64_t bytesLoaded = -1;
+    };
+
+    // P17: current TileStats (see above). Like every Renderer method except
+    // version(), must be called on the render thread; it only reads state
+    // written by renderFrame() and never mutates the scene.
+    static TileStats tileStats();
+
     static void shutdown();
 
     static const char* version();

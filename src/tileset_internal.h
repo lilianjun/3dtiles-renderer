@@ -17,6 +17,8 @@
 #include <memory>
 #include <string>
 
+#include "tiles_renderer/renderer.h" // P17: TileStats
+
 namespace filament {
 class Engine;
 class Scene;
@@ -60,6 +62,10 @@ public:
     // Number of tiles selected for rendering by the last update()
     // (-1 when no tileset is loaded).
     int renderedTileCount() const;
+
+    // P17: streaming diagnostics snapshot (see renderer.h TileStats).
+    // All fields are -1 when no tileset is loaded.
+    Renderer::TileStats tileStats() const;
 
 private:
     struct Impl;

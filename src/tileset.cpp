@@ -978,6 +978,12 @@ struct TilesetRenderer::Impl {
         // actually starts/processes the queued tile content loads.
         tileset->loadTiles();
 
+        // P17: capture the traversal's diagnostics for tileStats().
+        lastSelected =
+            static_cast<int>(viewResult.tilesToRenderThisFrame.size());
+        lastWorkerQueue = viewResult.workerThreadTileLoadQueueLength;
+        lastMainQueue = viewResult.mainThreadTileLoadQueueLength;
+
         // Use the traversal's explicit render selection to drive Scene
         // visibility (not tile.isRenderable(), which is true for every loaded
         // tile). Include fading-out tiles so LOD transitions don't pop.
@@ -1047,6 +1053,10 @@ struct TilesetRenderer::Impl {
     std::unique_ptr<Cesium3DTilesSelection::Tileset> tileset;
     bool loaded = false;
     int renderedCount = -1;
+    // P17: last traversal's diagnostics, captured in updateTiles().
+    int lastSelected = -1;
+    std::int32_t lastWorkerQueue = -1;
+    std::int32_t lastMainQueue = -1;
     // P12: why the last loadTileset() failed (empty when it succeeded).
     std::string lastError;
     // P5 rebase origin (world coordinates, double). Tile selection
@@ -1108,6 +1118,55 @@ int TilesetRenderer::renderedTileCount() const {
     return _impl->renderedCount;
 #else
     return -1;
+#endif
+}
+
+Renderer::TileStats TilesetRenderer::tileStats() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    Renderer::TileStats stats;
+    if (!_impl->loaded || _impl->tileset == nullptr) {
+        return stats; // all -1
+    }
+    stats.selectedTiles = _impl->lastSelected;
+    stats.tilesLoading = static_cast<std::int64_t>(_impl->lastWorkerQueue) +
+                         static_cast<std::int64_t>(_impl->lastMainQueue);
+    // Walk the instantiated tree once: count finished (Done) tiles and
+    // failed tiles. Done-state counting is exact; forEachLoadedTile would
+    // also count tiles merely referenced but not yet loaded, which would
+    // make "loaded" lie during streaming.
+    std::int64_t loadedCount = 0;
+    std::int64_t failedCount = 0;
+    const Cesium3DTilesSelection::Tile* pRoot =
+        _impl->tileset->getRootTile();
+    if (pRoot != nullptr) {
+        // Iterative stack — no recursion depth risk on deep trees.
+        std::vector<const Cesium3DTilesSelection::Tile*> stack{pRoot};
+        while (!stack.empty()) {
+            const Cesium3DTilesSelection::Tile* pTile = stack.back();
+            stack.pop_back();
+            const auto state = pTile->getState();
+            if (state == Cesium3DTilesSelection::TileLoadState::Done) {
+                ++loadedCount;
+            }
+            if (state == Cesium3DTilesSelection::TileLoadState::Failed ||
+                state ==
+                    Cesium3DTilesSelection::TileLoadState::FailedTemporarily) {
+                // Permanent and transient failures both count: a transient
+                // failure is retried by cesium-native and may clear.
+                ++failedCount;
+            }
+            for (const Cesium3DTilesSelection::Tile& child :
+                 pTile->getChildren()) {
+                stack.push_back(&child);
+            }
+        }
+    }
+    stats.tilesLoaded = loadedCount;
+    stats.tilesFailed = failedCount;
+    stats.bytesLoaded = _impl->tileset->getTotalDataBytes();
+    return stats;
+#else
+    return Renderer::TileStats{};
 #endif
 }
 

@@ -9,6 +9,23 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- Tile streaming diagnostics (P17, ADR-0015): new `Renderer::tileStats()`
+  returning `Renderer::TileStats` — `selectedTiles` (last traversal's render
+  selection), `tilesLoading` (worker + main load queue lengths),
+  `tilesLoaded` (tiles in `TileLoadState::Done`, counted exactly by walking
+  the instantiated tile tree — `forEachLoadedTile` would also count
+  still-loading tiles and lie during streaming), `tilesFailed`
+  (permanent + transient failures), `bytesLoaded`
+  (`Tileset::getTotalDataBytes`, content bytes — not a GPU memory estimate).
+  All `-1` when no tileset is loaded; render-thread-only like every other
+  API except `version()`. New `tile_stats` ctest (via `tiles_demo --stats`):
+  healthy tileset -> loaded > 0, failed == 0, loaded monotonic,
+  `renderedTileCount()` consistent with `selected`; corrupt glb ->
+  failed > 0 with graceful exit 0; screenshots with/without `--stats` are
+  bit-identical (querying stats never perturbs rendering). FPS is
+  deliberately not reported (Mesa software numbers are meaningless) and no
+  CPU/GPU memory estimate is fabricated (cesium-native exposes only content
+  bytes; Filament v1.77 has no public per-scene GPU accounting).
 - Deterministic camera trajectory replay (P16, ADR-0014): the demo drives
   `setOrbitCamera` per logical frame from a CSV keyframe trajectory
   (`tests/data/trajectories/p16_orbit_push.csv`, smoothstep interpolation,
