@@ -202,6 +202,29 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
   endif()
 endif()
 
+# P11: golden screenshot regression gate. Re-renders one representative
+# fixture per phase with fixed parameters and requires pixel equality
+# against the frozen goldens in tests/golden/ (see its README for the
+# comparison policy and the regeneration rules).
+# Deliberately NOT registered under TILES_SANITIZE: ASan/UBSan
+# instrumentation can perturb pixel output; sanitizer builds gate on
+# memory correctness, the golden gate on pixel correctness — separate
+# lanes, each strict in its own.
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
+   AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME golden_regression
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/golden_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --workdir "${CMAKE_BINARY_DIR}/golden_tmp")
+    set_tests_properties(golden_regression PROPERTIES TIMEOUT 1200)
+  else()
+    message(WARNING "[P11] Python3 not found — golden_regression test skipped")
+  endif()
+endif()
+
 # P6: lifecycle + fault-injection tests. Meaningful with or without
 # sanitizers (they assert graceful failure instead of crashes); the
 # sanitizer_* variants below additionally gate on ASan/LSan/UBSan reports.
