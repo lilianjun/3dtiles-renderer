@@ -98,6 +98,11 @@ struct FilamentState {
     filament::MaterialInstance* materialInstance = nullptr;
     std::uint32_t width = 0;
     std::uint32_t height = 0;
+    // P12: the native window handle passed to initialize(), kept so resize()
+    // can recreate the swap chain for the same window. For WASM this points
+    // at the host's canvas-selector string (host must keep it alive — same
+    // rule as in initialize()).
+    void* nativeWindow = nullptr;
     // P3: optional tileset integration (null when no tileset loaded).
     std::unique_ptr<TilesetRenderer> tileset;
     OrbitCamera orbit;
@@ -177,27 +182,38 @@ void destroyFilamentState() {
 
 bool g_initialized = false;
 
+// P12: last failure description (see Renderer::lastError()). Only written
+// on the render thread (the API is single-threaded), so no locking.
+std::string g_lastError;
+
+void setLastError(const std::string& message) {
+    g_lastError = message;
+    if (!message.empty()) {
+        std::cerr << "[tiles_renderer] error: " << message << std::endl;
+    }
+}
+
 } // namespace
 
 bool Renderer::initialize(const RendererConfig& config) {
     if (config.window == nullptr || config.width == 0 || config.height == 0) {
-        std::cerr << "[tiles_renderer] initialize: invalid config "
-                     "(need non-null window + nonzero width/height)"
-                  << std::endl;
+        setLastError("initialize: invalid config "
+                     "(need non-null window + nonzero width/height)");
         return false;
     }
     if (g_initialized) {
-        std::cerr << "[tiles_renderer] initialize: already initialized" << std::endl;
+        setLastError("initialize: already initialized");
         return false;
     }
+    setLastError("");
 
 #ifdef TILES_WITH_FILAMENT
     // ---- Real Filament backend (P2 Linux, P4 other platforms) ----
     FilamentState& s = g_state;
     s.engine = filament::Engine::create(TILES_FILAMENT_BACKEND);
     if (s.engine == nullptr) {
-        std::cerr << "[tiles_renderer] initialize: Engine::create("
-                  << TILES_PLATFORM_NAME << ") failed" << std::endl;
+        setLastError(std::string("initialize: Engine::create(") +
+                     TILES_PLATFORM_NAME + ") failed");
         return false;
     }
     // Native window handle interpretation is platform-specific, but every
@@ -211,8 +227,8 @@ bool Renderer::initialize(const RendererConfig& config) {
 #if defined(TILES_PLATFORM_WASM)
     const char* canvasSelector = config.window;
     if (canvasSelector == nullptr || canvasSelector[0] == '\0') {
-        std::cerr << "[tiles_renderer] initialize: web backend needs a "
-                     "canvas selector (e.g. \"#canvas\")" << std::endl;
+        setLastError("initialize: web backend needs a canvas selector "
+                     "(e.g. \"#canvas\")");
         filament::Engine::destroy(s.engine);
         s.engine = nullptr;
         return false;
@@ -226,11 +242,11 @@ bool Renderer::initialize(const RendererConfig& config) {
 #endif
     s.swapChain = s.engine->createSwapChain(nativeWindow);
     if (s.swapChain == nullptr) {
-        std::cerr << "[tiles_renderer] initialize: createSwapChain failed"
-                  << std::endl;
+        setLastError("initialize: createSwapChain failed");
         destroyFilamentState();
         return false;
     }
+    s.nativeWindow = nativeWindow;
     s.width = config.width;
     s.height = config.height;
 
@@ -470,28 +486,76 @@ void Renderer::shutdown() {
 
 bool Renderer::loadTileset(const std::string& tilesetUrl) {
     if (!g_initialized) {
-        std::cerr << "[tiles_renderer] loadTileset: not initialized"
-                  << std::endl;
+        setLastError("loadTileset: not initialized");
         return false;
     }
+    setLastError("");
 #ifdef TILES_WITH_FILAMENT
     FilamentState& s = g_state;
     if (s.engine == nullptr || s.scene == nullptr) {
+        setLastError("loadTileset: engine not ready");
         return false;
     }
     s.tileset.reset(); // drop any previously loaded tileset first
     auto tileset = std::make_unique<TilesetRenderer>(s.engine, s.scene);
     if (!tileset->load(tilesetUrl)) {
+        setLastError("loadTileset: " + tileset->lastError());
         return false;
     }
     s.tileset = std::move(tileset);
     return true;
 #else
     (void)tilesetUrl;
-    std::cerr << "[tiles_renderer] loadTileset: not available in this build"
-              << std::endl;
+    setLastError("loadTileset: not available in this build");
     return false;
 #endif
+}
+
+bool Renderer::resize(std::uint32_t width, std::uint32_t height) {
+    if (!g_initialized) {
+        setLastError("resize: not initialized");
+        return false;
+    }
+    if (width == 0 || height == 0) {
+        setLastError("resize: dimensions must be nonzero");
+        return false;
+    }
+    setLastError("");
+#ifdef TILES_WITH_FILAMENT
+    FilamentState& s = g_state;
+    if (s.engine == nullptr || s.swapChain == nullptr ||
+        s.nativeWindow == nullptr) {
+        setLastError("resize: engine not ready");
+        return false;
+    }
+    if (width == s.width && height == s.height) {
+        return true; // no-op
+    }
+    // Recreate the swap chain for the same native window (the host owns the
+    // window and is responsible for resizing the OS-level surface first).
+    // Called between frames on the render thread, so no in-flight frame is
+    // using the old swap chain.
+    s.engine->destroy(s.swapChain);
+    s.swapChain = s.engine->createSwapChain(s.nativeWindow);
+    if (s.swapChain == nullptr) {
+        setLastError("resize: createSwapChain failed");
+        return false;
+    }
+    s.width = width;
+    s.height = height;
+    s.view->setViewport(filament::Viewport{0, 0, width, height});
+    const double aspect = static_cast<double>(width) / static_cast<double>(height);
+    s.camera->setProjection(45.0, aspect, 0.1, 100.0);
+    std::cout << "[tiles_renderer] resized to " << width << "x" << height
+              << std::endl;
+    return true;
+#else
+    return true; // stub path: nothing to resize
+#endif
+}
+
+std::string Renderer::lastError() {
+    return g_lastError;
 }
 
 void Renderer::setOrbitCamera(

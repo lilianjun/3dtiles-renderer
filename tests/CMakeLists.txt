@@ -242,6 +242,21 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux")
       tiles_apply_sanitizers(tiles_renderer_lifecycle)
       add_test(NAME lifecycle COMMAND tiles_renderer_lifecycle)
       set_tests_properties(lifecycle PROPERTIES TIMEOUT 600)
+
+      # P12: host-integration check — drives the public API like a real
+      # host app (init -> render -> resize -> load -> shutdown), covering
+      # the P12 additions Renderer::resize() and Renderer::lastError().
+      # Needs a real X11 window (self-wraps under xvfb-run when headless).
+      # Uses only the public header; argv[1] is a loadable fixture dir.
+      add_executable(tiles_renderer_host_integration host_integration_check.cpp)
+      target_link_libraries(tiles_renderer_host_integration PRIVATE
+        tiles_renderer SDL3::SDL3-static)
+      target_compile_features(tiles_renderer_host_integration PRIVATE cxx_std_20)
+      tiles_apply_sanitizers(tiles_renderer_host_integration)
+      add_test(NAME host_integration
+        COMMAND tiles_renderer_host_integration
+                "${CMAKE_CURRENT_SOURCE_DIR}/data/p8_pnts_cloud")
+      set_tests_properties(host_integration PROPERTIES TIMEOUT 600)
     endif()
     # Fault injection through the demo binary: bad tileset path, corrupt
     # tileset.json, corrupt .glb — all must fail gracefully, never crash.
@@ -320,6 +335,13 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
       add_test(NAME sanitizer_lifecycle
         COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_renderer_lifecycle>")
       set_tests_properties(sanitizer_lifecycle PROPERTIES TIMEOUT 900)
+    endif()
+    # P12: host-integration check under sanitizers.
+    if(TARGET tiles_renderer_host_integration)
+      add_test(NAME sanitizer_host_integration
+        COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_renderer_host_integration>"
+                "${CMAKE_CURRENT_SOURCE_DIR}/data/p8_pnts_cloud")
+      set_tests_properties(sanitizer_host_integration PROPERTIES TIMEOUT 900)
     endif()
     set_tests_properties(
       sanitizer_demo sanitizer_tileset sanitizer_b3dm sanitizer_i3dm

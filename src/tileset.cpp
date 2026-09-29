@@ -808,6 +808,7 @@ struct TilesetRenderer::Impl {
         : engine(engine_), scene(scene_) {}
 
     bool loadTileset(const std::string& urlOrPath) {
+        lastError.clear();
         std::string url = urlOrPath;
         std::string localPath;
         if (url.compare(0, 7, "file://") == 0) {
@@ -819,8 +820,9 @@ struct TilesetRenderer::Impl {
         if (!localPath.empty()) {
             std::ifstream probe(localPath, std::ios::binary);
             if (!probe) {
-                std::cerr << "[tiles_renderer] loadTileset: file not found: "
-                          << urlOrPath << std::endl;
+                lastError = "file not found: " + urlOrPath;
+                std::cerr << "[tiles_renderer] loadTileset: " << lastError
+                          << std::endl;
                 return false;
             }
         }
@@ -863,8 +865,10 @@ struct TilesetRenderer::Impl {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
         if (tileset->getRootTile() == nullptr) {
-            std::cerr << "[tiles_renderer] loadTileset: failed to load "
-                      << urlOrPath << std::endl;
+            lastError = "failed to load tileset (no root tile within 30s): " +
+                        urlOrPath;
+            std::cerr << "[tiles_renderer] loadTileset: " << lastError
+                      << std::endl;
             tileset.reset();
             return false;
         }
@@ -1024,6 +1028,8 @@ struct TilesetRenderer::Impl {
     std::unique_ptr<Cesium3DTilesSelection::Tileset> tileset;
     bool loaded = false;
     int renderedCount = -1;
+    // P12: why the last loadTileset() failed (empty when it succeeded).
+    std::string lastError;
     // P5 rebase origin (world coordinates, double). Tile selection
     // (ViewState) orbits this point in full double precision; rendering
     // subtracts it in double precision before the float32 conversion.
@@ -1048,6 +1054,14 @@ bool TilesetRenderer::load(const std::string& urlOrPath) {
                  "cesium-native + Filament)"
               << std::endl;
     return false;
+#endif
+}
+
+std::string TilesetRenderer::lastError() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->lastError;
+#else
+    return "loadTileset: not available (built without cesium-native + Filament)";
 #endif
 }
 

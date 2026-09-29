@@ -59,14 +59,34 @@ public:
     // P5: http(s):// URL — served by cesium-native's CurlAssetAccessor).
     // Must be called after initialize(). Tile selection/LOD runs every frame
     // in renderFrame() against the orbit camera set via setOrbitCamera().
-    // Returns false when not initialized or the tileset failed to load.
+    // Returns false when not initialized or the tileset failed to load
+    // (see lastError() for why). Loading a new tileset replaces the old one;
+    // there is no separate unload — dropping the tileset happens via
+    // shutdown() or by loading another one.
     static bool loadTileset(const std::string& tilesetUrl);
 
     // P3: orbit camera used for tile selection and the Filament view.
     // Only takes effect while a tileset is loaded; otherwise the P2 fixed
     // camera is kept. yaw/pitch in degrees, distance in the tileset's units.
+    // The camera orbits the tileset's local origin (P5 rebase); there is no
+    // free lookAt/target API in this version — see docs/integration.md.
     static void setOrbitCamera(float yawDegrees, float pitchDegrees,
                                float distance);
+
+    // P12: resize the render surface (host window resize, orientation
+    // change, split-screen, ...). The host keeps owning the native window;
+    // the SDK recreates its swap chain for the same window handle and
+    // updates the viewport + camera aspect. Must be called on the render
+    // thread, between frames (not from inside a frame callback).
+    // Returns false when not initialized or either dimension is zero.
+    // No-op (returns true) when the size is unchanged.
+    static bool resize(std::uint32_t width, std::uint32_t height);
+
+    // P12: human-readable description of the most recent SDK failure
+    // (initialize / loadTileset / resize returning false). Empty when the
+    // last such call succeeded. Valid until the next SDK call; the SDK is
+    // single-threaded (see below), so no lifetime hazards beyond that.
+    static std::string lastError();
 
     // P3: number of tiles selected for rendering by the last renderFrame()
     // (-1 when no tileset is loaded).
@@ -76,5 +96,13 @@ public:
 
     static const char* version();
 };
+
+// P12: threading model. Every Renderer method except version() must be
+// called on ONE thread — the render thread that called initialize().
+// Internally the SDK spawns worker threads for tile I/O and parsing
+// (cesium-native task system), but all Filament calls and all public API
+// state live on the caller's thread; there is no internal locking on the
+// API surface. Do not call renderFrame() (or any other method) from two
+// threads concurrently.
 
 } // namespace tiles_renderer

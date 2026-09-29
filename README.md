@@ -157,13 +157,14 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
 ### P6：内存与资源健壮性（见 ADR-0007）
 
 ```bash
-# 1) 普通回归（14/14）：smoke、demo、截图、tileset、http、b3dm、rebase、
-#    i3dm、pnts、cmpt、tiles11、golden_regression、lifecycle、fault_inputs
+# 1) 普通回归（15/15）：smoke、demo、截图、tileset、http、b3dm、rebase、
+#    i3dm、pnts、cmpt、tiles11、golden_regression、lifecycle、fault_inputs、
+#    host_integration（P12：宿主视角 API 集成检查）
 cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON -DTILES_SDL3_NATIVE_VIDEO=ON
 cmake --build --preset linux -j2
 xvfb-run -a ctest --preset linux -I 1,9 --output-on-failure
 
-# 2) sanitizer 门禁（10/10）：ASan + LSan + UBSan，只插桩自有 targets
+# 2) sanitizer 门禁（11/11）：ASan + LSan + UBSan，只插桩自有 targets
 cmake --preset linux-asan          # Debug + TILES_SANITIZE=ON，构建目录 build/linux-asan
 cmake --build --preset linux-asan -j2
 xvfb-run -a ctest --preset linux-asan -R sanitizer_ --output-on-failure

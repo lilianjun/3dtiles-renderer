@@ -47,6 +47,9 @@ public:
     // itself is async internally; update() pumps it).
     bool load(const std::string& urlOrPath);
 
+    // P12: why the last load() failed (empty when it succeeded).
+    std::string lastError() const;
+
     // Per-frame work: pump async tasks, run tile selection for the orbit
     // camera, toggle tile visibility. Must be called before rendering.
     void update(double viewportWidth, double viewportHeight,
