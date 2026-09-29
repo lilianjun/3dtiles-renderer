@@ -73,6 +73,25 @@
 | iOS | ❌ 本地无 Xcode | ✅ iOS arm64 交叉 | ❌ 无设备 |
 | WASM | ✅ emcc stub 交叉编译 | ✅ | ❌ 无浏览器验证；Filament C++ 未接 |
 
+## CI 实战记录（2026-09-29，PR #1）
+
+- Windows runner（`windows-2025-vs2026` 镜像）默认捡到 MinGW，
+  链不动 Filament 的 MSVC `/MD` 预编译 `.lib`（ABI 不兼容）。
+  修法：preset 不再写 `generator`（删掉原来的 `Unix Makefiles`），
+  让 CMake 自动选最新安装的 Visual Studio；另加
+  `CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>DLL`
+  与 Filament 的 `md/` 包对齐（防 LNK2038），以及 `/Zc:__cplusplus`
+ （MSVC 默认 `__cplusplus` 恒为 `199711L`，smoke test 的 C++20
+  static_assert 会误杀）。
+- iOS：xcframework 布局下没有 `link_directories`，`zstd` 必须走
+  xcframework 全路径（与其它 archive 一样进 `_filament_libs`），
+  不能按裸名进 `_filament_syslibs`。
+- iOS 链接另需 `-framework OpenGLES`：`Engine::create()` 的 backend
+  switch 会把 GL driver 工具函数拉进链接（与 Android 上
+  GLESv3/EGL 同一类问题）。
+- 以上三处都是 `tiles_renderer_linkcheck` 先在本机/CI 暴露出来的——
+  说明"强制真链接"的验收目标达到了设计目的。
+
 ## 后续事项
 
 - P3 遗留：HTTP(S) asset accessor、b3dm/i3dm 内容类型、ECEF→ENU rebase。
