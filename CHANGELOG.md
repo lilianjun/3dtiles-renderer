@@ -9,6 +9,22 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- ADD refinement + region bounding-volume verification (P21, ADR-0019):
+  new `add_region` ctest (`tests/add_region_test.py`, ~3s, PASS over 3 runs)
+  plus `sanitizer_add_region` (ASan/LSan/UBSan, no reports). ADD fixture
+  `tests/data/p21_add_tileset/` (same geometry as P20's REPLACE fixture,
+  `refine: "ADD"`): FAR->NEAR->FAR proves the ADD/REPLACE contrast as a
+  regression gate — NEAR selects `{root.glb, child_0..3.glb}` (root stays,
+  vs P20's REPLACE selecting only the 4 children), FAR2 falls back to
+  `{root.glb}`, loaded 2->6 cached. Region fixture
+  `tests/data/p21_region_tileset/` (`gen_p21_region_tileset.py`): 3D Tiles
+  1.0 `region` BVs (radians, WGS84) at lat=0/lon=0 with a root-tile
+  `transform` translating local boxes to ECEF(6378137,0,0); the SDK's
+  existing rebase path (`computeLocalOrigin`: BoundingRegion -> OBB center)
+  brings them back near the origin with zero SDK changes — NEAR selects
+  `{root.glb, child_0.glb, child_1.glb}`, loaded=4, failed=0, and the
+  screenshot differs from the `--no-tileset` reference by 5382 px (4.5%,
+  bit-identical over 3 runs).
 - Frustum culling + LOD refinement verification (P20, ADR-0018):
   `Renderer::selectedTileIds()` (render thread; ID strings of the last
   traversal's `tilesToRenderThisFrame` via cesium-native

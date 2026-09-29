@@ -323,6 +323,24 @@ if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   endif()
 endif()
 
+# P21: ADD refinement + region bounding volumes. Two-part test (ADD
+# fixture for parent-stays-selected semantics vs P20's REPLACE;
+# region fixture: WGS84 region BVs + tile transform at ECEF magnitude,
+# rebase brings them back near the origin). Fast (<10s incl. the
+# empty-reference screenshot render); run 3x for stability during dev.
+if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME add_region
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/add_region_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>")
+    set_tests_properties(add_region PROPERTIES TIMEOUT 300)
+  else()
+    message(WARNING "[P21] Python3 not found — add_region test skipped")
+  endif()
+endif()
+
 # P11: golden screenshot regression gate. Re-renders one representative
 # fixture per phase with fixed parameters and requires pixel equality
 # against the frozen goldens in tests/golden/ (see its README for the
@@ -491,6 +509,16 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
               --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
               --demo "$<TARGET_FILE:tiles_demo>")
     set_tests_properties(sanitizer_frustum_lod PROPERTIES TIMEOUT 600)
+    # P21: ADD refinement + region bounding volumes under ASan/LSan/UBSan —
+    # shorter runs gating on sanitizer reports plus the core assertions
+    # (ADD: root stays selected at NEAR; region: all tiles load, failed=0).
+    add_test(NAME sanitizer_add_region
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/add_region_test.py"
+              --sanitized
+              --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
+              --demo "$<TARGET_FILE:tiles_demo>")
+    set_tests_properties(sanitizer_add_region PROPERTIES TIMEOUT 600)
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"
