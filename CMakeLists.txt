@@ -320,6 +320,26 @@ if(TILES_WITH_FILAMENT)
       URL "${_filament_base_url}/${_filament_pkg}"
     )
     FetchContent_MakeAvailable(filament_bin)
+    # P15: gltfio decodes embedded PNG/JPEG textures through a
+    # client-supplied TextureProvider; the prebuilt stb decoder (libstb.a)
+    # ships in the Filament release archives, so wire it in wherever it
+    # exists. Without it, textured materials silently render black
+    # ("Missing texture provider for image/png") — unnoticed until P15
+    # because no earlier fixture used textures.
+    if(_filament_xcframework)
+      set(_stb_lib_path
+        "${filament_bin_SOURCE_DIR}/lib/libstb.xcframework/ios-arm64/libstb.a")
+    else()
+      set(_stb_lib_path
+        "${filament_bin_SOURCE_DIR}/${_filament_libdir}/libstb.a")
+    endif()
+    if(EXISTS "${_stb_lib_path}")
+      list(APPEND _filament_libs stb)
+      target_compile_definitions(tiles_renderer PRIVATE TILES_WITH_STB_PROVIDER)
+    else()
+      message(WARNING "[P15] libstb.a not in the Filament package — glTF "
+                      "textures will not decode on ${TILES_PLATFORM}.")
+    endif()
     add_library(filament_prebuilt INTERFACE)
     target_include_directories(filament_prebuilt INTERFACE
       "${filament_bin_SOURCE_DIR}/include")

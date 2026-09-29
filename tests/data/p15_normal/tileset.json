@@ -1,0 +1,72 @@
+{
+  "asset": {
+    "version": "1.0"
+  },
+  "geometricError": 100.0,
+  "root": {
+    "boundingVolume": {
+      "box": [
+        8,
+        0,
+        0,
+        9,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        0,
+        4
+      ]
+    },
+    "geometricError": 10.0,
+    "refine": "ADD",
+    "children": [
+      {
+        "boundingVolume": {
+          "box": [
+            3,
+            0,
+            0,
+            1.5,
+            0,
+            0,
+            0,
+            1.5,
+            0,
+            0,
+            0,
+            1.5
+          ]
+        },
+        "geometricError": 0.0,
+        "content": {
+          "uri": "nmap.glb"
+        }
+      },
+      {
+        "boundingVolume": {
+          "box": [
+            11,
+            0,
+            0,
+            1.5,
+            0,
+            0,
+            0,
+            1.5,
+            0,
+            0,
+            0,
+            1.5
+          ]
+        },
+        "geometricError": 0.0,
+        "content": {
+          "uri": "flat.glb"
+        }
+      }
+    ]
+  }
+}

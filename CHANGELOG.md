@@ -8,6 +8,23 @@ A = Android, i = iOS, wasm = WebAssembly.
 
 ## [Unreleased]
 
+### Added
+- PBR material pipeline verification (P15, ADR-0013): deterministic fixtures
+  (`tests/data/gen_p15_pbr_tileset.py`, no network) covering metallic 0 vs 1,
+  roughness 0.08 vs 0.9, hand-made normal map vs flat normals,
+  `alphaMode=BLEND` vs `OPAQUE`, single vs double-sided culling, and a
+  procedural checkerboard `baseColorTexture` — asserted by the new
+  `pbr_materials_screenshot` ctest with comparison-based (not hard-coded)
+  pixel assertions.
+
+### Fixed
+- glTF textures (PNG/JPEG) rendered black: gltfio's `ResourceLoader` had no
+  `TextureProvider` registered ("Missing texture provider for image/png").
+  The render bridge now wires Filament's prebuilt stb decoder
+  (`createStbProvider`, `libstb.a`) wherever the platform package ships it
+  (`TILES_WITH_STB_PROVIDER`; configure-time warning otherwise). No
+  third-party source changed.
+
 ## [0.1.0] — 2026-09-29 (P13: SDK install & packaging)
 
 ### Added

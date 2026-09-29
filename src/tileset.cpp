@@ -40,6 +40,9 @@
 #include <gltfio/FilamentAsset.h>
 #include <gltfio/MaterialProvider.h>
 #include <gltfio/ResourceLoader.h>
+#ifdef TILES_WITH_STB_PROVIDER
+#include <gltfio/TextureProvider.h> // createStbProvider (P15: glTF textures)
+#endif
 #include <gltfio/materials/uberarchive.h>
 #include <utils/Entity.h>
 #endif
@@ -609,6 +612,14 @@ public:
         resourceConfig.engine = engine;
         _resourceLoader =
             new filament::gltfio::ResourceLoader(resourceConfig);
+#ifdef TILES_WITH_STB_PROVIDER
+        // P15: without a texture provider, gltfio logs "Missing texture
+        // provider for image/png" and textured materials render black.
+        // The stb decoder ships in the Filament prebuilt package (libstb.a).
+        _textureProvider = filament::gltfio::createStbProvider(engine);
+        _resourceLoader->addTextureProvider("image/png", _textureProvider);
+        _resourceLoader->addTextureProvider("image/jpeg", _textureProvider);
+#endif
     }
 
     ~FilamentPrepareResources() override {
@@ -618,6 +629,9 @@ public:
         delete _materialProvider;
         filament::gltfio::AssetLoader::destroy(&_assetLoader);
         delete _resourceLoader;
+#ifdef TILES_WITH_STB_PROVIDER
+        delete _textureProvider;
+#endif
     }
 
     CesiumAsync::Future<
@@ -790,6 +804,11 @@ private:
     filament::gltfio::MaterialProvider* _materialProvider = nullptr;
     filament::gltfio::AssetLoader* _assetLoader = nullptr;
     filament::gltfio::ResourceLoader* _resourceLoader = nullptr;
+#ifdef TILES_WITH_STB_PROVIDER
+    // P15: stb image decoder feeding gltfio's ResourceLoader (PNG/JPEG).
+    // Must outlive _resourceLoader; destroyed after it above.
+    filament::gltfio::TextureProvider* _textureProvider = nullptr;
+#endif
     // P5 rebase origin (world coordinates, double); subtracted from every
     // tile translation in double precision before the float32 conversion.
     glm::dvec3 _localOrigin{0.0, 0.0, 0.0};

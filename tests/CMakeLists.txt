@@ -202,6 +202,26 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
   endif()
 endif()
 
+# P15: PBR material pipeline verification — deterministic fixtures with
+# metallic/roughness contrast, a hand-made normal map, BLEND transparency,
+# single/double-sided culling and a procedural checkerboard baseColor
+# texture, rendered through tiles_demo with comparison-based assertions
+# (no hard-coded Mesa shading values). See docs/adr/0013-pbr-materials.md.
+if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME pbr_materials_screenshot
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/pbr_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --outdir "${CMAKE_BINARY_DIR}/screenshots/p15_pbr"
+              --frames 60 --width 800 --height 600)
+    set_tests_properties(pbr_materials_screenshot PROPERTIES TIMEOUT 1200)
+  else()
+    message(WARNING "[P15] Python3 not found — pbr_materials_screenshot test skipped")
+  endif()
+endif()
+
 # P11: golden screenshot regression gate. Re-renders one representative
 # fixture per phase with fixed parameters and requires pixel equality
 # against the frozen goldens in tests/golden/ (see its README for the
@@ -319,6 +339,12 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
       COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
               --frames 60
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p10_11_implicit/tileset.json")
+    # P15 scene: PBR materials with embedded PNG textures (checkerboard
+    # baseColor + normal map) through the stb TextureProvider added in P15.
+    add_test(NAME sanitizer_pbr
+      COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
+              --frames 60
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p15_tex/tileset.json")
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"
@@ -345,7 +371,7 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
     endif()
     set_tests_properties(
       sanitizer_demo sanitizer_tileset sanitizer_b3dm sanitizer_i3dm
-      sanitizer_pnts sanitizer_cmpt sanitizer_11 sanitizer_http
+      sanitizer_pnts sanitizer_cmpt sanitizer_11 sanitizer_pbr sanitizer_http
       sanitizer_faults
       PROPERTIES TIMEOUT 900)
   else()
