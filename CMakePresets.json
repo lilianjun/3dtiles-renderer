@@ -52,9 +52,10 @@
       "binaryDir": "${sourceDir}/build/android",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "TILES_PLATFORM": "android"
+        "TILES_PLATFORM": "android",
+        "BUILD_TESTING": false
       },
-      "description": "Requires ANDROID_NDK_HOME. Without it, configure falls back to a host stub build with a warning (P0 policy). P1 wires the NDK toolchain file here.",
+      "description": "Auto-wires the NDK toolchain from ANDROID_NDK_HOME when present (P4); otherwise configures as a host stub with a warning (P0 policy).",
       "displayName": "Android (NDK cross)",
       "generator": "Unix Makefiles",
       "name": "android"
@@ -63,9 +64,10 @@
       "binaryDir": "${sourceDir}/build/ios",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "TILES_PLATFORM": "ios"
+        "TILES_PLATFORM": "ios",
+        "BUILD_TESTING": false
       },
-      "description": "Requires macOS + Xcode. On other hosts, configure falls back to a host stub build with a warning (P0 policy). P1 wires the iOS toolchain here.",
+      "description": "On macOS hosts, auto-wires a real iOS cross build (P4). On other hosts, configures as a host stub with a warning (P0 policy).",
       "displayName": "iOS (Xcode cross)",
       "generator": "Unix Makefiles",
       "name": "ios"
@@ -74,9 +76,10 @@
       "binaryDir": "${sourceDir}/build/wasm",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "TILES_PLATFORM": "wasm"
+        "TILES_PLATFORM": "wasm",
+        "BUILD_TESTING": false
       },
-      "description": "Requires activated Emscripten SDK (emcc on PATH). Without it, configure falls back to a host stub build with a warning (P0 policy). P1 wires the Emscripten toolchain file here.",
+      "description": "Auto-wires the Emscripten toolchain from EMSDK when present (P4); otherwise configures as a host stub with a warning (P0 policy).",
       "displayName": "WebAssembly (Emscripten)",
       "generator": "Unix Makefiles",
       "name": "wasm"

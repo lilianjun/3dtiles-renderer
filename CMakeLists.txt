@@ -1,17 +1,64 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(tiles_renderer VERSION 0.1.0 LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
 # ---------------------------------------------------------------------------
 # Target platform selection.
 # Values: linux | windows | android | ios | wasm
+# Declared before project() so the cross-toolchain wiring below can read it.
 # ---------------------------------------------------------------------------
 set(TILES_PLATFORM "linux" CACHE STRING "Target platform")
 set_property(CACHE TILES_PLATFORM PROPERTY STRINGS linux windows android ios wasm)
+
+# ---------------------------------------------------------------------------
+# P4: cross-compilation toolchain auto-wiring (must run before project()).
+# When the toolchain is found in the environment, the preset "just works".
+# When it is missing, configure falls back to a HOST STUB build with a
+# warning (P0 policy) instead of hard-failing. An explicitly passed
+# -DCMAKE_TOOLCHAIN_FILE always wins over the auto-wiring.
+#
+# TILES_CROSS_TOOLCHAIN is recomputed deterministically on *every*
+# configure from cached state + environment (never "remembered" via the
+# cache), so re-configures (e.g. after editing CMakeLists.txt) behave
+# identically to fresh ones.
+# ---------------------------------------------------------------------------
+# Step 1: detect an already-wired toolchain (re-configure or explicit -D).
+set(TILES_CROSS_TOOLCHAIN "")
+if(TILES_PLATFORM STREQUAL "android"
+    AND CMAKE_TOOLCHAIN_FILE MATCHES "android\\.toolchain\\.cmake")
+  set(TILES_CROSS_TOOLCHAIN "android-ndk")
+elseif(TILES_PLATFORM STREQUAL "wasm"
+    AND CMAKE_TOOLCHAIN_FILE MATCHES "Emscripten\\.cmake")
+  set(TILES_CROSS_TOOLCHAIN "emscripten")
+elseif(TILES_PLATFORM STREQUAL "ios" AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  set(TILES_CROSS_TOOLCHAIN "ios")
+endif()
+# Step 2: fresh auto-wiring when nothing is wired yet.
+if(NOT TILES_CROSS_TOOLCHAIN AND NOT CMAKE_TOOLCHAIN_FILE)
+  if(TILES_PLATFORM STREQUAL "android")
+    if(DEFINED ENV{ANDROID_NDK_HOME}
+        AND EXISTS "$ENV{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake")
+      set(CMAKE_TOOLCHAIN_FILE "$ENV{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake")
+      set(ANDROID_ABI "arm64-v8a" CACHE STRING "Android ABI")
+      set(ANDROID_PLATFORM "android-24" CACHE STRING "Android API level")
+      set(ANDROID_STL "c++_shared" CACHE STRING "Android STL")
+      set(TILES_CROSS_TOOLCHAIN "android-ndk")
+    endif()
+  elseif(TILES_PLATFORM STREQUAL "wasm")
+    if(DEFINED ENV{EMSDK}
+        AND EXISTS "$ENV{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")
+      set(CMAKE_TOOLCHAIN_FILE "$ENV{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")
+      set(TILES_CROSS_TOOLCHAIN "emscripten")
+    endif()
+  elseif(TILES_PLATFORM STREQUAL "ios" AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+    # Real iOS cross build on macOS hosts (CI). Xcode clang handles
+    # -arch/-isysroot from these cache variables with Makefiles/Ninja too.
+    set(CMAKE_SYSTEM_NAME "iOS" CACHE STRING "Target system")
+    set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "iOS architectures")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "iOS deployment target")
+    set(TILES_CROSS_TOOLCHAIN "ios")
+  endif()
+endif()
+
+project(tiles_renderer VERSION 0.1.0 LANGUAGES CXX)
 
 # ---------------------------------------------------------------------------
 # Dependency switches.
@@ -28,40 +75,41 @@ option(TILES_WITH_CESIUM_NATIVE "Fetch and build cesium-native (3D Tiles loading
 option(TILES_WITH_FILAMENT      "Fetch Filament (rendering, prebuilt binaries)" OFF)
 option(TILES_WITH_SDL3          "Fetch and build SDL3 (demo + tests only; never the SDK)" OFF)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 # ---------------------------------------------------------------------------
 # SDK availability checks.
 # Policy: warn with a clear hint, never hard-fail. The host stub build
 # always configures so developers get fast feedback on any machine.
+# (The actual toolchain wiring happens before project(); see above.)
 # ---------------------------------------------------------------------------
 if(TILES_PLATFORM STREQUAL "android")
-  if(DEFINED ENV{ANDROID_NDK_HOME})
-    set(_ndk "$ENV{ANDROID_NDK_HOME}")
-  elseif(DEFINED ENV{ANDROID_NDK_ROOT})
-    set(_ndk "$ENV{ANDROID_NDK_ROOT}")
-  endif()
-  if(NOT _ndk)
+  if(TILES_CROSS_TOOLCHAIN STREQUAL "android-ndk")
+    message(STATUS "[P4] Android NDK toolchain wired: $ENV{ANDROID_NDK_HOME} (ABI=${ANDROID_ABI})")
+  else()
     message(WARNING
-      "[P0] ANDROID_NDK_HOME/ANDROID_NDK_ROOT is not set — Android SDK check skipped.\n"
+      "[P0] ANDROID_NDK_HOME is not set or has no android.toolchain.cmake — Android SDK check skipped.\n"
       "      Configure continues as a HOST STUB build. For a real cross build:\n"
       "        export ANDROID_NDK_HOME=<path-to-ndk>\n"
       "      then re-run: cmake --preset android")
-  else()
-    message(STATUS "[P0] Android NDK found: ${_ndk}")
   endif()
 elseif(TILES_PLATFORM STREQUAL "ios")
-  if(NOT APPLE)
+  if(TILES_CROSS_TOOLCHAIN STREQUAL "ios")
+    message(STATUS "[P4] iOS cross toolchain wired (macOS host, arm64)")
+  else()
     message(WARNING
       "[P0] iOS builds require macOS + Xcode — this host cannot produce an iOS binary.\n"
       "      Configure continues as a HOST STUB build.")
   endif()
 elseif(TILES_PLATFORM STREQUAL "wasm")
-  find_program(EMCC_EXECUTABLE emcc)
-  if(NOT EMCC_EXECUTABLE)
-    message(WARNING
-      "[P0] 'emcc' not found — install & activate the Emscripten SDK for a real WASM build.\n"
-      "      Configure continues as a HOST STUB build.")
+  if(TILES_CROSS_TOOLCHAIN STREQUAL "emscripten")
+    message(STATUS "[P4] Emscripten toolchain wired: $ENV{EMSDK}")
   else()
-    message(STATUS "[P0] Emscripten found: ${EMCC_EXECUTABLE}")
+    message(WARNING
+      "[P0] EMSDK not set or Emscripten.cmake not found — install & activate the Emscripten SDK for a real WASM build.\n"
+      "      Configure continues as a HOST STUB build.")
   endif()
 endif()
 
@@ -85,6 +133,11 @@ target_include_directories(tiles_renderer PUBLIC
   "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 target_compile_features(tiles_renderer PUBLIC cxx_std_20)
+# P4: the SDK source selects its Filament backend + native-handle
+# interpretation from the *target* platform (see src/renderer.cpp).
+string(TOUPPER "${TILES_PLATFORM}" _tiles_platform_upper)
+target_compile_definitions(tiles_renderer PRIVATE
+  "TILES_PLATFORM_${_tiles_platform_upper}")
 
 # ---------------------------------------------------------------------------
 # Third-party dependencies (P1: locked to stable tags — docs/adr/0002).
@@ -113,54 +166,151 @@ if(TILES_WITH_CESIUM_NATIVE)
 endif()
 
 # --- Filament: rendering. Goes into the SDK. ---
-# Filament is very expensive to build from source, so P1 consumes the
+# Filament is very expensive to build from source, so we consume the
 # official prebuilt binaries for the pinned release (per-platform archives).
-# Linux today; android/ios/web/windows archives get wired in P2.
+# P4 wires linux / android / windows / ios. wasm has no C++ release (the
+# official web package is filament.js only), so Filament stays off there
+# and the SDK builds as a stub — see docs/adr/0006-platform-backends.md.
 if(TILES_WITH_FILAMENT)
+  set(TILES_FILAMENT_VERSION "1.77.0")
+  set(_filament_base_url
+      "https://github.com/google/filament/releases/download/v${TILES_FILAMENT_VERSION}")
+
+  # Per-platform selection. <pkg> = release tgz name, <libdir> = lib dir
+  # inside it, <libs> = archive names (without lib prefix / extension).
+  set(_filament_pkg "")
+  set(_filament_libdir "")
+  set(_filament_libs "")
+  set(_filament_use_group OFF)   # GNU ld --start-group (not for MSVC/Xcode)
+  set(_filament_xcframework OFF) # iOS: pick the device slice out of each .xcframework
+  set(_filament_syslibs "")
+
   if(TILES_PLATFORM STREQUAL "linux")
-    set(TILES_FILAMENT_VERSION "1.77.0")
-    message(STATUS "[P1] Fetching Filament prebuilt binaries v${TILES_FILAMENT_VERSION} (linux) ...")
+    set(_filament_pkg "filament-v${TILES_FILAMENT_VERSION}-linux.tgz")
+    set(_filament_libdir "lib/x86_64")
+    set(_filament_libs filament backend bluegl bluevk filabridge filaflat
+        utils geometry smol-v ibl gltfio gltfio_core uberarchive uberzlib image)
+    set(_filament_use_group ON)
+    # Note: the official Filament release binaries are built with
+    # clang/libc++, so consumers also link the libc++ runtime (+ zstd used
+    # by MaterialParser). Our own objects stay on libstdc++; no std:: types
+    # cross the Filament API boundary (Engine::Config etc. are POD), so the
+    # two runtimes coexist.
+    set(_filament_syslibs zstd c++ c++abi)
+  elseif(TILES_PLATFORM STREQUAL "android")
+    if(NOT TILES_CROSS_TOOLCHAIN STREQUAL "android-ndk")
+      message(WARNING "[P4] Filament's android prebuilt needs the NDK cross toolchain — skipping Filament (stub SDK).")
+    else()
+      set(_filament_pkg "filament-v${TILES_FILAMENT_VERSION}-android-native.tgz")
+      set(_filament_libdir "lib/${ANDROID_ABI}")
+      # The android prebuilt ships Vulkan only (no bluegl) and a single
+      # gltfio_core (no separate gltfio archive).
+      set(_filament_libs filament backend bluevk filabridge filaflat
+          utils geometry smol-v ibl gltfio_core uberarchive uberzlib image)
+      set(_filament_use_group ON)
+      # NDK supplies libc++ via ANDROID_STL; zstd + android/log are extra.
+      # GLESv3/EGL: Engine::create()'s backend switch pulls every driver
+      # (incl. OpenGLDriver) into the link, so the system GL libs are a
+      # genuine transitive dependency of the SDK on Android.
+      set(_filament_syslibs zstd android log GLESv3 EGL)
+    endif()
+  elseif(TILES_PLATFORM STREQUAL "windows")
+    set(_filament_pkg "filament-v${TILES_FILAMENT_VERSION}-windows.tgz")
+    # Note the extra md/ level (libs built against the /MD runtime).
+    set(_filament_libdir "lib/x86_64/md")
+    set(_filament_libs filament backend bluevk filabridge filaflat
+        utils geometry smol-v ibl gltfio gltfio_core uberarchive uberzlib image)
+    # MSVC resolves cyclic static deps without --start-group.
+    # zstd.lib ships in the package (used by MaterialParser, as on Linux).
+    # ws2_32/dbghelp: usual Windows system deps of Filament's utils/backend.
+    set(_filament_syslibs zstd ws2_32 dbghelp)
+  elseif(TILES_PLATFORM STREQUAL "ios")
+    if(NOT TILES_CROSS_TOOLCHAIN STREQUAL "ios")
+      message(WARNING "[P4] Filament's ios prebuilt needs a macOS host — skipping Filament (stub SDK).")
+    else()
+      set(_filament_pkg "filament-v${TILES_FILAMENT_VERSION}-ios.tgz")
+      set(_filament_xcframework ON)
+      set(_filament_libs filament backend filabridge filaflat
+          utils geometry smol-v ibl gltfio_core uberarchive uberzlib image)
+      # iOS system frameworks pulled in by Filament's drivers/platform code.
+      set(_filament_syslibs zstd
+          "-framework Foundation" "-framework UIKit" "-framework Metal"
+          "-framework CoreGraphics" "-framework CoreVideo"
+          "-framework QuartzCore" "-framework IOKit" "-framework CFNetwork")
+    endif()
+  elseif(TILES_PLATFORM STREQUAL "wasm")
+    message(STATUS "[P4] No C++ Filament release for Web (official web package is filament.js only) — Filament disabled on wasm (stub SDK). See docs/adr/0006-platform-backends.md.")
+  endif()
+
+  if(_filament_pkg)
+    message(STATUS "[P4] Fetching Filament prebuilt binaries v${TILES_FILAMENT_VERSION} (${_filament_pkg}) ...")
     FetchContent_Declare(
       filament_bin
-      URL https://github.com/google/filament/releases/download/v${TILES_FILAMENT_VERSION}/filament-v${TILES_FILAMENT_VERSION}-linux.tgz
+      URL "${_filament_base_url}/${_filament_pkg}"
     )
     FetchContent_MakeAvailable(filament_bin)
     add_library(filament_prebuilt INTERFACE)
     target_include_directories(filament_prebuilt INTERFACE
       "${filament_bin_SOURCE_DIR}/include")
-    # Static libs; the linker pulls only referenced objects.
-    # Note: the official Filament release binaries are built with clang/libc++,
-    # so consumers also link the libc++ runtime (+ zstd used by MaterialParser).
-    # Our own objects stay on libstdc++; no std:: types cross the Filament API
-    # boundary (Engine::Config etc. are POD), so the two runtimes coexist.
-    target_link_directories(filament_prebuilt INTERFACE
-      "${filament_bin_SOURCE_DIR}/lib/x86_64")
-    target_link_libraries(filament_prebuilt INTERFACE
-      # The static archives reference each other cyclically (e.g. gltfio ->
-      # filament/geometry); group them so the linker rescans until resolved.
-      "-Wl,--start-group"
-      filament backend bluegl bluevk filabridge filaflat
-      utils geometry smol-v ibl
-      gltfio gltfio_core uberarchive uberzlib image
-      "-Wl,--end-group"
-      zstd c++ c++abi)
+    if(_filament_xcframework)
+      # iOS ships .xcframeworks; link the ios-arm64 device slice directly
+      # (works with Makefiles/Ninja — no Xcode project required).
+      foreach(_lib IN LISTS _filament_libs)
+        target_link_libraries(filament_prebuilt INTERFACE
+          "${filament_bin_SOURCE_DIR}/lib/lib${_lib}.xcframework/ios-arm64/lib${_lib}.a")
+      endforeach()
+    else()
+      # Static libs; the linker pulls only referenced objects.
+      target_link_directories(filament_prebuilt INTERFACE
+        "${filament_bin_SOURCE_DIR}/${_filament_libdir}")
+      if(_filament_use_group)
+        # The static archives reference each other cyclically (e.g. gltfio
+        # -> filament/geometry); group them so GNU ld rescans until resolved.
+        target_link_libraries(filament_prebuilt INTERFACE "-Wl,--start-group")
+      endif()
+      target_link_libraries(filament_prebuilt INTERFACE ${_filament_libs})
+      if(_filament_use_group)
+        target_link_libraries(filament_prebuilt INTERFACE "-Wl,--end-group")
+      endif()
+    endif()
+    target_link_libraries(filament_prebuilt INTERFACE ${_filament_syslibs})
     # PUBLIC: consumers of this static SDK library need the transitive link.
     target_link_libraries(tiles_renderer PUBLIC filament_prebuilt)
     target_compile_definitions(tiles_renderer PRIVATE TILES_WITH_FILAMENT)
 
-    # P2: compile the unlit demo material with matc and embed the .filamat
-    # blob as a C++ header, so the SDK stays free of runtime data files.
+    # Host matc: compiles the embedded demo material. matc is a *host* tool,
+    # so it comes from the host-platform tgz (reused when target == host).
+    # -a all: one material blob serves every backend (OpenGL/Vulkan/Metal).
+    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+      set(_host_pkg "filament-v${TILES_FILAMENT_VERSION}-mac.tgz")
+      set(_matc_rel "bin/matc")
+    elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+      set(_host_pkg "filament-v${TILES_FILAMENT_VERSION}-windows.tgz")
+      set(_matc_rel "bin/matc.exe")
+    else()
+      set(_host_pkg "filament-v${TILES_FILAMENT_VERSION}-linux.tgz")
+      set(_matc_rel "bin/matc")
+    endif()
+    if(_host_pkg STREQUAL _filament_pkg)
+      set(TILES_MATC "${filament_bin_SOURCE_DIR}/${_matc_rel}")
+    else()
+      FetchContent_Declare(
+        filament_host
+        URL "${_filament_base_url}/${_host_pkg}"
+      )
+      FetchContent_MakeAvailable(filament_host)
+      set(TILES_MATC "${filament_host_SOURCE_DIR}/${_matc_rel}")
+    endif()
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
-    set(TILES_MATC "${filament_bin_SOURCE_DIR}/bin/matc")
     set(TILES_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/unlit_color.mat")
     set(TILES_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_color.filamat")
     set(TILES_FILAMAT_H
         "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_color_filamat.h")
     add_custom_command(
       OUTPUT "${TILES_FILAMAT}"
-      COMMAND "${TILES_MATC}" -a opengl -o "${TILES_FILAMAT}" "${TILES_MAT_SRC}"
+      COMMAND "${TILES_MATC}" -a all -o "${TILES_FILAMAT}" "${TILES_MAT_SRC}"
       DEPENDS "${TILES_MAT_SRC}"
-      COMMENT "matc: compiling unlit_color.mat (OpenGL)")
+      COMMENT "matc: compiling unlit_color.mat (all backends)")
     add_custom_command(
       OUTPUT "${TILES_FILAMAT_H}"
       COMMAND "${Python3_EXECUTABLE}"
@@ -171,10 +321,18 @@ if(TILES_WITH_FILAMENT)
       COMMENT "Embedding unlit_color.filamat as C++ header")
     add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}")
     add_dependencies(tiles_renderer tiles_materials)
+
+    # P4: cross platforms build no demo/tests, so nothing would ever link
+    # the SDK — add a shared-lib link check to validate the prebuilt lib
+    # list (paths + symbol resolution) on each wired platform.
+    if(TILES_PLATFORM STREQUAL "android" OR TILES_PLATFORM STREQUAL "ios")
+      add_library(tiles_renderer_linkcheck SHARED cmake/linkcheck.cpp)
+      target_link_libraries(tiles_renderer_linkcheck PRIVATE tiles_renderer)
+    endif()
   else()
     message(STATUS
-      "[P1] Filament prebuilt binaries for platform '${TILES_PLATFORM}' "
-      "are wired in P2 — skipping Filament on this preset.")
+      "[P4] Filament prebuilt binaries for platform '${TILES_PLATFORM}' "
+      "are not wired — building the SDK without Filament (stub).")
   endif()
 endif()
 

@@ -76,17 +76,30 @@ cmake --build --preset linux
 ctest --preset linux       # smoke 测试链接 SDK 静态库并运行
 ```
 
-### 其他平台
+### 其他平台（P4：工具链自动接线）
 
 ```bash
-cmake --preset windows   # 在 Windows 上执行
-cmake --preset android   # 需 ANDROID_NDK_HOME；缺失时给出警告并以降级桩配置继续
-cmake --preset ios       # 需 macOS + Xcode；缺失时给出警告并以降级桩配置继续
-cmake --preset wasm      # 需 emcc；缺失时给出警告并以降级桩配置继续
+cmake --preset android   # 需 ANDROID_NDK_HOME（r27d）；自动接 NDK toolchain + Filament android 预编译包
+cmake --preset ios       # 需 macOS + Xcode；自动做 iOS arm64 交叉 + Filament xcframework
+cmake --preset wasm      # 需 EMSDK；自动接 Emscripten（Filament 官方 web 包无 C++ 库，SDK 为 stub）
+cmake --preset windows   # 在 Windows 上执行；自动接 Filament windows 预编译包
 ```
 
-> P0 策略：SDK 缺失时**只警告、不硬失败**，保证任何机器都能 configure 成功。
-> 真正的交叉工具链在 P1 接入（见路线图）。
+> P0 策略保留：工具链缺失时**只警告、不硬失败**，以降级桩配置继续。
+> 各平台 backend 选择与预编译包布局调查见 ADR-0006。
+
+### 平台状态矩阵（P4）
+
+| 平台 | Backend | 本地编译验证 | CI 编译验证 | 运行验证 |
+|---|---|---|---|---|
+| Linux | OpenGL | ✅ gcc 全依赖 | ✅ 全依赖 + `xvfb-run ctest` 4/4 | ✅ xvfb + Mesa 像素断言 |
+| Android | Vulkan | ✅ NDK r27d arm64（SDK + linkcheck.so 链接通过） | ✅ | ❌ 无真机 |
+| Windows | Vulkan | ❌ 本地无 MSVC | ✅ MSVC + Filament 预编译包 | ❌ 无实机 |
+| iOS | Metal | ❌ 本地无 Xcode | ✅ iOS arm64 交叉 + xcframework | ❌ 无设备 |
+| Web (WASM) | WebGL（预留） | ✅ emcc SDK stub 交叉编译；renderer.cpp WASM 分支经 emcc + 真实 Filament 头文件语法验证 | ✅ | ❌ 无浏览器验证；官方 v1.77.0 web 包只有 `filament.js`，C++ 接线待办 |
+
+> 诚实边界：只有 Linux 无头渲染经过真实像素验证；Android 链接通过不等于
+> 真机运行成功；Web 的 Filament C++ 接线需自行源码构建（见 ADR-0006）。
 
 ### 打开第三方依赖（P1 已接入，默认仍关闭以保持零下载可配置）
 
@@ -144,8 +157,16 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
   调度、gltfio ubershader 解码 GLB、Filament PBR 渲染；自生成测试 tileset
   （灰/橙/青三盒）；`ViewUpdateResult` 驱动可见性；`xvfb-run` 像素断言 —— ✅ 已完成
   （本机 linux 全依赖构建 + 4/4 测试通过；SDK 零 SDL；见 ADR-0005）
-- **P4 移动端**：Android / iOS 真机优化、触摸输入
-- **P5 WASM**：Emscripten 发布、浏览器内运行
+- **P4 四端接线与 CI**：各平台 Filament backend 选定（Linux/OpenGL、
+  Android/Vulkan、Windows/Vulkan、iOS/Metal、Web 预留 WebGL）；
+  工具链自动接线（NDK r27d / Emscripten / Xcode）；Filament v1.77.0
+  预编译包按平台接线（android/windows/ios 真链接，web 官方包无 C++ 库故 stub）；
+  CI 四平台真实构建 —— ✅ 已完成
+  （本地：linux 4/4、android NDK 链接通过、wasm emcc 交叉通过；
+  windows/ios 编译靠 CI；运行验证仅 linux 无头；见 ADR-0006）
+- **P5 真机与 Web**：Android APK / iOS app 真机冒烟、Windows 实机、
+  浏览器运行；Filament for Web 源码构建或 filament.js 桥接；
+  P3 遗留（HTTP(S)、b3dm/i3dm、ECEF→ENU rebase）
 
 ## AI 协作
 

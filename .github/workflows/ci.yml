@@ -2,43 +2,56 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
+
+# P4: every platform builds the real dependency set (no zero-dep stubs).
+# - linux:   full deps (SDL3 demo + Cesium Native + Filament), xvfb-run ctest
+# - windows: MSVC + Filament prebuilt (SDK static lib + linkcheck dylib link)
+# - android: NDK r27d + Filament android prebuilt (SDK + linkcheck .so link)
+# - ios:     macOS host, real iOS arm64 cross compile + Filament xcframework
+# - wasm:    Emscripten cross compile of the SDK (stub: official Filament
+#            v1.77.0 web release ships no C++ libs, see ADR-0006)
 
 jobs:
   # ---------------------------------------------------------------- linux
   linux:
-    name: Linux (gcc)
+    name: Linux (gcc, full deps + xvfb tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install SDL3 X11 video deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxext-dev libxrandr-dev \
+            libxcursor-dev libxi-dev libxinerama-dev libxss-dev libxtst-dev \
+            libc++-dev libc++abi-dev
       - name: Configure
-        run: cmake --preset linux
+        run: >
+          cmake --preset linux
+          -DTILES_WITH_SDL3=ON
+          -DTILES_WITH_CESIUM_NATIVE=ON
+          -DTILES_WITH_FILAMENT=ON
+          -DTILES_SDL3_NATIVE_VIDEO=ON
       - name: Build
-        run: cmake --build --preset linux
-      - name: Test
-        run: ctest --preset linux --output-on-failure
-      # NOTE: with zero-dep defaults there is no runnable app binary;
-      # the SDL demo (tiles_demo) only exists with -DTILES_WITH_SDL3=ON.
-      # ctest's smoke test already exercises a built binary.
+        run: cmake --build --preset linux -j"$(nproc)"
+      - name: Test (headless, Mesa software GL)
+        run: xvfb-run -a ctest --preset linux --output-on-failure
 
   # -------------------------------------------------------------- windows
   windows:
-    name: Windows (MSVC)
+    name: Windows (MSVC + Filament)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - name: Configure
-        run: cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64 -DTILES_PLATFORM=windows
+        run: cmake --preset windows -DTILES_WITH_FILAMENT=ON
       - name: Build
-        run: cmake --build build/windows --config Release
-      # NOTE: no runnable app binary in zero-dep defaults (see linux job).
+        run: cmake --build --preset windows --config Release
 
   # -------------------------------------------------------------- android
-  # P0: validates that the android preset configures with the NDK present.
-  # P1: switches to the real NDK toolchain file in the preset.
   android:
-    name: Android (NDK)
+    name: Android (NDK r27d + Filament)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,39 +63,36 @@ jobs:
       - name: Set up Android NDK
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r26d
-      - name: Configure (stub, warns if NDK missing)
-        run: cmake --preset android
+          ndk-version: r27d
+      - name: Configure
+        # nttld/setup-ndk exports ANDROID_NDK_HOME for the following steps;
+        # the android preset auto-wires the NDK toolchain from it.
+        run: cmake --preset android -DTILES_WITH_FILAMENT=ON
       - name: Build
-        run: cmake --build --preset android
+        run: cmake --build --preset android -j"$(nproc)"
 
   # ----------------------------------------------------------------- ios
-  # P0 placeholder: runs on macOS and exercises the ios preset's warning path
-  # plus a host compile. P1 replaces this with a real xcodebuild archive.
   ios:
-    name: iOS (placeholder)
+    name: iOS (arm64 cross + Filament)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Configure (P0 placeholder — host stub)
-        run: cmake --preset ios
-      - name: Build (P0 placeholder — host stub)
-        run: cmake --build --preset ios
-      # TODO(P1): xcodebuild -scheme tiles_renderer -destination 'generic/platform=iOS'
+      - name: Configure
+        run: cmake --preset ios -DTILES_WITH_FILAMENT=ON
+      - name: Build
+        run: cmake --build --preset ios -j"$(sysctl -n hw.ncpu)"
 
   # ---------------------------------------------------------------- wasm
-  # P0: validates the wasm preset configure path with Emscripten installed.
-  # P1: switches to the real Emscripten toolchain file in the preset.
   wasm:
-    name: WebAssembly (Emscripten)
+    name: WebAssembly (Emscripten SDK stub)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Set up Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
-          version: 3.1.68
-      - name: Configure (stub, warns if emcc missing)
+          version: 6.0.10
+      - name: Configure
         run: cmake --preset wasm
       - name: Build
-        run: cmake --build --preset wasm
+        run: cmake --build --preset wasm -j"$(nproc)"
