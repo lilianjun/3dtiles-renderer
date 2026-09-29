@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # ---------------------------------------------------------------- linux
+  linux:
+    name: Linux (gcc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset linux
+      - name: Build
+        run: cmake --build --preset linux
+      - name: Test
+        run: ctest --preset linux --output-on-failure
+      - name: Run binary
+        run: ./build/linux/tiles_renderer
+
+  # -------------------------------------------------------------- windows
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build/windows -G "Visual Studio 17 2022" -A x64 -DTILES_PLATFORM=windows
+      - name: Build
+        run: cmake --build build/windows --config Release
+      - name: Run binary
+        run: ./build/windows/Release/tiles_renderer.exe
+
+  # -------------------------------------------------------------- android
+  # P0: validates that the android preset configures with the NDK present.
+  # P1: switches to the real NDK toolchain file in the preset.
+  android:
+    name: Android (NDK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+      - name: Configure (stub, warns if NDK missing)
+        run: cmake --preset android
+      - name: Build
+        run: cmake --build --preset android
+
+  # ----------------------------------------------------------------- ios
+  # P0 placeholder: runs on macOS and exercises the ios preset's warning path
+  # plus a host compile. P1 replaces this with a real xcodebuild archive.
+  ios:
+    name: iOS (placeholder)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (P0 placeholder — host stub)
+        run: cmake --preset ios
+      - name: Build (P0 placeholder — host stub)
+        run: cmake --build --preset ios
+      # TODO(P1): xcodebuild -scheme tiles_renderer -destination 'generic/platform=iOS'
+
+  # ---------------------------------------------------------------- wasm
+  # P0: validates the wasm preset configure path with Emscripten installed.
+  # P1: switches to the real Emscripten toolchain file in the preset.
+  wasm:
+    name: WebAssembly (Emscripten)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.68
+      - name: Configure (stub, warns if emcc missing)
+        run: cmake --preset wasm
+      - name: Build
+        run: cmake --build --preset wasm

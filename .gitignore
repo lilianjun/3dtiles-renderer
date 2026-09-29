@@ -1,0 +1,60 @@
+# Build outputs
+build/
+out/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.lib
+*.exe
+*.pdb
+*.ilk
+*.exp
+
+# CMake FetchContent / generated
+_deps/
+generated/
+
+# IDE
+.vscode/
+.idea/
+*.user
+*.suo
+*.sln.docstates
+.vs/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Android
+local.properties
+*.apk
+*.aab
+*.ap_
+.gradle/
+captures/
+
+# iOS / macOS
+*.ipa
+*.dSYM.zip
+*.dSYM/
+
+# Emscripten
+*.wasm
+*.js.mem
+.emscripten_cache/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+compile_commands.json
