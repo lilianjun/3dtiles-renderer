@@ -9,6 +9,18 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Fixed
+- CI install step (P14 gate, first actually exercised): the Linux job's
+  "Install SDK to temp prefix" step failed with
+  `file INSTALL cannot set permissions on "/usr/local/include"`.
+  cesium-native v0.64.0's per-library header install rules bake
+  `${CMAKE_INSTALL_PREFIX}` into absolute destinations at configure
+  time, so the install-time `--prefix` override never applied to them.
+  Fixed by setting `-DCMAKE_INSTALL_PREFIX="${RUNNER_TEMP}/tiles_sdk"`
+  at configure time (the install step keeps the same `--prefix`).
+  Verified locally end-to-end: full `cmake --install` + external
+  `install_smoke` consumer (`sdk version: 0.1.0`). Like the P22 glm
+  issue, this gate had never gone green before — every earlier run was
+  cancelled or failed before reaching it.
 - Windows/Android/iOS/WASM CI compile (P22 follow-up hotfix): the
   `#include <glm/...>` / `#include <curl/curl.h>` in `src/tileset.cpp`
   were unconditional, but those CI configs build the SDK *without*

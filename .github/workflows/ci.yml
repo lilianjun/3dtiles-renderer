@@ -41,6 +41,7 @@ jobs:
           -DTILES_WITH_CESIUM_NATIVE=ON
           -DTILES_WITH_FILAMENT=ON
           -DTILES_SDL3_NATIVE_VIDEO=ON
+          -DCMAKE_INSTALL_PREFIX="${RUNNER_TEMP}/tiles_sdk"
       - name: Build
         run: cmake --build --preset linux -j"$(nproc)"
       - name: Test (headless, Mesa software GL)
@@ -58,6 +59,12 @@ jobs:
       # The smoke binary only calls Renderer::version(): a pure function
       # needing no display, so it runs without xvfb. Rendering is already
       # covered by the ctest suite above.
+      # NOTE: CMAKE_INSTALL_PREFIX is set at configure time (see above),
+      # not just via --prefix at install time: cesium-native's per-library
+      # install rules bake ${CMAKE_INSTALL_PREFIX} into absolute
+      # destinations at configure time, so an install-time --prefix alone
+      # leaves its headers targeting /usr/local/include (permission error
+      # on CI, silent mis-install as root).
       - name: Install SDK to temp prefix
         run: cmake --install build/linux --prefix "${RUNNER_TEMP}/tiles_sdk"
       - name: Install smoke test (external consumer)
