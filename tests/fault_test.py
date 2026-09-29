@@ -13,6 +13,11 @@ Driven through tiles_demo; the exit-code contract is:
   H. pnts with wrong magic    -> exit 0 (bad tile skipped, no crash)
   I. pnts POINTS_LENGTH past the POSITION/RGB data
                               -> exit 0 (bad tile skipped, no crash)
+  J. cmpt with a truncated inner pnts tile
+                              -> exit 0 (bad tile skipped, no crash)
+  K. cmpt with wrong magic     -> exit 0 (bad tile skipped, no crash)
+  L. cmpt tilesLength larger than the actual inner tiles
+                              -> exit 0 (bad tile skipped, no crash)
 
 A crash (segfault/abort, e.g. exit -11/-6) fails the test. When the demo
 binary was built with -DTILES_SANITIZE=ON, wrap this script in
@@ -240,6 +245,70 @@ def main():
             failures += 1
         else:
             print("PASS: case %s (corrupt pnts skipped, no crash)" % case)
+
+    # P9 cases J/K/L: corrupt cmpt tile content. Same contract as case C:
+    # the bad tile is skipped, the demo exits 0, no crash.
+    print("=== cases J/K/L: corrupt cmpt tile content ===")
+    cmpt_dir = os.path.join(workdir, "corrupt_cmpt")
+    shutil.rmtree(cmpt_dir, ignore_errors=True)
+    os.makedirs(cmpt_dir)
+    with open(os.path.join(HERE, "data", "p9_cmpt_tileset",
+                           "composite.cmpt"), "rb") as f:
+        good_cmpt = f.read()
+    # J: inner pnts tile truncated (cmpt envelope stays valid: the pnts
+    # inner tile's byteLength is cut by 100 bytes, the trailing i3dm is
+    # dropped, and the cmpt byteLength is set to the actual new size).
+    # The inner pnts converter reports an *error*, so the merged result
+    # fails gracefully.
+    pnts_off = 16 + _struct.unpack("<I", good_cmpt[16 + 8:16 + 12])[0]
+    pnts_len = _struct.unpack("<I", good_cmpt[pnts_off + 8:pnts_off + 12])[0]
+    cut = 100
+    assert pnts_len > cut + 12
+    new_pnts_len = pnts_len - cut
+    trunc = (good_cmpt[:pnts_off] +
+             good_cmpt[pnts_off:pnts_off + 8] +
+             _struct.pack("<I", new_pnts_len) +
+             good_cmpt[pnts_off + 12:pnts_off + new_pnts_len])
+    trunc = trunc[:8] + _struct.pack("<I", len(trunc)) + trunc[12:]
+    with open(os.path.join(cmpt_dir, "tile_j.cmpt"), "wb") as f:
+        f.write(trunc)
+    # K: wrong magic.
+    with open(os.path.join(cmpt_dir, "tile_k.cmpt"), "wb") as f:
+        f.write(b"xxxx" + good_cmpt[4:])
+    # L: tilesLength larger than the actual inner tiles (converter stops
+    # at byteLength with a warning; the tile must not crash the demo).
+    # cmpt header: magic(4) version(4) byteLength(4) tilesLength(4).
+    tiles_length = _struct.unpack("<I", good_cmpt[12:16])[0]
+    with open(os.path.join(cmpt_dir, "tile_l.cmpt"), "wb") as f:
+        f.write(good_cmpt[:12] + _struct.pack("<I", tiles_length + 5)
+                + good_cmpt[16:])
+    for case, uri in (("J", "tile_j.cmpt"), ("K", "tile_k.cmpt"),
+                      ("L", "tile_l.cmpt")):
+        ts_path = os.path.join(cmpt_dir, "tileset_%s.json" % case)
+        with open(ts_path, "w") as f:
+            _json.dump({
+                "asset": {"version": "1.0"},
+                "root": {
+                    "boundingVolume": {
+                        "box": [0, 0, 0, 14, 0, 0, 0, 5, 0, 0, 0, 5]},
+                    "geometricError": 0.0,
+                    "content": {"uri": uri},
+                },
+            }, f)
+        shot = os.path.join(workdir, "corrupt_cmpt_%s.png" % case)
+        rc = run_demo(args.demo, ["--frames", "30", "--tileset", ts_path,
+                                  "--screenshot", shot])
+        if rc is None:
+            failures += 1
+        elif crashed(rc):
+            print("FAIL: case %s crashed (exit %d)" % (case, rc))
+            failures += 1
+        elif rc != 0:
+            print("FAIL: case %s: expected exit 0 (bad tile skipped), "
+                  "got %d" % (case, rc))
+            failures += 1
+        else:
+            print("PASS: case %s (corrupt cmpt skipped, no crash)" % case)
 
     if failures:
         print("FAIL: fault_test (%d case(s) failed)" % failures)

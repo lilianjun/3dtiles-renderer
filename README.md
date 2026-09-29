@@ -150,14 +150,15 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
   （这是通用 local-origin rebase，不是严格旋转 ENU 基；详见 ADR-0005。）
 
 > **边界（诚实说明）**：i3dm 见 P7（ADR-0008）；pnts 见 P8（ADR-0009）；
+> cmpt 见 P9（ADR-0010）；
 > 代理/证书走系统默认；rebase 不是完整 ENU 姿态变换。
-> 详见 ADR-0005、ADR-0008、ADR-0009。
+> 详见 ADR-0005、ADR-0008、ADR-0009、ADR-0010。
 
 ### P6：内存与资源健壮性（见 ADR-0007）
 
 ```bash
-# 1) 普通回归（10/10）：smoke、demo、截图、tileset、http、b3dm、rebase、
-#    i3dm、lifecycle、fault_inputs
+# 1) 普通回归（12/12）：smoke、demo、截图、tileset、http、b3dm、rebase、
+#    i3dm、pnts、cmpt、lifecycle、fault_inputs
 cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON -DTILES_SDL3_NATIVE_VIDEO=ON
 cmake --build --preset linux -j2
 xvfb-run -a ctest --preset linux -I 1,9 --output-on-failure
@@ -230,6 +231,14 @@ cesium-native `CurlAssetAccessor` 的 handle 缓存泄漏），自有代码泄�
   rebase near/far 与 RTC/reference 截图 bit-identical；
   故障注入加截断/坏 magic/POINTS_LENGTH 越界 pnts 优雅失败—— ✅ 已完成
   （sanitizer 19/19、普通 11/11，SDK 零 SDL；见 ADR-0009）
+- **P9 cmpt 真实支持**：cesium-native `CmptToGltfConverter` 递归转换
+  内嵌 tile 并 `Model::merge` 合并为一个 Model——无需 SDK 代码改动
+  （P5 的 RTC 提取 + P7 的多 buffer 合并 + P7 的实例展开 + P8 的原生
+  POINTS 渲染已全覆盖）；`cmpt_tileset_screenshot` 断言同一帧含 b3dm
+  橙色盒子、pnts 64 点（每点 1px）、i3dm 6 实例（多 blob）；
+  故障注入加截断/坏 magic/tilesLength 不符 cmpt 优雅失败；
+  `sanitizer_cmpt` 进 linux-asan 门禁—— ✅ 已完成
+  （sanitizer 21/21、普通 12/12，SDK 零 SDL；见 ADR-0010）
 
 ## AI 协作
 

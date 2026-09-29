@@ -164,6 +164,25 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
   endif()
 endif()
 
+# P9: cmpt (Composite) real support — one composite.cmpt packing a b3dm,
+# a pnts and an i3dm inner tile. cesium-native's CmptToGltfConverter
+# converts each inner tile recursively and merges the Models; the SDK's
+# existing modelToGlb path handles the merged result with no code change.
+if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME cmpt_tileset_screenshot
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmpt_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --out "${CMAKE_BINARY_DIR}/screenshots/p9_cmpt.png"
+              --frames 60 --width 800 --height 600)
+    set_tests_properties(cmpt_tileset_screenshot PROPERTIES TIMEOUT 1200)
+  else()
+    message(WARNING "[P9] Python3 not found — cmpt screenshot test skipped")
+  endif()
+endif()
+
 # P6: lifecycle + fault-injection tests. Meaningful with or without
 # sanitizers (they assert graceful failure instead of crashes); the
 # sanitizer_* variants below additionally gate on ASan/LSan/UBSan reports.
@@ -231,6 +250,12 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
       COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
               --frames 60
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p8_pnts_many/tileset.json")
+    # P9 scene: cmpt conversion path (composite of b3dm + pnts + i3dm,
+    # merged by cesium-native into one Model; no SDK code change).
+    add_test(NAME sanitizer_cmpt
+      COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
+              --frames 60
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p9_cmpt_tileset/tileset.json")
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"
@@ -250,7 +275,7 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
     endif()
     set_tests_properties(
       sanitizer_demo sanitizer_tileset sanitizer_b3dm sanitizer_i3dm
-      sanitizer_pnts sanitizer_http
+      sanitizer_pnts sanitizer_cmpt sanitizer_http
       sanitizer_faults
       PROPERTIES TIMEOUT 900)
   else()
