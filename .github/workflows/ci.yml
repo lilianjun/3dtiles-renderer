@@ -45,6 +45,20 @@ jobs:
         run: cmake --build --preset linux -j"$(nproc)"
       - name: Test (headless, Mesa software GL)
         run: xvfb-run -a ctest --preset linux --output-on-failure
+      # P14: lock in P13's install packaging. Runs as steps in this job
+      # (not a separate job) because the check needs the already-built
+      # tree — a new job would redo the full dependency build for nothing.
+      # The smoke binary only calls Renderer::version(): a pure function
+      # needing no display, so it runs without xvfb. Rendering is already
+      # covered by the ctest suite above.
+      - name: Install SDK to temp prefix
+        run: cmake --install build/linux --prefix "${RUNNER_TEMP}/tiles_sdk"
+      - name: Install smoke test (external consumer)
+        run: |
+          cmake -S tests/install_smoke -B "${RUNNER_TEMP}/smoke-build" \
+            -DCMAKE_PREFIX_PATH="${RUNNER_TEMP}/tiles_sdk"
+          cmake --build "${RUNNER_TEMP}/smoke-build" -j"$(nproc)"
+          "${RUNNER_TEMP}/smoke-build/install_smoke"
 
   # -------------------------------------------------------- linux-asan
   # P6: sanitizer gate — the same scenarios as the linux job, rebuilt with
