@@ -1,0 +1,53 @@
+{
+  "asset": {
+    "version": "1.0"
+  },
+  "geometricError": 200.0,
+  "root": {
+    "boundingVolume": {
+      "box": [
+        9.25,
+        0,
+        0,
+        11.0,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0,
+        0,
+        8
+      ]
+    },
+    "geometricError": 32.0,
+    "refine": "ADD",
+    "content": {
+      "uri": "instances.i3dm"
+    },
+    "children": [
+      {
+        "boundingVolume": {
+          "box": [
+            16.25,
+            0,
+            0,
+            3.75,
+            0,
+            0,
+            0,
+            3,
+            0,
+            0,
+            0,
+            7
+          ]
+        },
+        "geometricError": 0.0,
+        "content": {
+          "uri": "accents.i3dm"
+        }
+      }
+    ]
+  }
+}

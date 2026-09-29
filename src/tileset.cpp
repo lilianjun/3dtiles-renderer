@@ -25,6 +25,8 @@
 #include <CesiumAsync/ThreadPool.h>
 #include <CesiumCurl/CurlAssetAccessor.h>
 #include <CesiumGltf/ExtensionCesiumRTC.h>
+#include <CesiumGltf/ExtensionExtMeshGpuInstancing.h>
+#include <CesiumGltf/AccessorView.h>
 #include <CesiumGltfWriter/GltfWriter.h>
 #include <CesiumUtility/CreditSystem.h>
 #endif
@@ -44,7 +46,13 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <iterator>
+
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -255,17 +263,252 @@ struct TileRenderData {
 // from a converted CesiumGltf::Model). rtcCenter: b3dm RTC_CENTER in tile-
 // local coordinates (double); applied to the transform in double precision
 // in prepareInMainThread instead of being baked into float glTF nodes.
+// upAxisFix: for i3dm-converted models, the glTF up-axis-to-Z-up matrix the
+// converter assumed the runtime would apply (see modelToGlb); identity for
+// everything else.
 // ---------------------------------------------------------------------------
 struct LoadThreadData {
     std::vector<std::uint8_t> glbBytes;
     glm::dvec3 rtcCenter{0.0, 0.0, 0.0};
+    glm::dmat4 upAxisFix{1.0};
 };
+
+// ---------------------------------------------------------------------------
+// P7: the rotation the i3dm converter conjugates instance transforms with.
+//
+// I3dmToGltfConverter writes each instance transform as
+//   toTileInv * composeInstanceTransform(i) * toTile
+// with toTile = upToZ * nodeTransform, where upToZ =
+// GltfUtilities::applyGltfUpAxisTransform(model, identity). It assumes the
+// runtime applies the same upToZ at the tile root (cesium-native's own
+// computeBoundingRegion uses tileTransform * T(rtc) * upToZ as the content
+// root), which cancels the conjugation. Our world is Y-up like the
+// embedded glTF, and the b3dm converter performs no such conjugation, so
+// for i3dm-converted models the render bridge must apply upToZ at the
+// asset root itself. Without it, instances render rotated by
+// inverse(upToZ): for RTC_CENTER-scale offsets that throws them megameters
+// off (empty frame), and even for small tilesets it pushes content
+// outside its own bounding volume. Replicated here (column-major, must
+// match CesiumGeometry::Transforms) so the SDK doesn't pull in
+// CesiumGltfContent for a single matrix.
+// ---------------------------------------------------------------------------
+glm::dmat4 upAxisToZUp(const CesiumGltf::Model& model) {
+    int axis = 1; // Y — the glTF default and cesium-native's default
+    const auto it = model.extras.find("gltfUpAxis");
+    if (it != model.extras.end()) {
+        axis = static_cast<int>(it->second.getSafeNumberOrDefault(1));
+    }
+    if (axis == 0) { // X up -> Z up
+        return glm::dmat4(
+            glm::dvec4(0.0, 0.0, 1.0, 0.0),
+            glm::dvec4(0.0, 1.0, 0.0, 0.0),
+            glm::dvec4(-1.0, 0.0, 0.0, 0.0),
+            glm::dvec4(0.0, 0.0, 0.0, 1.0));
+    }
+    if (axis == 2) { // Z up -> Z up: identity
+        return glm::dmat4(1.0);
+    }
+    // Y up -> Z up
+    return glm::dmat4(
+        glm::dvec4(1.0, 0.0, 0.0, 0.0),
+        glm::dvec4(0.0, 0.0, 1.0, 0.0),
+        glm::dvec4(0.0, -1.0, 0.0, 0.0),
+        glm::dvec4(0.0, 0.0, 0.0, 1.0));
+}
+
+// ---------------------------------------------------------------------------
+// P7: expand EXT_mesh_gpu_instancing into plain nodes.
+//
+// Filament v1.77's gltfio does NOT implement EXT_mesh_gpu_instancing
+// (verified in the prebuilt libgltfio_core.a: the extension name appears
+// once in the extension registry, but the instance TRANSLATION/ROTATION/
+// SCALE attributes are never read). It renders the base mesh exactly once
+// and silently drops every instance. The render bridge therefore expands
+// each instanced node into N regular nodes with baked
+// (nodeMatrix * instanceTRS) matrices, which gltfio renders correctly.
+// Cost: N draw calls instead of one instanced draw call; tile instance
+// counts are small enough that this is the right correctness-first trade.
+// A future Filament whose gltfio implements the extension can delete this
+// function and pass the extension through untouched.
+// ---------------------------------------------------------------------------
+void expandGpuInstancing(CesiumGltf::Model& model) {
+    using namespace CesiumGltf;
+    constexpr const char* kExt =
+        ExtensionExtMeshGpuInstancing::ExtensionName;
+
+    std::vector<std::uint32_t> instancedNodes;
+    for (std::uint32_t i = 0; i < model.nodes.size(); ++i) {
+        if (model.nodes[i].getExtension<ExtensionExtMeshGpuInstancing>() !=
+            nullptr) {
+            instancedNodes.push_back(i);
+        }
+    }
+    if (instancedNodes.empty()) {
+        return;
+    }
+
+    // node index -> parents (a node may be referenced more than once, so
+    // splice by search-and-replace at patch time rather than by slot).
+    struct ParentRef {
+        bool isScene;
+        std::uint32_t parent;
+    };
+    std::unordered_map<std::uint32_t, std::vector<ParentRef>> parents;
+    for (std::uint32_t i = 0; i < model.nodes.size(); ++i) {
+        for (const std::int32_t child : model.nodes[i].children) {
+            if (child >= 0) {
+                parents[static_cast<std::uint32_t>(child)].push_back(
+                    {false, i});
+            }
+        }
+    }
+    for (std::uint32_t i = 0; i < model.scenes.size(); ++i) {
+        for (const std::int32_t child : model.scenes[i].nodes) {
+            if (child >= 0) {
+                parents[static_cast<std::uint32_t>(child)].push_back(
+                    {true, i});
+            }
+        }
+    }
+
+    auto nodeMatrix = [](const Node& node) {
+        glm::dmat4 m(1.0);
+        if (node.matrix.size() == 16) {
+            for (int c = 0; c < 4; ++c) {
+                for (int r = 0; r < 4; ++r) {
+                    m[c][r] = node.matrix[c * 4 + r];
+                }
+            }
+            return m;
+        }
+        glm::dvec3 t(0.0);
+        glm::dquat q(1.0, 0.0, 0.0, 0.0); // (w, x, y, z)
+        glm::dvec3 s(1.0);
+        if (node.translation.size() == 3) {
+            t = glm::dvec3(
+                node.translation[0], node.translation[1],
+                node.translation[2]);
+        }
+        if (node.rotation.size() == 4) {
+            // glTF quaternion: (x, y, z, w).
+            q = glm::dquat(
+                node.rotation[3], node.rotation[0], node.rotation[1],
+                node.rotation[2]);
+        }
+        if (node.scale.size() == 3) {
+            s = glm::dvec3(node.scale[0], node.scale[1], node.scale[2]);
+        }
+        return glm::translate(glm::dmat4(1.0), t) * glm::mat4_cast(q) *
+               glm::scale(glm::dmat4(1.0), s);
+    };
+
+    for (const std::uint32_t nodeIdx : instancedNodes) {
+        // Copy (not reference): appending clones below may reallocate
+        // model.nodes and invalidate references.
+        const Node node = model.nodes[nodeIdx];
+        const auto* pExt =
+            node.getExtension<ExtensionExtMeshGpuInstancing>();
+        if (pExt == nullptr) {
+            continue;
+        }
+        const auto itT = pExt->attributes.find("TRANSLATION");
+        if (itT == pExt->attributes.end()) {
+            continue; // no translations: nothing to expand
+        }
+        AccessorView<glm::vec3> translations(model, itT->second);
+        if (translations.status() != AccessorViewStatus::Valid ||
+            translations.size() == 0) {
+            continue;
+        }
+        const auto itR = pExt->attributes.find("ROTATION");
+        const auto itS = pExt->attributes.find("SCALE");
+        AccessorView<glm::vec4> rotations(
+            model, itR != pExt->attributes.end() ? itR->second : -1);
+        AccessorView<glm::vec3> scales(
+            model, itS != pExt->attributes.end() ? itS->second : -1);
+        const bool hasR =
+            rotations.status() == AccessorViewStatus::Valid;
+        const bool hasS = scales.status() == AccessorViewStatus::Valid;
+
+        const glm::dmat4 base = nodeMatrix(node);
+        const std::uint64_t count =
+            static_cast<std::uint64_t>(translations.size());
+        std::vector<std::int32_t> clones;
+        clones.reserve(static_cast<std::size_t>(count));
+        for (std::uint64_t i = 0; i < count; ++i) {
+            const glm::vec3 t = translations[i];
+            glm::vec4 r(0.0f, 0.0f, 0.0f, 1.0f);
+            if (hasR && i < static_cast<std::uint64_t>(rotations.size())) {
+                r = rotations[i];
+            }
+            glm::vec3 s(1.0f);
+            if (hasS && i < static_cast<std::uint64_t>(scales.size())) {
+                s = scales[i];
+            }
+            const glm::dmat4 inst =
+                glm::translate(glm::dmat4(1.0), glm::dvec3(t)) *
+                glm::mat4_cast(glm::dquat(r.w, r.x, r.y, r.z)) *
+                glm::scale(glm::dmat4(1.0), glm::dvec3(s));
+            const glm::dmat4 m = base * inst;
+            Node clone = node; // copies mesh, name, children, ...
+            clone.extensions.erase(kExt);
+            clone.matrix.assign(
+                {static_cast<double>(m[0][0]), static_cast<double>(m[0][1]),
+                 static_cast<double>(m[0][2]), static_cast<double>(m[0][3]),
+                 static_cast<double>(m[1][0]), static_cast<double>(m[1][1]),
+                 static_cast<double>(m[1][2]), static_cast<double>(m[1][3]),
+                 static_cast<double>(m[2][0]), static_cast<double>(m[2][1]),
+                 static_cast<double>(m[2][2]), static_cast<double>(m[2][3]),
+                 static_cast<double>(m[3][0]), static_cast<double>(m[3][1]),
+                 static_cast<double>(m[3][2]), static_cast<double>(m[3][3])});
+            // NOTE: write identity TRS *defaults* rather than clear()ing the
+            // vectors: CesiumGltfWriter serializes any non-default vector,
+            // and an empty vector != the {0,0,0}/{0,0,0,1}/{1,1,1} defaults,
+            // producing invalid "translation": [] JSON that cgltf rejects.
+            // Identity defaults are omitted by the writer, which is what we
+            // want next to the baked matrix.
+            clone.translation = {0.0, 0.0, 0.0};
+            clone.rotation = {0.0, 0.0, 0.0, 1.0};
+            clone.scale = {1.0, 1.0, 1.0};
+            clones.push_back(static_cast<std::int32_t>(model.nodes.size()));
+            model.nodes.push_back(std::move(clone));
+        }
+
+        // Splice the clones in where the instanced node was referenced.
+        const auto itP = parents.find(nodeIdx);
+        if (itP != parents.end()) {
+            for (const ParentRef& ref : itP->second) {
+                std::vector<std::int32_t>& list =
+                    ref.isScene ? model.scenes[ref.parent].nodes
+                                : model.nodes[ref.parent].children;
+                for (auto it = list.begin(); it != list.end();) {
+                    if (*it == static_cast<std::int32_t>(nodeIdx)) {
+                        it = list.erase(it);
+                        it = list.insert(it, clones.begin(), clones.end());
+                        std::advance(it, clones.size());
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+        }
+        // The original instanced node is now unreferenced; strip the
+        // extension so nothing downstream trips on it.
+        model.nodes[nodeIdx].extensions.erase(kExt);
+    }
+    model.removeExtensionUsed(kExt);
+    model.removeExtensionRequired(kExt);
+}
 
 // Serialize a cesium-native glTF Model (e.g. produced by the b3dm/i3dm
 // converters) back to binary glb so gltfio can load it. A present
 // CESIUM_RTC extension is extracted into rtcCenter (double) and stripped,
 // because gltfio does not understand it and float glTF nodes cannot hold
 // ECEF-scale centers. Returns nullptr on failure.
+// P7: EXT_mesh_gpu_instancing nodes are expanded into plain nodes first
+// (see expandGpuInstancing), and multi-buffer models are merged into the
+// single GLB BIN chunk (the i3dm converter appends an instance-data
+// buffer; writing only buffers[0] would dangle the instance accessors).
 LoadThreadData* modelToGlb(const CesiumGltf::Model& inModel) {
     CesiumGltf::Model model = inModel; // copy: we strip the RTC extension
     glm::dvec3 rtcCenter{0.0, 0.0, 0.0};
@@ -279,10 +522,56 @@ LoadThreadData* modelToGlb(const CesiumGltf::Model& inModel) {
         model.removeExtensionRequired(
             CesiumGltf::ExtensionCesiumRTC::ExtensionName);
     }
+    // P7: detect i3dm-converted models BEFORE expandGpuInstancing strips
+    // the extension. Only the i3dm converter adds EXT_mesh_gpu_instancing,
+    // and only it conjugates instance transforms by upToZ (see above), so
+    // only those models need the compensating rotation at the asset root.
+    bool fromI3dm = false;
+    for (const auto& node : model.nodes) {
+        if (node.getExtension<CesiumGltf::ExtensionExtMeshGpuInstancing>() !=
+            nullptr) {
+            fromI3dm = true;
+            break;
+        }
+    }
+    const glm::dmat4 upAxisFix = fromI3dm ? upAxisToZUp(model)
+                                          : glm::dmat4(1.0);
+    expandGpuInstancing(model);
     std::span<const std::byte> bufferData;
+    std::vector<std::byte> mergedBuffers;
     if (!model.buffers.empty()) {
-        const auto& bytes = model.buffers[0].cesium.data;
-        bufferData = std::span<const std::byte>(bytes.data(), bytes.size());
+        // P7: a GLB has a single BIN chunk, but converted models may carry
+        // several buffers — the i3dm converter appends an instance-data
+        // buffer holding the EXT_mesh_gpu_instancing TRANSLATION/ROTATION/
+        // SCALE accessors. Merge every buffer's data into one chunk and
+        // repoint all bufferViews at buffer 0 with adjusted byteOffsets;
+        // writing only buffers[0] would dangle the instance accessors.
+        std::vector<std::size_t> base(model.buffers.size(), 0);
+        for (std::size_t i = 0; i < model.buffers.size(); ++i) {
+            base[i] = mergedBuffers.size();
+            const auto& bytes = model.buffers[i].cesium.data;
+            mergedBuffers.insert(mergedBuffers.end(), bytes.begin(),
+                                 bytes.end());
+            while (mergedBuffers.size() % 4 != 0) {
+                mergedBuffers.push_back(std::byte{0});
+            }
+        }
+        for (auto& bufferView : model.bufferViews) {
+            if (bufferView.buffer >= 0 &&
+                static_cast<std::size_t>(bufferView.buffer) < base.size()) {
+                bufferView.byteOffset +=
+                    static_cast<std::int64_t>(base[bufferView.buffer]);
+                bufferView.buffer = 0;
+            }
+        }
+        model.buffers.resize(1);
+        model.buffers[0].cesium.data.assign(mergedBuffers.begin(),
+                                            mergedBuffers.end());
+        model.buffers[0].byteLength =
+            static_cast<std::int64_t>(mergedBuffers.size());
+        bufferData = std::span<const std::byte>(
+            model.buffers[0].cesium.data.data(),
+            model.buffers[0].cesium.data.size());
     }
     CesiumGltfWriter::GltfWriter writer;
     CesiumGltfWriter::GltfWriterResult result = writer.writeGlb(model, bufferData);
@@ -293,6 +582,7 @@ LoadThreadData* modelToGlb(const CesiumGltf::Model& inModel) {
     }
     auto* pData = new LoadThreadData();
     pData->rtcCenter = rtcCenter;
+    pData->upAxisFix = upAxisFix;
     pData->glbBytes.assign(
         reinterpret_cast<const std::uint8_t*>(result.gltfBytes.data()),
         reinterpret_cast<const std::uint8_t*>(result.gltfBytes.data()) +
@@ -384,6 +674,7 @@ public:
         auto* pData = new TileRenderData();
         pData->glbBytes = std::move(pLoad->glbBytes);
         const glm::dvec3 rtcCenter = pLoad->rtcCenter;
+        const glm::dmat4 upAxisFix = pLoad->upAxisFix;
         delete pLoad;
 
         pData->asset = _assetLoader->createAsset(
@@ -406,11 +697,15 @@ public:
         }
 
         // Compose the tile's world transform in double precision:
-        //   world = tileTransform * translate(rtcCenter) - localOrigin
+        //   world = tileTransform * translate(rtcCenter) * upAxisFix
+        //           - localOrigin
         // The b3dm RTC_CENTER (if any) is applied here in double precision
         // instead of being baked into the float glTF node, and localOrigin
         // (P5 rebase) keeps huge ECEF-style coordinates renderable in
-        // float32. Both are no-ops for the small local test tilesets.
+        // float32. upAxisFix cancels the up-axis conjugation the i3dm
+        // converter applies to instance transforms (identity for b3dm /
+        // raw glb). Both rtcCenter and upAxisFix are no-ops for the small
+        // local test tilesets.
         glm::dmat4 worldT = tile.getTransform();
         if (rtcCenter != glm::dvec3(0.0)) {
             glm::dmat4 rtcT(1.0);
@@ -419,6 +714,7 @@ public:
             rtcT[3][2] = rtcCenter.z;
             worldT = worldT * rtcT;
         }
+        worldT = worldT * upAxisFix;
         worldT[3] -= glm::dvec4(_localOrigin, 0.0);
         filament::math::mat4f m;
         for (int c = 0; c < 4; ++c) {

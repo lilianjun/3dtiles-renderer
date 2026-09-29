@@ -104,6 +104,28 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
   endif()
 endif()
 
+# P7: i3dm real support — instancing, 256-instance stress, tile-transform
+# rebase, and RTC_CENTER, all with headless pixel assertions.
+if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME i3dm_tileset_screenshot
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/i3dm_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --out "${CMAKE_BINARY_DIR}/screenshots/p7_i3dm_main.png"
+              --many-out "${CMAKE_BINARY_DIR}/screenshots/p7_i3dm_many.png"
+              --rebase-near-out "${CMAKE_BINARY_DIR}/screenshots/p7_i3dm_rebase_near.png"
+              --rebase-far-out "${CMAKE_BINARY_DIR}/screenshots/p7_i3dm_rebase_far.png"
+              --rtc-out "${CMAKE_BINARY_DIR}/screenshots/p7_i3dm_rtc.png"
+              --rtc-ref-out "${CMAKE_BINARY_DIR}/screenshots/p7_i3dm_rtc_ref.png"
+              --frames 60 --width 800 --height 600)
+    set_tests_properties(i3dm_tileset_screenshot PROPERTIES TIMEOUT 1200)
+  else()
+    message(WARNING "[P7] Python3 not found — i3dm screenshot test skipped")
+  endif()
+endif()
+
 # P6: lifecycle + fault-injection tests. Meaningful with or without
 # sanitizers (they assert graceful failure instead of crashes); the
 # sanitizer_* variants below additionally gate on ASan/LSan/UBSan reports.
@@ -160,6 +182,11 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
       COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
               --frames 60
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p5_b3dm_tileset/tileset.json")
+    # P7 scene: i3dm conversion path (instancing expansion + up-axis fix).
+    add_test(NAME sanitizer_i3dm
+      COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
+              --frames 60
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p7_i3dm_tileset/tileset.json")
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"
@@ -178,7 +205,8 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
       set_tests_properties(sanitizer_lifecycle PROPERTIES TIMEOUT 900)
     endif()
     set_tests_properties(
-      sanitizer_demo sanitizer_tileset sanitizer_b3dm sanitizer_http
+      sanitizer_demo sanitizer_tileset sanitizer_b3dm sanitizer_i3dm
+      sanitizer_http
       sanitizer_faults
       PROPERTIES TIMEOUT 900)
   else()

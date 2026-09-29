@@ -1,0 +1,28 @@
+{
+  "asset": {
+    "version": "1.0"
+  },
+  "geometricError": 200.0,
+  "root": {
+    "boundingVolume": {
+      "box": [
+        32.0,
+        0,
+        32.0,
+        32.0,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0,
+        0,
+        32.0
+      ]
+    },
+    "geometricError": 0.0,
+    "content": {
+      "uri": "instances.i3dm"
+    }
+  }
+}

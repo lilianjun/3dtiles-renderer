@@ -141,7 +141,7 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
   `CesiumGltfWriter::writeGlb` 重新序列化后交给 gltfio；
   b3dm 的 `RTC_CENTER`（`CESIUM_RTC` 扩展）以双精度参与 transform 计算；
   `b3dm_tileset_screenshot` 断言 b3dm 橙色瓦片上屏。
-  i3dm 仍为 TODO（同路径理论可用，但无测试数据覆盖）。
+  i3dm 见 P7（ADR-0008）。
 - **ECEF→local-origin rebase**：tileset 加载后取 root bounding volume 中心
   为双精度原点；瓦片**选择**（Cesium ViewState）在真实世界坐标（double）
   进行，**渲染**时每 tile transform 减去原点再转 float32，Filament 相机
@@ -149,13 +149,14 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
   `far` tileset 验证：rebase 后与 `near` 的橙色质心偏差 ≤ 25 px。
   （这是通用 local-origin rebase，不是严格旋转 ENU 基；详见 ADR-0005。）
 
-> **边界（诚实说明）**：i3dm 未实现（待办）；代理/证书走系统默认；
-> rebase 不是完整 ENU 姿态变换。详见 ADR-0005。
+> **边界（诚实说明）**：i3dm 见 P7（ADR-0008）；代理/证书走系统默认；
+> rebase 不是完整 ENU 姿态变换。详见 ADR-0005、ADR-0008。
 
 ### P6：内存与资源健壮性（见 ADR-0007）
 
 ```bash
-# 1) 普通回归（9/9）：smoke、demo、截图、tileset、http、b3dm、rebase、lifecycle、fault_inputs
+# 1) 普通回归（10/10）：smoke、demo、截图、tileset、http、b3dm、rebase、
+#    i3dm、lifecycle、fault_inputs
 cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON -DTILES_SDL3_NATIVE_VIDEO=ON
 cmake --build --preset linux -j2
 xvfb-run -a ctest --preset linux -I 1,9 --output-on-failure
@@ -211,6 +212,15 @@ cesium-native `CurlAssetAccessor` 的 handle 缓存泄漏），自有代码泄�
   API 生命周期测试；`registerAllTileContentTypes()` 改 `std::call_once`；
   Filament teardown 顺序修正（Renderer 先于 SwapChain）—— ✅ 已完成
   （sanitizer 6/6、普通 9/9，SDK 零 SDL；见 ADR-0007）
+- **P7 i3dm 真实支持**：cesium-native `I3dmToGltfConverter` 产出
+  `EXT_mesh_gpu_instancing`，SDK 把实例**展开为普通 glTF nodes**
+  （Filament v1.77 gltfio 只解析扩展名、不执行实例属性）；
+  多 buffer 合并、converter 的 up-axis 共轭补偿（tile root 附加
+  Y-up→Z-up 旋转）、RTC_CENTER 双精度 rebase；
+  `i3dm_tileset_screenshot` 断言 12 橙色 + 8 旋转青色实例上屏、
+  256 实例不崩、rebase near/far 与 RTC/reference 截图 bit-identical；
+  故障注入加截断/坏 magic/INSTANCES_LENGTH 越界 i3dm 优雅失败—— ✅ 已完成
+  （sanitizer 7/7、普通 10/10，SDK 零 SDL；见 ADR-0008）
 
 ## AI 协作
 

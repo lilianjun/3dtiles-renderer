@@ -5,6 +5,10 @@ Driven through tiles_demo; the exit-code contract is:
   A. nonexistent tileset path -> exit 1 (clean error message, no crash)
   B. corrupt tileset.json      -> exit 1 (bounded load wait, no crash)
   C. corrupt .glb tile content -> exit 0 (bad tile skipped, rest renders)
+  D. truncated i3dm            -> exit 0 (bad tile skipped, no crash)
+  E. i3dm with wrong magic    -> exit 0 (bad tile skipped, no crash)
+  F. i3dm INSTANCES_LENGTH past the POSITION data
+                              -> exit 0 (bad tile skipped, no crash)
 
 A crash (segfault/abort, e.g. exit -11/-6) fails the test. When the demo
 binary was built with -DTILES_SANITIZE=ON, wrap this script in
@@ -122,6 +126,60 @@ def main():
         failures += 1
     else:
         print("PASS: case C (corrupt tile skipped, rest rendered)")
+
+    # P7 cases D/E/F: corrupt i3dm tile content. Same contract as case C:
+    # the bad tile is skipped, the demo exits 0, no crash.
+    print("=== cases D/E/F: corrupt i3dm tile content ===")
+    i3dm_dir = os.path.join(workdir, "corrupt_i3dm")
+    shutil.rmtree(i3dm_dir, ignore_errors=True)
+    os.makedirs(i3dm_dir)
+    with open(os.path.join(HERE, "data", "p7_i3dm_tileset",
+                           "instances.i3dm"), "rb") as f:
+        good_i3dm = f.read()
+    import json as _json
+    import struct as _struct
+    # D: truncated mid-header.
+    with open(os.path.join(i3dm_dir, "tile.i3dm"), "wb") as f:
+        f.write(good_i3dm[:20])
+    # E: wrong magic.
+    with open(os.path.join(i3dm_dir, "tile_e.i3dm"), "wb") as f:
+        f.write(b"xxxx" + good_i3dm[4:])
+    # F: INSTANCES_LENGTH larger than the POSITION data (reads past end).
+    ft_len = _struct.unpack("<I", good_i3dm[12:16])[0]
+    ft = _json.loads(good_i3dm[32:32 + ft_len].decode("utf-8"))
+    ft["INSTANCES_LENGTH"] = ft["INSTANCES_LENGTH"] * 2
+    new_ft = _json.dumps(ft, separators=(",", ":")).encode("utf-8")
+    new_ft += b" " * ((4 - len(new_ft) % 4) % 4)
+    assert len(new_ft) == ft_len, "feature-table padding changed"
+    with open(os.path.join(i3dm_dir, "tile_f.i3dm"), "wb") as f:
+        f.write(good_i3dm[:32] + new_ft + good_i3dm[32 + ft_len:])
+    for case, uri in (("D", "tile.i3dm"), ("E", "tile_e.i3dm"),
+                      ("F", "tile_f.i3dm")):
+        ts_path = os.path.join(i3dm_dir, "tileset_%s.json" % case)
+        with open(ts_path, "w") as f:
+            _json.dump({
+                "asset": {"version": "1.0"},
+                "root": {
+                    "boundingVolume": {
+                        "box": [9.25, 0, 0, 10.25, 0, 0, 0, 3, 0, 0, 0, 8]},
+                    "geometricError": 0.0,
+                    "content": {"uri": uri},
+                },
+            }, f)
+        shot = os.path.join(workdir, "corrupt_i3dm_%s.png" % case)
+        rc = run_demo(args.demo, ["--frames", "30", "--tileset", ts_path,
+                                  "--screenshot", shot])
+        if rc is None:
+            failures += 1
+        elif crashed(rc):
+            print("FAIL: case %s crashed (exit %d)" % (case, rc))
+            failures += 1
+        elif rc != 0:
+            print("FAIL: case %s: expected exit 0 (bad tile skipped), "
+                  "got %d" % (case, rc))
+            failures += 1
+        else:
+            print("PASS: case %s (corrupt i3dm skipped, no crash)" % case)
 
     if failures:
         print("FAIL: fault_test (%d case(s) failed)" % failures)
