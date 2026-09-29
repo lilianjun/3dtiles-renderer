@@ -56,7 +56,9 @@ public:
                            std::uint32_t& outWidth, std::uint32_t& outHeight);
 
     // P3: load a 3D Tiles tileset (local filesystem path, file:// URL, or
-    // P5: http(s):// URL — served by cesium-native's CurlAssetAccessor).
+    // P5: http(s):// URL — served by the SDK's NonThrowingCurlAccessor;
+    // P18: network failures surface as synthetic HTTP 599, never as C++
+    // exceptions (mixed libstdc++/libc++ runtimes make those unsafe).
     // Must be called after initialize(). Tile selection/LOD runs every frame
     // in renderFrame() against the orbit camera set via setOrbitCamera().
     // Returns false when not initialized or the tileset failed to load
@@ -102,9 +104,14 @@ public:
     //                   be larger than renderedTileCount(): the root tile is
     //                   often selected but has no renderable content of its
     //                   own.
-    //   tilesLoading  — tiles sitting in cesium-native's worker + main
-    //                   thread load queues: claimed by the traversal, content
-    //                   not yet in flight/done.
+    //   tilesLoading  — tiles with content load still outstanding: the
+    //                   traversal's worker + main thread load queues PLUS
+    //                   tiles whose content fetch/finalize is in flight
+    //                   (TileLoadState::ContentLoading/ContentLoaded).
+    //                   P18 refinement: queue lengths alone go to 0 while
+    //                   curl requests are still downloading, which made the
+    //                   gauge lie during slow loads; counting in-flight
+    //                   content states keeps it honest.
     //   tilesLoaded   — tiles whose content finished loading
     //                   (TileLoadState::Done). Counts only truly finished
     //                   tiles, not tiles merely referenced but still loading.

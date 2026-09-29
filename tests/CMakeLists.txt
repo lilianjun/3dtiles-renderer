@@ -267,6 +267,26 @@ if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
   endif()
 endif()
 
+# P18: weak-network resilience gate (local slow HTTP fixture, no external
+# network/root). Covers: slow-net completion, request prevention on
+# deselection, mid-load camera change, mid-load teardown, and server outage.
+# Deterministic steady-state assertions; the whole suite runs < 2 min.
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
+   AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME weak_network
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/weaknet_test.py"
+              --mode all
+              --demo "$<TARGET_FILE:tiles_demo>")
+    # Five cases incl. a 3s dead-server window; comfortably under 2 minutes.
+    set_tests_properties(weak_network PROPERTIES TIMEOUT 600)
+  else()
+    message(WARNING "[P18] Python3 not found — weak_network test skipped")
+  endif()
+endif()
+
 # P11: golden screenshot regression gate. Re-renders one representative
 # fixture per phase with fixed parameters and requires pixel equality
 # against the frozen goldens in tests/golden/ (see its README for the
@@ -404,6 +424,17 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
       COMMAND ${_p6_run} -- "$<TARGET_FILE:tiles_demo>"
               --frames 60 --stats
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
+    # P18: mid-load teardown under ASan/LSan/UBSan — exit while tile content
+    # requests are in flight, then gate on any sanitizer report. Uses the
+    # same lsan.supp as the other sanitizer_* scenarios (third-party
+    # CurlAssetAccessor handle; see tests/lsan.supp).
+    add_test(NAME sanitizer_weaknet_abort
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/weaknet_test.py"
+              --mode abort --sanitized
+              --suppressions "${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp"
+              --demo "$<TARGET_FILE:tiles_demo>")
+    set_tests_properties(sanitizer_weaknet_abort PROPERTIES TIMEOUT 600)
     add_test(NAME sanitizer_http
       COMMAND ${_p6_run} -- "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/http_tileset_test.py"

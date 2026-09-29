@@ -49,6 +49,18 @@ struct DemoArgs {
                             // before the trajectory starts (lets async tile
                             // loading settle; not dumped, not counted)
     bool stats = false;     // P17: print per-frame TileStats to stdout
+    // P18: weak-network test hooks (dev/test only, not for production use).
+    // --until-loaded N renders up to N frames but stops early once the
+    // tileset has settled (loading == 0 && loaded > 0 for 20 consecutive
+    // frames); exits 1 if the budget is exhausted first. --exit-on-loading
+    // aborts (through the normal shutdown path) on the first frame where
+    // any tile load is in flight — this exercises mid-load teardown.
+    int untilLoaded = 0;  // 0 = disabled; >0 = max frames for settle polling
+    bool exitOnLoading = false;
+    // P18: on the first frame with any tile load in flight, push the camera
+    // far out (deselecting child tiles) and keep rendering. Exercises
+    // request cancellation/drain for tiles that fall out of selection.
+    bool zoomOutOnLoading = false;
 };
 
 bool parseArgs(int argc, char** argv, DemoArgs& out) {
@@ -88,11 +100,22 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             out.warmup = std::stoi(value);
         } else if (arg == "--stats") {
             out.stats = true;
+        } else if (arg == "--until-loaded") {
+            if (!needValue("--until-loaded", value)) return false;
+            out.untilLoaded = std::stoi(value);
+            out.frames = out.untilLoaded;
+            out.framesExplicit = true;
+        } else if (arg == "--exit-on-loading") {
+            out.exitOnLoading = true;
+        } else if (arg == "--zoom-out-on-loading") {
+            out.zoomOutOnLoading = true;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "usage: tiles_demo [--frames N] [--width W] [--height H] "
                          "[--screenshot out.png] [--tileset path-or-url] "
                          "[--no-tileset] [--trajectory keys.csv] "
-                         "[--frame-dir dir] [--warmup N] [--stats]"
+                         "[--frame-dir dir] [--warmup N] [--stats] "
+                         "[--until-loaded N] [--exit-on-loading] "
+                         "[--zoom-out-on-loading]"
                       << std::endl;
             return false;
         } else {
@@ -337,6 +360,13 @@ int main(int argc, char** argv) {
         // P3: simple orbit control — drag with the left mouse button to
         // orbit, mouse wheel to zoom. (Disabled in trajectory mode.)
         bool alive = exitCode == 0;
+        // P18: consecutive settled frames needed before --until-loaded
+        // declares the tileset stable (guards transient queue-empty gaps
+        // between the tileset.json fetch and the child tile requests).
+        int settleStreak = 0;
+        bool settled = false;
+        const int kSettleFrames = 20;
+        bool zoomedOut = false; // P18: --zoom-out-on-loading fired once
         while (rendered < args.frames && alive) {
             alive = pumpEvents(!trajectoryMode);
             if (trajectoryMode) {
@@ -351,6 +381,45 @@ int main(int argc, char** argv) {
                     exitCode = 1;
                     break;
                 }
+                // P18: settle polling / mid-load abort hooks (dev/test).
+                bool stopEarly = false;
+                if (args.untilLoaded > 0 || args.exitOnLoading ||
+                    args.zoomOutOnLoading) {
+                    const auto st = tiles_renderer::Renderer::tileStats();
+                    if (args.exitOnLoading && st.tilesLoading > 0) {
+                        std::cout << "[demo] abort: load in flight at frame "
+                                  << rendered << std::endl;
+                        stopEarly = true;
+                    }
+                    if (args.zoomOutOnLoading && !zoomedOut &&
+                        st.tilesLoading > 0) {
+                        // Push the camera far out with the current yaw/pitch:
+                        // child tiles drop out of selection while their
+                        // requests are in flight. 2000 is calibrated for the
+                        // p3 fixture (root geometricError 16, children 0):
+                        // root SSE falls below maxScreenSpaceError there.
+                        tiles_renderer::Renderer::setOrbitCamera(
+                            yawDeg, pitchDeg, 2000.0f);
+                        zoomedOut = true;
+                        std::cout << "[demo] zoomed out at frame " << rendered
+                                  << std::endl;
+                    }
+                    if (args.untilLoaded > 0) {
+                        if (st.tilesLoading == 0 && st.tilesLoaded > 0) {
+                            if (++settleStreak >= kSettleFrames) {
+                                std::cout
+                                    << "[demo] settled: frames=" << rendered
+                                    << " loaded=" << st.tilesLoaded
+                                    << " failed=" << st.tilesFailed
+                                    << std::endl;
+                                settled = true;
+                                stopEarly = true;
+                            }
+                        } else {
+                            settleStreak = 0;
+                        }
+                    }
+                }
                 if (args.stats) {
                     // P17: per-frame streaming diagnostics (dev/test HUD).
                     // Format is stable for tests/stats_test.py to parse.
@@ -364,12 +433,20 @@ int main(int argc, char** argv) {
                               << " bytes=" << st.bytesLoaded << std::endl;
                 }
                 ++rendered;
+                if (stopEarly) {
+                    break;
+                }
             } else {
                 SDL_Delay(4);
             }
         }
         std::cout << "[demo] rendered " << rendered << "/" << args.frames
                   << " frames" << std::endl;
+        if (args.untilLoaded > 0 && !settled) {
+            std::cerr << "[demo] NOT settled after " << rendered << " frames"
+                      << std::endl;
+            exitCode = 1;
+        }
         if (rendered == 0) {
             std::cerr << "[demo] no frame rendered" << std::endl;
             exitCode = 1;

@@ -23,7 +23,6 @@
 #include <CesiumAsync/IAssetRequest.h>
 #include <CesiumAsync/IAssetResponse.h>
 #include <CesiumAsync/ThreadPool.h>
-#include <CesiumCurl/CurlAssetAccessor.h>
 #include <CesiumGltf/ExtensionCesiumRTC.h>
 #include <CesiumGltf/ExtensionExtMeshGpuInstancing.h>
 #include <CesiumGltf/AccessorView.h>
@@ -56,6 +55,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <curl/curl.h>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -203,14 +203,214 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// RoutingAssetAccessor: http(s) URLs go through cesium-native's
-// CurlAssetAccessor (libcurl, own worker threads); everything else
-// (plain paths, file://) is served from the local filesystem.
+// NonThrowingCurlAccessor: minimal HTTP(S) client for tile fetching.
+//
+// cesium-native's CurlAssetAccessor throws std::runtime_error when the
+// network itself fails (DNS, connection refused, timeout...). On Linux our
+// process mixes libstdc++ (our code, GCC) with libc++ (Filament prebuilts);
+// the thrown exception's destructor is interposed to libc++abi's version,
+// which frees libstdc++-allocated memory with free() -> heap corruption /
+// SIGSEGV (found by P18's outage test; see docs/adr/0016-weak-network-testing.md).
+// This accessor NEVER throws: network failures are reported as synthetic
+// HTTP 599 responses with empty bodies, which the cesium-native loaders
+// already handle gracefully (the same path as a real HTTP 500).
+// ---------------------------------------------------------------------------
+class SimpleAssetResponse : public CesiumAsync::IAssetResponse {
+public:
+    SimpleAssetResponse(std::uint16_t status, std::string contentType,
+                        std::vector<std::byte> data)
+        : _status(status), _contentType(std::move(contentType)),
+          _data(std::move(data)) {}
+
+    std::uint16_t statusCode() const override { return _status; }
+    std::string contentType() const override { return _contentType; }
+    const CesiumAsync::HttpHeaders& headers() const override {
+        return _headers;
+    }
+    std::span<const std::byte> data() const override { return _data; }
+
+private:
+    std::uint16_t _status;
+    std::string _contentType;
+    CesiumAsync::HttpHeaders _headers;
+    std::vector<std::byte> _data;
+};
+
+class SimpleAssetRequest : public CesiumAsync::IAssetRequest {
+public:
+    SimpleAssetRequest(std::string method, std::string url,
+                       const std::vector<CesiumAsync::IAssetAccessor::THeader>& headers,
+                       std::unique_ptr<SimpleAssetResponse> response)
+        : _method(std::move(method)), _url(std::move(url)),
+          _response(std::move(response)) {
+        for (const auto& h : headers) {
+            _headers[h.first] = h.second;
+        }
+    }
+
+    const std::string& method() const override { return _method; }
+    const std::string& url() const override { return _url; }
+    const CesiumAsync::HttpHeaders& headers() const override {
+        return _headers;
+    }
+    const CesiumAsync::IAssetResponse* response() const override {
+        return _response.get();
+    }
+
+private:
+    std::string _method;
+    std::string _url;
+    CesiumAsync::HttpHeaders _headers;
+    std::unique_ptr<SimpleAssetResponse> _response;
+};
+
+class NonThrowingCurlAccessor : public CesiumAsync::IAssetAccessor {
+public:
+    CesiumAsync::Future<std::shared_ptr<CesiumAsync::IAssetRequest>> get(
+        const CesiumAsync::AsyncSystem& asyncSystem, const std::string& url,
+        const std::vector<THeader>& headers) override {
+        return asyncSystem.runInWorkerThread(
+            [url, headers]() -> std::shared_ptr<CesiumAsync::IAssetRequest> {
+                return perform(
+                    "GET", url, headers, std::span<const std::byte>());
+            });
+    }
+
+    CesiumAsync::Future<std::shared_ptr<CesiumAsync::IAssetRequest>> request(
+        const CesiumAsync::AsyncSystem& asyncSystem, const std::string& verb,
+        const std::string& url, const std::vector<THeader>& headers,
+        const std::span<const std::byte>& contentPayload) override {
+        // Copy the payload: the caller's span may not outlive the worker.
+        std::vector<std::byte> payload(
+            contentPayload.begin(), contentPayload.end());
+        return asyncSystem.runInWorkerThread(
+            [verb, url, headers,
+             payload = std::move(payload)]()
+                -> std::shared_ptr<CesiumAsync::IAssetRequest> {
+                return perform(verb, url, headers, payload);
+            });
+    }
+
+    void tick() noexcept override {
+        // All transfers block inside worker threads; nothing to pump.
+    }
+
+private:
+    // Synthetic status for "the network itself failed" (refused, DNS,
+    // timeout...). Outside the real 1xx-5xx range so it can't be confused
+    // with a server reply; loaders treat any non-2xx as a failed load.
+    static constexpr std::uint16_t kNetworkErrorStatus = 599;
+
+    static std::size_t writeCallback(
+        char* ptr, std::size_t size, std::size_t nmemb, void* userdata) {
+        auto* data = static_cast<std::vector<std::byte>*>(userdata);
+        std::size_t n = size * nmemb;
+        const std::byte* bytes = reinterpret_cast<const std::byte*>(ptr);
+        data->insert(data->end(), bytes, bytes + n);
+        return n;
+    }
+
+    static void ensureCurlInit() {
+        static std::once_flag flag;
+        std::call_once(flag, []() {
+            curl_global_init(CURL_GLOBAL_DEFAULT);
+        });
+    }
+
+    static std::shared_ptr<CesiumAsync::IAssetRequest> perform(
+        const std::string& verb, const std::string& url,
+        const std::vector<THeader>& headers,
+        std::span<const std::byte> payload) noexcept {
+        // Must not throw: see the class comment. All failure paths below
+        // synthesize a 599 response instead.
+        ensureCurlInit();
+        CURL* curl = curl_easy_init();
+        if (!curl) {
+            return makeError(verb, url, headers);
+        }
+
+        std::vector<std::byte> data;
+        std::string contentType;
+        long httpStatus = 0;
+        bool ok = false;
+
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &data);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60L);
+        // Fail fast on stalled connections so a dead server surfaces as a
+        // failed tile instead of hanging a worker (outage recovery).
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 15L);
+
+        struct curl_slist* list = nullptr;
+        for (const auto& h : headers) {
+            std::string line = h.first + ": " + h.second;
+            list = curl_slist_append(list, line.c_str());
+        }
+        if (list) {
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
+        }
+
+        if (verb != "GET") {
+            curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, verb.c_str());
+            if (!payload.empty()) {
+                curl_easy_setopt(
+                    curl, CURLOPT_POSTFIELDS, payload.data());
+                curl_easy_setopt(
+                    curl, CURLOPT_POSTFIELDSIZE,
+                    static_cast<long>(payload.size()));
+            }
+        }
+
+        if (curl_easy_perform(curl) == CURLE_OK) {
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpStatus);
+            char* ct = nullptr;
+            curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ct);
+            if (ct) {
+                contentType = ct;
+            }
+            ok = true;
+        }
+        if (list) {
+            curl_slist_free_all(list);
+        }
+        curl_easy_cleanup(curl);
+
+        std::uint16_t status =
+            ok ? static_cast<std::uint16_t>(httpStatus)
+               : kNetworkErrorStatus;
+        if (!ok) {
+            data.clear();
+            contentType.clear();
+        }
+        auto response = std::make_unique<SimpleAssetResponse>(
+            status, std::move(contentType), std::move(data));
+        return std::make_shared<SimpleAssetRequest>(
+            verb, url, headers, std::move(response));
+    }
+
+    static std::shared_ptr<CesiumAsync::IAssetRequest> makeError(
+        const std::string& verb, const std::string& url,
+        const std::vector<THeader>& headers) noexcept {
+        auto response = std::make_unique<SimpleAssetResponse>(
+            kNetworkErrorStatus, std::string(), std::vector<std::byte>());
+        return std::make_shared<SimpleAssetRequest>(
+            verb, url, headers, std::move(response));
+    }
+};
+
+// ---------------------------------------------------------------------------
+// RoutingAssetAccessor: http(s) URLs go through the SDK's NonThrowingCurlAccessor
+// (libcurl, blocking worker threads); everything else (plain paths, file://)
+// is served from the local filesystem.
 // ---------------------------------------------------------------------------
 class RoutingAssetAccessor : public CesiumAsync::IAssetAccessor {
 public:
     RoutingAssetAccessor()
-        : _pCurl(std::make_shared<CesiumCurl::CurlAssetAccessor>()),
+        : _pCurl(std::make_shared<NonThrowingCurlAccessor>()),
           _pLocal(std::make_shared<LocalFileAssetAccessor>()) {}
 
     CesiumAsync::Future<std::shared_ptr<CesiumAsync::IAssetRequest>> get(
@@ -245,7 +445,7 @@ private:
                url.compare(0, 8, "https://") == 0;
     }
 
-    std::shared_ptr<CesiumCurl::CurlAssetAccessor> _pCurl;
+    std::shared_ptr<NonThrowingCurlAccessor> _pCurl;
     std::shared_ptr<LocalFileAssetAccessor> _pLocal;
 };
 
@@ -1130,6 +1330,13 @@ Renderer::TileStats TilesetRenderer::tileStats() const {
     stats.selectedTiles = _impl->lastSelected;
     stats.tilesLoading = static_cast<std::int64_t>(_impl->lastWorkerQueue) +
                          static_cast<std::int64_t>(_impl->lastMainQueue);
+    // P18: the traversal queues drain into cesium-native's async request
+    // scheduler, so queue lengths alone hit 0 while curl downloads are
+    // still in flight (observed: 3 tiles downloading, queues at 0). Count
+    // tiles in ContentLoading/ContentLoaded too, so "loading" stays honest
+    // during slow loads. (A tile is never in both sets at once: queued
+    // tiles have not started loading yet.)
+    std::int64_t inFlightContent = 0;
     // Walk the instantiated tree once: count finished (Done) tiles and
     // failed tiles. Done-state counting is exact; forEachLoadedTile would
     // also count tiles merely referenced but not yet loaded, which would
@@ -1148,6 +1355,12 @@ Renderer::TileStats TilesetRenderer::tileStats() const {
             if (state == Cesium3DTilesSelection::TileLoadState::Done) {
                 ++loadedCount;
             }
+            if (state ==
+                    Cesium3DTilesSelection::TileLoadState::ContentLoading ||
+                state ==
+                    Cesium3DTilesSelection::TileLoadState::ContentLoaded) {
+                ++inFlightContent;
+            }
             if (state == Cesium3DTilesSelection::TileLoadState::Failed ||
                 state ==
                     Cesium3DTilesSelection::TileLoadState::FailedTemporarily) {
@@ -1163,6 +1376,7 @@ Renderer::TileStats TilesetRenderer::tileStats() const {
     }
     stats.tilesLoaded = loadedCount;
     stats.tilesFailed = failedCount;
+    stats.tilesLoading += inFlightContent;
     stats.bytesLoaded = _impl->tileset->getTotalDataBytes();
     return stats;
 #else

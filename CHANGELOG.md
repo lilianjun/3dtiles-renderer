@@ -9,6 +9,16 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- Weak-network resilience gate (P18, ADR-0016): `tests/slow_http_server.py`
+  (threaded localhost HTTP with per-response delay, chunk-paced bandwidth
+  cap, and per-request logging) plus `tests/weaknet_test.py` (new
+  `weak_network` ctest, ~8s): slow-net completion (`loaded==4, failed==0`),
+  request prevention on deselection (far camera → children never requested,
+  server log is ground truth), mid-load camera change (graceful steady
+  state), mid-load teardown (`--exit-on-loading`, also gated under
+  ASan/UBSan as `sanitizer_weaknet_abort`), and server outage (kill +
+  same-port restart → exit 0, never crashes). Demo-only hooks:
+  `--until-loaded N`, `--exit-on-loading`, `--zoom-out-on-loading`.
 - Tile streaming diagnostics (P17, ADR-0015): new `Renderer::tileStats()`
   returning `Renderer::TileStats` — `selectedTiles` (last traversal's render
   selection), `tilesLoading` (worker + main load queue lengths),
@@ -45,6 +55,21 @@ A = Android, i = iOS, wasm = WebAssembly.
   pixel assertions.
 
 ### Fixed
+- **Real crash on network failure (P18):** cesium-native's
+  `CurlAssetAccessor` throws `std::runtime_error` when the network itself
+  fails (refused/DNS/timeout). On Linux our process mixes libstdc++ (GCC)
+  with libc++ (Filament prebuilts); the exception's destructor interposed
+  to libc++abi's version → heap corruption / SIGSEGV (found by the new
+  outage test, confirmed under ASan as `alloc-dealloc-mismatch`). The SDK
+  now uses its own `NonThrowingCurlAccessor` (`src/tileset.cpp`): blocking
+  libcurl transfers in worker threads that **never throw** — failures
+  surface as synthetic HTTP 599 responses, which cesium-native loaders
+  already handle gracefully (tile `Failed`, no exception). As a side effect,
+  the `tests/lsan.supp` Entry 1 leak (CurlAssetAccessor handle cache) no
+  longer applies — the leaker is not instantiated anymore.
+- `tileStats().tilesLoading` (P18): was queue-lengths only and reported 0
+  while bytes were still in flight; now also counts tiles in
+  `ContentLoading`/`ContentLoaded` via the tree walk.
 - glTF textures (PNG/JPEG) rendered black: gltfio's `ResourceLoader` had no
   `TextureProvider` registered ("Missing texture provider for image/png").
   The render bridge now wires Filament's prebuilt stb decoder
