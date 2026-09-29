@@ -8,6 +8,19 @@ A = Android, i = iOS, wasm = WebAssembly.
 
 ## [Unreleased]
 
+### Added
+- P24: upstream issue draft for the P19 `TreeTraversalState` pinning
+  finding (`docs/upstream/issue-traversal-pinning.md`, not yet filed):
+  re-verified on master that an 800 KB `maximumCachedBytes` budget is
+  silently exceeded ~3.4x on a shallow-wide tree (23 tiles /
+  2,760,912 bytes resident, zero eviction over 146 frames), with the
+  mechanism cited file:line from cesium-native v0.64.0 sources.
+- P24: remaining-gaps roadmap (ADR-0023) — honest P0/P1/P2 inventory:
+  no real-device render verification (P0), corrupt-cmpt SIGSEGV
+  upstream #1457 still open (P0), KTX2/BasisU black textures,
+  traversal pinning, no IBL, i3dm CPU expansion (P1), Draco, 1px pnts,
+  WASM stub, translation-only ECEF rebase (P2 / won't-fix-for-now).
+
 ### Fixed
 - CI install step (P14 gate, first actually exercised): the Linux job's
   "Install SDK to temp prefix" step failed with
