@@ -58,3 +58,4 @@ Thumbs.db
 *.log
 *.tmp
 compile_commands.json
+__pycache__/

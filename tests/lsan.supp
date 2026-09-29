@@ -1,0 +1,37 @@
+# P6: LeakSanitizer suppressions for the tiles_renderer test suite.
+#
+# Policy (docs/adr/0007-sanitizer-memory-robustness.md):
+#   - Leaks in OUR code (src/, samples/) are BUGS: fix them, never suppress.
+#   - Entries below are third-party one-time-initialization / driver leaks
+#     (Mesa, X11, SDL, Filament prebuilts, cesium-native) that we cannot fix.
+#   - Every entry MUST carry a comment naming the source and the evidence
+#     (which scenario reported it). Overly broad patterns (e.g. "leak:libGL*")
+#     are banned: they would hide real Filament/GL resource leaks, which are
+#     our responsibility to destroy (see Renderer::shutdown ordering).
+#
+# Format: one "leak:<substring>" per line, matched against the allocation
+# stack. See https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
+#
+# (Populated from real triage runs; empty until the first report is
+# classified.)
+
+# --- Entry 1 (2026-09-29): cesium-native CurlAssetAccessor handle-cache leak.
+# Source: cesium-native v0.64.0, CesiumCurl/src/CurlAssetAccessor.cpp.
+#   struct CurlAssetAccessor::CurlCache keeps a std::vector of CURL* handles
+#   (curl_easy_init'ed in get(), reset in release()) but defines NO
+#   destructor, and ~CurlAssetAccessor() only calls curl_global_cleanup() —
+#   grep confirms zero curl_easy_cleanup() calls in the file. Every cached
+#   handle (plus its 3 MiB transfer buffer from Curl_multi_xfer_buf_borrow,
+#   connection/SSL-session/DNS state) leaks when the accessor is destroyed.
+# Evidence: sanitizer_http (HTTP tileset via local http.server) reported
+#   9.4 MiB in 102 allocations, all with libcurl-internal top frames
+#   (Curl_multi_xfer_buf_borrow, Curl_open, Curl_multi_handle,
+#   Curl_ssl_scache_create, ...). Our code never calls libcurl directly; in
+#   this binary curl is reachable only through CesiumCurl, so matching
+#   curl-internal symbols cannot hide one of our own leaks.
+# Proper fix (upstream): give CurlCache a destructor that calls
+#   curl_easy_cleanup() on every cached handle.
+leak:Curl_
+leak:curlx_
+leak:ip2addr
+leak:parseurl_and_replace

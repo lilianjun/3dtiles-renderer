@@ -152,6 +152,29 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
 > **边界（诚实说明）**：i3dm 未实现（待办）；代理/证书走系统默认；
 > rebase 不是完整 ENU 姿态变换。详见 ADR-0005。
 
+### P6：内存与资源健壮性（见 ADR-0007）
+
+```bash
+# 1) 普通回归（9/9）：smoke、demo、截图、tileset、http、b3dm、rebase、lifecycle、fault_inputs
+cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON -DTILES_SDL3_NATIVE_VIDEO=ON
+cmake --build --preset linux -j2
+xvfb-run -a ctest --preset linux -I 1,9 --output-on-failure
+
+# 2) sanitizer 门禁（6/6）：ASan + LSan + UBSan，只插桩自有 targets
+cmake --preset linux-asan          # Debug + TILES_SANITIZE=ON，构建目录 build/linux-asan
+cmake --build --preset linux-asan -j2
+xvfb-run -a ctest --preset linux-asan -R sanitizer_ --output-on-failure
+```
+
+`TILES_SANITIZE=ON` 给 `tiles_renderer`/`tiles_demo`/测试加
+`-fsanitize=address,undefined -fno-sanitize=vptr -fno-sanitize-recover=all`
+（第三方保持无插桩；`-fno-sanitize=vptr` 是因为 Filament/cesium-native
+预编译库均为 `-fno-rtti`，UBSan vptr 检查对其必然误报——已验证为误报）。
+`tests/lsan.supp` 只收录确认过的第三方泄漏（当前 1 条：
+cesium-native `CurlAssetAccessor` 的 handle 缓存泄漏），自有代码泄漏一律修复。
+另新增故障注入测试（不存在路径/损坏 tileset.json/损坏 glb）与 API 生命周期测试
+（未初始化调用、重复 initialize、shutdown 后调用、shutdown 后重初始化）。
+
 > 首次全依赖 configure 会触发 vcpkg 构建 cesium-native 的约 15 个第三方 port，
 > 在 2 核机器上需要数十分钟，请耐心等待。SDL3 的 X11 视频后端需要
 > `-DTILES_SDL3_NATIVE_VIDEO=ON`（及 `libx11-dev libxext-dev libxrandr-dev
@@ -183,6 +206,11 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
   浏览器运行；Filament for Web 源码构建或 filament.js 桥接；
   P3 遗留（i3dm、完整 ENU 姿态变换）—— HTTP(S)、b3dm、local-origin rebase
   已在本阶段完成并验证（见 ADR-0005）
+- **P6 内存与资源健壮性**：ASan+LSan+UBSan 门禁（`linux-asan` preset，
+  只插桩自有 targets）；故障注入（坏路径/坏 tileset/坏 glb 优雅处理）；
+  API 生命周期测试；`registerAllTileContentTypes()` 改 `std::call_once`；
+  Filament teardown 顺序修正（Renderer 先于 SwapChain）—— ✅ 已完成
+  （sanitizer 6/6、普通 9/9，SDK 零 SDL；见 ADR-0007）
 
 ## AI 协作
 

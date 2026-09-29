@@ -5,6 +5,10 @@
       "name": "linux"
     },
     {
+      "configurePreset": "linux-asan",
+      "name": "linux-asan"
+    },
+    {
       "configurePreset": "windows",
       "name": "windows"
     },
@@ -37,6 +41,23 @@
       "displayName": "Linux (native)",
       "generator": "Unix Makefiles",
       "name": "linux"
+    },
+    {
+      "binaryDir": "${sourceDir}/build/linux-asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "TILES_PLATFORM": "linux",
+        "TILES_SANITIZE": "ON",
+        "TILES_SDL3_NATIVE_VIDEO": "ON",
+        "TILES_WITH_SDL3": "ON",
+        "TILES_WITH_CESIUM_NATIVE": "ON",
+        "TILES_WITH_FILAMENT": "ON"
+      },
+      "description": "Linux + ASan/LSan/UBSan on our own targets (P6). Third-party deps stay uninstrumented. Requires X11 dev packages for the SDL native video backend.",
+      "displayName": "Linux (sanitizers)",
+      "generator": "Unix Makefiles",
+      "inherits": "linux",
+      "name": "linux-asan"
     },
     {
       "binaryDir": "${sourceDir}/build/windows",
@@ -88,6 +109,10 @@
     {
       "configurePreset": "linux",
       "name": "linux"
+    },
+    {
+      "configurePreset": "linux-asan",
+      "name": "linux-asan"
     }
   ],
   "version": 3

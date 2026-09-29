@@ -158,11 +158,16 @@ void destroyFilamentState() {
         s.engine->destroy(s.scene);
         s.scene = nullptr;
     }
+    // Filament docs: destroy in reverse creation order —
+    // view, scene, renderer, swapChain, engine last.
+    if (s.renderer) {
+        s.engine->destroy(s.renderer);
+        s.renderer = nullptr;
+    }
     if (s.swapChain) {
         s.engine->destroy(s.swapChain);
         s.swapChain = nullptr;
     }
-    s.renderer = nullptr;
     filament::Engine::destroy(s.engine);
     s.engine = nullptr;
     s.width = s.height = 0;

@@ -81,6 +81,51 @@ option(TILES_WITH_CESIUM_NATIVE "Fetch and build cesium-native (3D Tiles loading
 option(TILES_WITH_FILAMENT      "Fetch Filament (rendering, prebuilt binaries)" OFF)
 option(TILES_WITH_SDL3          "Fetch and build SDL3 (demo + tests only; never the SDK)" OFF)
 
+# ---------------------------------------------------------------------------
+# P6: sanitizer builds (ASan + LSan + UBSan) for OUR targets only.
+# Third-party deps (cesium-native, SDL3, Filament prebuilts) are intentionally
+# NOT instrumented: they are prebuilt or very expensive to rebuild, and the
+# sanitizer runtimes still intercept their allocations at run time, so leaks
+# in third-party code are still *detected* (triaged via tests/lsan.supp).
+# Usage: -DTILES_SANITIZE=ON, or the linux-asan preset. See docs/adr/0007.
+# ---------------------------------------------------------------------------
+option(TILES_SANITIZE "Build our targets with -fsanitize=address,undefined (Linux/GCC/Clang only)" OFF)
+
+function(tiles_apply_sanitizers target)
+  if(NOT TILES_SANITIZE)
+    return()
+  endif()
+  if(NOT TILES_PLATFORM STREQUAL "linux")
+    message(WARNING "[P6] TILES_SANITIZE is only supported on linux — ignoring for '${target}'")
+    return()
+  endif()
+  if(NOT (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+    message(WARNING "[P6] TILES_SANITIZE needs GCC or Clang — ignoring for '${target}'")
+    return()
+  endif()
+  # -fno-sanitize-recover=all: any UB aborts instead of print-and-continue,
+  # so the sanitizer ctest gate cannot miss it. LSan is part of ASan on Linux
+  # (detect_leaks defaults to 1); third-party leak triage lives in
+  # tests/lsan.supp.
+  #
+  # -fno-sanitize=vptr: UBSan's vptr check requires RTTI typeinfo in vtables,
+  # but the prebuilt Filament and cesium-native static libs are compiled with
+  # -fno-rtti (verified: zero __typeinfo symbols in libgltfio_core.a and the
+  # cesium archives). Every virtual call through a third-party static type
+  # (e.g. MaterialProvider::destroyMaterials()) therefore false-positives as
+  # "invalid vptr" even though the object is valid (vptr stable from
+  # construction to destruction, ASan-clean). All other UBSan checks stay on.
+  target_compile_options(${target} PRIVATE
+    -fsanitize=address,undefined -fno-sanitize=vptr
+    -fno-omit-frame-pointer
+    -fno-sanitize-recover=all -g)
+  # Note: for the STATIC tiles_renderer lib these link options are inert at
+  # archive time; the sanitizer runtimes get linked via the executables below.
+  target_link_options(${target} PRIVATE
+    -fsanitize=address,undefined -fno-sanitize=vptr
+    -fno-sanitize-recover=all)
+endfunction()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # MSVC reports __cplusplus as 199711L unless /Zc:__cplusplus is given —
@@ -139,6 +184,7 @@ configure_file(
 # window handle + size from the host app. The SDK NEVER depends on SDL3.
 # ---------------------------------------------------------------------------
 add_library(tiles_renderer STATIC src/renderer.cpp src/tileset.cpp)
+tiles_apply_sanitizers(tiles_renderer)
 target_include_directories(tiles_renderer PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_BINARY_DIR}/generated"
@@ -409,6 +455,7 @@ if(TILES_WITH_SDL3)
   endif()
 
   add_executable(tiles_demo samples/demo/main.cpp)
+  tiles_apply_sanitizers(tiles_demo)
   target_link_libraries(tiles_demo PRIVATE tiles_renderer SDL3::SDL3-static)
   target_include_directories(tiles_demo PRIVATE "${stb_SOURCE_DIR}")
   target_compile_definitions(tiles_demo PRIVATE TILES_WITH_SDL3)

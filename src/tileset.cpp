@@ -531,11 +531,12 @@ struct TilesetRenderer::Impl {
         // Register cesium-native's tile content converters (glTF, b3dm, etc.).
         // Without this, GLB magic bytes are not recognized and tile loads
         // fail. Must be called once before any Tileset is created.
-        static bool contentTypesRegistered = false;
-        if (!contentTypesRegistered) {
+        // P6: std::call_once instead of a bool flag (thread-safe; the old
+        // flag raced if two tilesets loaded concurrently on first use).
+        static std::once_flag contentTypesRegisteredFlag;
+        std::call_once(contentTypesRegisteredFlag, []() {
             Cesium3DTilesContent::registerAllTileContentTypes();
-            contentTypesRegistered = true;
-        }
+        });
 
         auto pAccessor = std::make_shared<RoutingAssetAccessor>();
         auto pPrepare =
