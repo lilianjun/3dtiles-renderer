@@ -76,7 +76,7 @@
 - 验收：ctest 全过；新增测试验证构造期透传 + live setter 生效（读 `getOptions()`）；
   sanitizer 跑一遍；SDK 零 SDL。
 
-### P32：事件系统
+### P32：事件系统 ✅ 完成（2026-09-30，commit 待填）
 - `struct TilesetEventCallbacks`：`onTileLoad` / `onTileUnload` /
   `onTileFailed({url, message})` / `onTileVisible` / `onAllTilesLoaded` /
   `onLoadProgress(pendingRequests, tilesProcessing)` / `onInitialTilesLoaded`。
@@ -87,6 +87,12 @@
 - 回调内禁止调用变更类 `Renderer` API（文档写死；查询类允许）。
 - 验收：fixture 计数测试（load/unload/visible 触发；坏 tileset 触发 tileFailed；
   `initialTilesLoaded` 全周期只一次）；ctest 全过。
+- 实现要点：单 tree walk 检测 TileLoadState 变迁（Done↔/Failed*）；
+  `loadErrorCallback` 用 shared 队列（teardown 时不碰 Impl）；
+  替换 tileset 时同步 fire 旧 tileset 的 tileUnload；
+  traversal root 空 ID 与 tileLoad/tileUnload 语义一致。
+  另修 P22 遗留 demo bug：`--switch-at-frame` 在 renderFrame 失败时重复触发，
+  现为 one-shot。
 
 ### P33：显示 / 变换 / 只读属性
 - `setShow(bool)` / `isShow()`；`show=false` 时跳过 Filament 场景提交；

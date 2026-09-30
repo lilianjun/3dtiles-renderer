@@ -81,6 +81,25 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
   endif()
 endif()
 
+# P32: cesium.js-style tileset event callbacks (7 events). Behavioral:
+# tileLoad/tileVisible/loadProgress/allTilesLoaded/initialTilesLoaded on a
+# good load; tileFailed on corrupt child content; tileUnload on mid-run
+# tileset switch; clearEventCallbacks stops delivery.
+if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME tileset_events
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/event_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json"
+              --bad-tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p32_bad_child_tileset/tileset.json")
+    set_tests_properties(tileset_events PROPERTIES TIMEOUT 900)
+  else()
+    message(WARNING "[P32] Python3 not found — tileset_events test skipped")
+  endif()
+endif()
+
 # P5: fill the three P3 gaps, each with its own headless pixel assertion.
 if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   find_package(Python3 COMPONENTS Interpreter)
@@ -701,6 +720,17 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
                 "${CMAKE_CURRENT_SOURCE_DIR}/data/p8_pnts_cloud")
       set_tests_properties(sanitizer_host_integration PROPERTIES TIMEOUT 900)
     endif()
+    # P32: tileset event callbacks under ASan/LSan/UBSan — the per-frame
+    # tree walk, the loadErrorCallback queue, and the switch-time unload
+    # sweep, with the core event assertions.
+    add_test(NAME sanitizer_events
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/event_test.py"
+              --sanitized
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json"
+              --bad-tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p32_bad_child_tileset/tileset.json")
+    set_tests_properties(sanitizer_events PROPERTIES TIMEOUT 900)
     set_tests_properties(
       sanitizer_demo sanitizer_tileset sanitizer_b3dm sanitizer_i3dm
       sanitizer_pnts sanitizer_cmpt sanitizer_11 sanitizer_pbr sanitizer_http

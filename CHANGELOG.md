@@ -9,6 +9,24 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- P32: cesium.js-aligned tileset events (second tileset-API alignment
+  phase). New public API: `Renderer::TilesetEventCallbacks` (7 events —
+  tileLoad, tileUnload, tileFailed, tileVisible, loadProgress,
+  allTilesLoaded, initialTilesLoaded) +
+  `Renderer::setEventCallbacks()`/`clearEventCallbacks()`. All fire on the
+  render thread inside `renderFrame()` in a deterministic order
+  (transitions → visible → progress → all-loaded → initial-loaded);
+  `tileVisible` and the per-frame walks are skipped when no callback is
+  registered. State-transition detection via one tree walk per frame
+  (Done in → tileLoad, Done out → tileUnload, Failed* in → tileFailed);
+  tileset.json-level failures arrive via cesium-native's
+  `loadErrorCallback` on a mutex-protected queue. Callbacks persist across
+  `loadTileset()` (stash-then-forward); replacing a loaded tileset fires
+  `tileUnload` for the old tileset's loaded tiles synchronously. Demo
+  gains `--event-log` and `--clear-events-at-frame N` test hooks. New
+  `tileset_events` test (steady load, corrupt-child tileFailed,
+  switch tileUnload, clear-stops-delivery) + `p32_bad_child_tileset`
+  fixture. ADR-0031.
 - P31: cesium.js-aligned tileset options (first tileset-API alignment
   phase, roadmap `docs/tileset-api-roadmap.md`). New public API:
   `Renderer::TilesetOptions` (11 fields — maximumScreenSpaceError,

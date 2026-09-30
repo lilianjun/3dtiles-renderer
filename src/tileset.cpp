@@ -7,6 +7,8 @@
 #include "tileset_internal.h"
 #include "converter_guard.h" // P28: empty-model guard for content converters
 
+#include <mutex> // P32: loadErrorCallback queue (may arrive off-thread)
+#include <unordered_map> // P32: per-tile last-state tracking for events
 #include <unordered_set>
 
 #ifdef TILES_WITH_CESIUM_NATIVE
@@ -1181,6 +1183,18 @@ struct TilesetRenderer::Impl {
     bool loadTileset(const std::string& urlOrPath,
                      const Renderer::TilesetOptions& sdkOptions) {
         lastError.clear();
+        // P32: reset the per-tileset event state for the new load. (A
+        // loadTileset() that replaces a live tileset fires tileUnload for
+        // the old tileset's tiles from Renderer::loadTileset, before the
+        // old TilesetRenderer is destroyed — see renderer.cpp.)
+        tileStates.clear();
+        initialTilesLoadedFired = false;
+        lastProgressPending = -1;
+        lastProgressProcessing = -1;
+        if (loadFailureQueue) {
+            std::lock_guard<std::mutex> lock(loadFailureQueue->mutex);
+            loadFailureQueue->pending.clear();
+        }
         // P31: validate/normalize the SDK options before touching the
         // filesystem or network. Invalid values fail fast (the live
         // tileset, if any, is untouched — same as any other failed load).
@@ -1318,6 +1332,25 @@ struct TilesetRenderer::Impl {
         options.ellipsoid = CesiumGeospatial::Ellipsoid(glm::dvec3(
             eff.ellipsoidRadii[0], eff.ellipsoidRadii[1],
             eff.ellipsoidRadii[2]));
+        // P32: tileset.json / layer.json / implicit-subtree load failures.
+        // The callback is owned by the Tileset and may outlive the Impl
+        // during teardown, so it only touches the shared failure queue —
+        // never the Impl. Drained on the render thread in
+        // dispatchFrameEvents(), which raises onTileFailed.
+        if (!loadFailureQueue) {
+            loadFailureQueue = std::make_shared<Impl::LoadFailureQueue>();
+        }
+        const std::shared_ptr<Impl::LoadFailureQueue> failureQueue =
+            loadFailureQueue;
+        options.loadErrorCallback =
+            [failureQueue](
+                const Cesium3DTilesSelection::TilesetLoadFailureDetails&
+                    details) {
+                Renderer::TileFailedInfo info;
+                info.message = details.message;
+                std::lock_guard<std::mutex> lock(failureQueue->mutex);
+                failureQueue->pending.push_back(std::move(info));
+            };
         // P19: honor a host-set cache budget (default: cesium-native's
         // 512MB). unloadCachedBytes() reads _options.maximumCachedBytes
         // every update, so this also stays live-mutable via
@@ -1407,6 +1440,186 @@ struct TilesetRenderer::Impl {
         return glm::dvec3(0.0);
     }
 
+    // P32: build the public event payload for a tile. The URL is best
+    // effort: only tiles whose TileID is a string (external tileset
+    // references) carry one; content URLs resolved by cesium-native's
+    // loaders are not exposed on the Tile, so url is "" for the common
+    // case. Documented as such in renderer.h.
+    static Renderer::TileEventInfo tileEventInfo(
+        const Cesium3DTilesSelection::Tile& tile) {
+        Renderer::TileEventInfo info;
+        info.tileId =
+            Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
+                tile.getTileID());
+        if (const std::string* pUrl =
+                std::get_if<std::string>(&tile.getTileID());
+            pUrl != nullptr) {
+            info.url = *pUrl;
+        }
+        return info;
+    }
+
+    // P32: dispatch cesium.js-style tileset events. Runs on the render
+    // thread at the end of updateTiles() (i.e. inside renderFrame()), after
+    // the traversal. Order per frame: queued loadErrorCallback failures,
+    // then state transitions (tileLoad/tileUnload/tileFailed, parent before
+    // children), then tileVisible (render selection order), then
+    // loadProgress (on change), allTilesLoaded (while fully loaded),
+    // initialTilesLoaded (once per loadTileset).
+    //
+    // tileLoad/tileUnload/tileFailed come from TileLoadState transitions
+    // observed in a single tree walk, which also yields the in-flight
+    // content count for loadProgress/allTilesLoaded. The walk only runs
+    // when at least one state/progress callback is registered; tileVisible
+    // only iterates the render selection when its callback is registered.
+    void dispatchFrameEvents(
+        const Cesium3DTilesSelection::ViewUpdateResult& viewResult) {
+        const Renderer::TilesetEventCallbacks& cb = eventCallbacks;
+
+        // 1. Queued tileset.json-level failures (loadErrorCallback).
+        if (cb.onTileFailed && loadFailureQueue) {
+            std::vector<Renderer::TileFailedInfo> queued;
+            {
+                std::lock_guard<std::mutex> lock(loadFailureQueue->mutex);
+                queued.swap(loadFailureQueue->pending);
+            }
+            for (const auto& info : queued) {
+                cb.onTileFailed(info);
+            }
+        } else if (loadFailureQueue) {
+            std::lock_guard<std::mutex> lock(loadFailureQueue->mutex);
+            loadFailureQueue->pending.clear();
+        }
+
+        const bool wantTransitions =
+            cb.onTileLoad || cb.onTileUnload || cb.onTileFailed;
+        const bool wantProgress =
+            wantTransitions || cb.onLoadProgress || cb.onAllTilesLoaded ||
+            cb.onInitialTilesLoaded;
+
+        // 2. Single tree walk: transitions + in-flight count.
+        std::int64_t inFlightContent = 0;
+        if (wantProgress && tileset != nullptr) {
+            const Cesium3DTilesSelection::Tile* pRoot =
+                tileset->getRootTile();
+            if (pRoot != nullptr) {
+                std::unordered_set<std::string> seen;
+                std::vector<const Cesium3DTilesSelection::Tile*> stack{pRoot};
+                using Cesium3DTilesSelection::TileLoadState;
+                while (!stack.empty()) {
+                    const auto* pTile = stack.back();
+                    stack.pop_back();
+                    const std::string id =
+                        Cesium3DTilesSelection::TileIdUtilities::
+                            createTileIdString(pTile->getTileID());
+                    seen.insert(id);
+                    const TileLoadState state = pTile->getState();
+                    const auto it = tileStates.find(id);
+                    const bool known = it != tileStates.end();
+                    const TileLoadState prev =
+                        known ? it->second : TileLoadState::Unloaded;
+                    if (wantTransitions && (!known || prev != state)) {
+                        const bool wasDone = known && prev == TileLoadState::Done;
+                        const bool isDone = state == TileLoadState::Done;
+                        const bool wasFailed =
+                            known &&
+                            (prev == TileLoadState::Failed ||
+                             prev == TileLoadState::FailedTemporarily);
+                        const bool isFailed =
+                            state == TileLoadState::Failed ||
+                            state == TileLoadState::FailedTemporarily;
+                        if (isDone && !wasDone && cb.onTileLoad) {
+                            cb.onTileLoad(tileEventInfo(*pTile));
+                        } else if (!isDone && wasDone && cb.onTileUnload) {
+                            cb.onTileUnload(tileEventInfo(*pTile));
+                        } else if (isFailed && !wasFailed && cb.onTileFailed) {
+                            Renderer::TileFailedInfo info;
+                            info.tileId = id;
+                            if (const std::string* pUrl = std::get_if<
+                                    std::string>(&pTile->getTileID());
+                                pUrl != nullptr) {
+                                info.url = *pUrl;
+                            }
+                            // Honest: cesium-native does not surface the
+                            // underlying content error text on the Tile.
+                            info.message = "tile content failed to load";
+                            cb.onTileFailed(info);
+                        }
+                    }
+                    tileStates[id] = state;
+                    if (state == TileLoadState::ContentLoading ||
+                        state == TileLoadState::ContentLoaded) {
+                        ++inFlightContent;
+                    }
+                    for (const auto& child : pTile->getChildren()) {
+                        stack.push_back(&child);
+                    }
+                }
+                // Tiles pruned from the tree (implicit tiling): a tile that
+                // was Done and vanished had its content released.
+                if (wantTransitions && cb.onTileUnload) {
+                    for (auto it = tileStates.begin();
+                         it != tileStates.end();) {
+                        if (seen.find(it->first) == seen.end()) {
+                            if (it->second ==
+                                Cesium3DTilesSelection::TileLoadState::Done) {
+                                Renderer::TileEventInfo info;
+                                info.tileId = it->first;
+                                cb.onTileUnload(info);
+                            }
+                            it = tileStates.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                } else if (!wantTransitions) {
+                    // Keep the map from growing when nobody observes
+                    // transitions but progress events need the walk: drop
+                    // entries for pruned tiles.
+                    for (auto it = tileStates.begin();
+                         it != tileStates.end();) {
+                        if (seen.find(it->first) == seen.end()) {
+                            it = tileStates.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. tileVisible: the traversal's render selection, in order.
+        if (cb.onTileVisible) {
+            for (const auto& pTile : viewResult.tilesToRenderThisFrame) {
+                cb.onTileVisible(tileEventInfo(*pTile));
+            }
+        }
+
+        // 4. loadProgress / allTilesLoaded / initialTilesLoaded.
+        if (wantProgress) {
+            const std::int64_t pending =
+                static_cast<std::int64_t>(lastWorkerQueue) +
+                static_cast<std::int64_t>(lastMainQueue);
+            if (cb.onLoadProgress &&
+                (pending != lastProgressPending ||
+                 inFlightContent != lastProgressProcessing)) {
+                lastProgressPending = pending;
+                lastProgressProcessing = inFlightContent;
+                cb.onLoadProgress(pending, inFlightContent);
+            }
+            const bool fullyLoaded =
+                pending <= 0 && inFlightContent <= 0;
+            if (fullyLoaded && cb.onAllTilesLoaded) {
+                cb.onAllTilesLoaded();
+            }
+            if (fullyLoaded && !initialTilesLoadedFired &&
+                cb.onInitialTilesLoaded) {
+                initialTilesLoadedFired = true;
+                cb.onInitialTilesLoaded();
+            }
+        }
+    }
+
     void updateTiles(
         double viewportWidth, double viewportHeight, const OrbitCamera& cam) {
         if (tileset == nullptr) {
@@ -1460,6 +1673,10 @@ struct TilesetRenderer::Impl {
                 Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
                     pTile->getTileID()));
         }
+
+        // P32: cesium.js-style tileset events, dispatched on the render
+        // thread at the end of the traversal.
+        dispatchFrameEvents(viewResult);
 
         // Use the traversal's explicit render selection to drive Scene
         // visibility (not tile.isRenderable(), which is true for every loaded
@@ -1539,6 +1756,30 @@ struct TilesetRenderer::Impl {
     std::vector<std::string> lastSelectedIds;
     // P12: why the last loadTileset() failed (empty when it succeeded).
     std::string lastError;
+    // P32: event callbacks (see Renderer::TilesetEventCallbacks), set via
+    // TilesetRenderer::setEventCallbacks().
+    Renderer::TilesetEventCallbacks eventCallbacks;
+    // P32: last observed TileLoadState per tile ID, for load/unload/failed
+    // transition detection in dispatchFrameEvents(). Reset on loadTileset().
+    std::unordered_map<std::string,
+                       Cesium3DTilesSelection::TileLoadState>
+        tileStates;
+    // P32: initialTilesLoaded fires once per loadTileset().
+    bool initialTilesLoadedFired = false;
+    // P32: last loadProgress payload, for change detection (-1 = never).
+    std::int64_t lastProgressPending = -1;
+    std::int64_t lastProgressProcessing = -1;
+    // P32: tileset.json-level failures arrive via
+    // TilesetOptions::loadErrorCallback (contract allows worker threads).
+    // The callback is owned by the Tileset, so during teardown it could
+    // outlive the Impl's other members — therefore it only touches this
+    // shared queue, never the Impl itself. Drained on the render thread in
+    // dispatchFrameEvents().
+    struct LoadFailureQueue {
+        std::mutex mutex;
+        std::vector<Renderer::TileFailedInfo> pending;
+    };
+    std::shared_ptr<LoadFailureQueue> loadFailureQueue;
     // P5 rebase origin (world coordinates, double). Tile selection
     // (ViewState) orbits this point in full double precision; rendering
     // subtracts it in double precision before the float32 conversion.
@@ -1742,6 +1983,51 @@ Renderer::TilesetOptions TilesetRenderer::currentOptions() const {
     return _impl->appliedOptions;
 #else
     return Renderer::TilesetOptions{};
+#endif
+}
+
+// P32: store event callbacks on the live TilesetRenderer.
+void TilesetRenderer::setEventCallbacks(
+    const Renderer::TilesetEventCallbacks& callbacks) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->eventCallbacks = callbacks;
+#else
+    (void)callbacks;
+#endif
+}
+
+// P32: fire onTileUnload for every tile whose content is currently loaded.
+// Runs on the render thread, before the Tileset object is destroyed.
+void TilesetRenderer::fireTileUnloadEvents() {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    if (!_impl->eventCallbacks.onTileUnload) {
+        return;
+    }
+    if (!_impl->loaded || _impl->tileset == nullptr) {
+        return;
+    }
+    const Cesium3DTilesSelection::Tile* pRoot =
+        _impl->tileset->getRootTile();
+    if (pRoot == nullptr) {
+        return;
+    }
+    std::vector<const Cesium3DTilesSelection::Tile*> stack{pRoot};
+    while (!stack.empty()) {
+        const auto* pTile = stack.back();
+        stack.pop_back();
+        const std::string id =
+            Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
+                pTile->getTileID());
+        const auto it = _impl->tileStates.find(id);
+        if (it != _impl->tileStates.end() &&
+            it->second == Cesium3DTilesSelection::TileLoadState::Done) {
+            _impl->eventCallbacks.onTileUnload(
+                TilesetRenderer::Impl::tileEventInfo(*pTile));
+        }
+        for (const auto& child : pTile->getChildren()) {
+            stack.push_back(&child);
+        }
+    }
 #endif
 }
 

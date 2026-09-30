@@ -87,6 +87,11 @@ std::int64_t g_pendingMaxCachedBytes = -1;
 double g_pendingMaxSse = 16.0;
 bool g_hasPendingMaxSse = false;
 
+// P32: event callbacks registered via setEventCallbacks(). Persist across
+// loadTileset() calls (and shutdown, like the other stashed settings);
+// forwarded to each new TilesetRenderer at load.
+Renderer::TilesetEventCallbacks g_eventCallbacks;
+
 #ifdef TILES_WITH_FILAMENT
 
 // P2 demo geometry: a single triangle. Static storage so the Filament buffer
@@ -724,6 +729,9 @@ bool Renderer::loadTileset(const std::string& tilesetUrl,
     if (g_hasPendingMaxSse) {
         tileset->setMaximumScreenSpaceError(g_pendingMaxSse);
     }
+    // P32: event callbacks persist across loads; the new TilesetRenderer
+    // gets the current set before loading.
+    tileset->setEventCallbacks(g_eventCallbacks);
     // P22: build-then-commit. The new TilesetRenderer is fully loaded
     // before it replaces the old one, so a failed loadTileset() (bad
     // path, corrupt tileset.json, timeout) leaves the currently-loaded
@@ -732,6 +740,13 @@ bool Renderer::loadTileset(const std::string& tilesetUrl,
     if (!tileset->load(tilesetUrl, options)) {
         setLastError("loadTileset: " + tileset->lastError());
         return false;
+    }
+    // P32: the old tileset's content is released by the replacement below;
+    // fire tileUnload for its loaded tiles first (synchronously, on the
+    // render thread). Only on success — a failed load leaves the old
+    // tileset untouched, so no unload events.
+    if (s.tileset) {
+        s.tileset->fireTileUnloadEvents();
     }
     s.tileset.reset(); // drop the previous tileset only on success
     s.tileset = std::move(tileset);
@@ -903,6 +918,32 @@ Renderer::TilesetOptions Renderer::currentTilesetOptions() {
     }
 #endif
     return TilesetOptions{};
+}
+
+// P32: register event callbacks. Stored in g_eventCallbacks (survives
+// loadTileset) and forwarded to the live TilesetRenderer when one exists.
+void Renderer::setEventCallbacks(const TilesetEventCallbacks& callbacks) {
+    if (!g_initialized) {
+        return;
+    }
+    g_eventCallbacks = callbacks;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setEventCallbacks(callbacks);
+    }
+#endif
+}
+
+void Renderer::clearEventCallbacks() {
+    if (!g_initialized) {
+        return;
+    }
+    g_eventCallbacks = TilesetEventCallbacks{};
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setEventCallbacks(g_eventCallbacks);
+    }
+#endif
 }
 
 // P26: toggle the default procedural IBL. Cheap: only attaches/detaches the

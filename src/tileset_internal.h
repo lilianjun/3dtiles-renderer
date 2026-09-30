@@ -96,6 +96,17 @@ public:
     // (diagnostic). Default options when no tileset is loaded.
     Renderer::TilesetOptions currentOptions() const;
 
+    // P32: event callbacks (see Renderer::TilesetEventCallbacks). Stored per
+    // TilesetRenderer; Renderer::setEventCallbacks forwards to the live one.
+    // Must be called on the render thread.
+    void setEventCallbacks(const Renderer::TilesetEventCallbacks& callbacks);
+
+    // P32: synchronously fire onTileUnload for every tile whose content is
+    // currently loaded (last observed state Done). Called by
+    // Renderer::loadTileset before a successful load replaces this
+    // TilesetRenderer. Must be called on the render thread.
+    void fireTileUnloadEvents();
+
 private:
     struct Impl;
     std::unique_ptr<Impl> _impl;

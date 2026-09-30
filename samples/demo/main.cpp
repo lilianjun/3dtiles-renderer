@@ -54,6 +54,8 @@ struct DemoArgs {
                             // loading settle; not dumped, not counted)
     bool stats = false;     // P17: print per-frame TileStats to stdout
     bool printSelected = false; // P20: print per-frame selected tile IDs
+    bool eventLog = false;  // P32: stream tileset events as [event] lines
+    int clearEventsAtFrame = -1; // P32: clearEventCallbacks() before frame N
     bool noIbl = false;     // P26: disable the default image-based lighting
                             // (renders with the P3 directional sun only)
     // P18: weak-network test hooks (dev/test only, not for production use).
@@ -151,6 +153,14 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             out.stats = true;
         } else if (arg == "--print-selected") {
             out.printSelected = true;
+        } else if (arg == "--event-log") {
+            // P32: stream tileset events as [event] lines.
+            out.eventLog = true;
+        } else if (arg == "--clear-events-at-frame") {
+            // P32: clearEventCallbacks() before frame N (test hook).
+            std::string v;
+            if (!needValue("--clear-events-at-frame", v)) return false;
+            out.clearEventsAtFrame = std::stoi(v);
         } else if (arg == "--no-ibl") {
             out.noIbl = true;
         } else if (arg == "--until-loaded") {
@@ -233,7 +243,8 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
                          "[--screenshot out.png] [--tileset path-or-url] "
                          "[--no-tileset] [--trajectory keys.csv] "
                          "[--frame-dir dir] [--warmup N] [--stats] "
-                         "[--print-selected] "
+                         "[--print-selected] [--event-log] "
+                         "[--clear-events-at-frame N] "
                          "[--until-loaded N] [--exit-on-loading] "
                          "[--zoom-out-on-loading] [--cache-budget BYTES] "
                          "[--print-rss] "
@@ -413,6 +424,38 @@ int main(int argc, char** argv) {
                     std::cout << "[preset-sse] value=" << args.presetSse
                               << std::endl;
                 }
+                // P32: stream tileset events as [event] lines (test hook).
+                if (args.eventLog) {
+                    tiles_renderer::Renderer::TilesetEventCallbacks cb;
+                    cb.onTileLoad = [](const auto& info) {
+                        std::cout << "[event] tileLoad id=" << info.tileId
+                                  << std::endl;
+                    };
+                    cb.onTileUnload = [](const auto& info) {
+                        std::cout << "[event] tileUnload id=" << info.tileId
+                                  << std::endl;
+                    };
+                    cb.onTileFailed = [](const auto& info) {
+                        std::cout << "[event] tileFailed id=" << info.tileId
+                                  << " message=" << info.message << std::endl;
+                    };
+                    cb.onTileVisible = [](const auto& info) {
+                        std::cout << "[event] tileVisible id=" << info.tileId
+                                  << std::endl;
+                    };
+                    cb.onAllTilesLoaded = []() {
+                        std::cout << "[event] allTilesLoaded" << std::endl;
+                    };
+                    cb.onLoadProgress = [](std::int64_t pending,
+                                           std::int64_t processing) {
+                        std::cout << "[event] loadProgress pending=" << pending
+                                  << " processing=" << processing << std::endl;
+                    };
+                    cb.onInitialTilesLoaded = []() {
+                        std::cout << "[event] initialTilesLoaded" << std::endl;
+                    };
+                    tiles_renderer::Renderer::setEventCallbacks(cb);
+                }
                 const bool useOptions = args.maxSseSet ||
                                         args.noFrustumCulling ||
                                         args.ellipsoidSet;
@@ -552,6 +595,8 @@ int main(int argc, char** argv) {
         // settles before the recorded trajectory starts. Not dumped, not
         // counted toward the trajectory frame index.
         int rendered = 0;
+        // P32: one-shot guard for --switch-at-frame (see the switch site).
+        std::vector<char> switchFired(args.switchTilesets.size(), 0);
         if (trajectoryMode && args.warmup > 0) {
             const auto pose = player->at(0);
             tiles_renderer::Renderer::setOrbitCamera(
@@ -606,8 +651,13 @@ int main(int argc, char** argv) {
             // P22: mid-run tileset switch. Fires before the frame's render
             // so frame N is the first frame of the new tileset. Failures are
             // logged, never fatal (the SDK keeps the old tileset).
+            // One-shot: `rendered` only advances on a successful
+            // renderFrame(), so without this a failed frame would re-fire
+            // the same switch (P32: this caused duplicate tileUnload
+            // events).
             for (size_t s = 0; s < args.switchTilesets.size(); ++s) {
-                if (args.switchAtFrames[s] == rendered) {
+                if (!switchFired[s] && args.switchAtFrames[s] == rendered) {
+                    switchFired[s] = true;
                     const bool ok = tiles_renderer::Renderer::loadTileset(
                         args.switchTilesets[s]);
                     std::cout << "[switch] frame=" << rendered
@@ -627,6 +677,11 @@ int main(int argc, char** argv) {
                     std::cout << "[set-sse] frame=" << rendered
                               << " value=" << sse << std::endl;
                 }
+            }
+            // P32: drop all event callbacks before frame N (test hook).
+            if (args.clearEventsAtFrame == rendered) {
+                tiles_renderer::Renderer::clearEventCallbacks();
+                std::cout << "[clear-events] frame=" << rendered << std::endl;
             }
             if (tiles_renderer::Renderer::renderFrame()) {
                 if (!args.frameDir.empty() && !dumpFramePng(rendered)) {

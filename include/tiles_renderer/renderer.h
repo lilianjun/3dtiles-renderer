@@ -6,6 +6,7 @@
 // plus the surface size, and the SDK owns rendering from there.
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -130,6 +131,61 @@ public:
     // (diagnostic; e.g. verifying what a host passed). Default options when
     // no tileset is loaded.
     static TilesetOptions currentTilesetOptions();
+
+    // P32: payload for per-tile events. tileId uses the same string form as
+    // selectedTileIds(). url is the tile content URL when the tile's ID
+    // carries one (external tileset references), otherwise empty.
+    struct TileEventInfo {
+        std::string tileId;
+        std::string url;
+    };
+
+    // P32: payload for onTileFailed. tileId/url as in TileEventInfo; message
+    // is the failure reason ("tile content failed to load" for per-tile
+    // content failures, since cesium-native does not surface the underlying
+    // error text on the Tile; the tileset.json loader's message otherwise).
+    struct TileFailedInfo {
+        std::string tileId;
+        std::string url;
+        std::string message;
+    };
+
+    // P32: cesium.js-style tileset event callbacks (7 events). All callbacks
+    // are invoked on the render thread, inside renderFrame(), in a
+    // deterministic order per frame:
+    //   tileLoad/tileUnload/tileFailed (state transitions), tileVisible
+    //   (render selection), loadProgress (when pending/processing counts
+    //   change), allTilesLoaded (every frame the view is fully loaded),
+    //   initialTilesLoaded (once per loadTileset).
+    // Timing notes (honest differences from cesium.js):
+    // - tileLoad fires when a tile's content becomes renderable (state ->
+    //   Done), not during traversal; tileUnload when its content is released.
+    // - A loadTileset() that replaces a loaded tileset fires tileUnload for
+    //   the old tileset's loaded tiles synchronously inside loadTileset().
+    // - Callbacks registered via setEventCallbacks() persist across
+    //   loadTileset() calls until clearEventCallbacks().
+    // - Do NOT call mutating Renderer APIs (loadTileset, set*, shutdown)
+    //   from inside a callback; query APIs (tileStats, selectedTileIds,
+    //   maximumScreenSpaceError) are safe.
+    struct TilesetEventCallbacks {
+        std::function<void(const TileEventInfo&)> onTileLoad;
+        std::function<void(const TileEventInfo&)> onTileUnload;
+        std::function<void(const TileFailedInfo&)> onTileFailed;
+        std::function<void(const TileEventInfo&)> onTileVisible;
+        std::function<void()> onAllTilesLoaded;
+        std::function<void(std::int64_t pendingRequests,
+                           std::int64_t tilesProcessing)>
+            onLoadProgress;
+        std::function<void()> onInitialTilesLoaded;
+    };
+
+    // P32: register event callbacks (applies to the next loadTileset() when
+    // called before any tileset is loaded, and live when one is). Must be
+    // called on the render thread.
+    static void setEventCallbacks(const TilesetEventCallbacks& callbacks);
+
+    // P32: remove all event callbacks. Must be called on the render thread.
+    static void clearEventCallbacks();
 
     // P3: orbit camera used for tile selection and the Filament view.
     // Only takes effect while a tileset is loaded; otherwise the P2 fixed
