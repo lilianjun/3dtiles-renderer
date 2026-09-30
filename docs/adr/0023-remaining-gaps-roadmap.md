@@ -36,6 +36,14 @@ explicitly out of scope.
   hardware access, not engineering.
 - **Why P0:** the SDK's entire value proposition is cross-platform; an
   unrendered platform is an untested promise.
+- **Plan (2026-09-30, user-approved):** Android goes first. Build a minimal
+  on-device smoke harness (`samples/android-smoke`: init Renderer on the
+  ANativeWindow, load the p3 fixture, screenshot, hash-compare) and run it
+  on li's paired Redmi K70 Ultra when it comes online. A goal-owned watcher
+  cron (`android-smoke-on-device-online`, every 15m) polls `device.list`;
+  the first online hit builds the harness, installs the APK, runs the test,
+  reports to the user, then disables itself. iOS/Windows real-device runs
+  remain open (need hardware).
 
 ### G2. Corrupt cmpt can SIGSEGV the host (upstream #1457, open, 0 comments)
 
