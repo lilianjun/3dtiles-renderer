@@ -149,10 +149,12 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
   `far` tileset 验证：rebase 后与 `near` 的橙色质心偏差 ≤ 25 px。
   （这是通用 local-origin rebase，不是严格旋转 ENU 基；详见 ADR-0005。）
 
-> **边界（诚实说明）**：i3dm 见 P7（ADR-0008）；pnts 见 P8（ADR-0009）；
-> cmpt 见 P9（ADR-0010）；3D Tiles 1.1 见 P10（ADR-0011）；
-> 代理/证书走系统默认；rebase 不是完整 ENU 姿态变换。
-> 详见 ADR-0005、ADR-0008、ADR-0009、ADR-0010、ADR-0011。
+> **边界（诚实说明）**：i3dm 见 P7（ADR-0008），GPU instancing 经 P27
+> 调研确认为边界（ADR-0026：Filament v1.77 ubershader 无 instancing
+> shader 支持、gltfio 无 hook，CPU 展开保持为正确性路径）；pnts 见
+> P8（ADR-0009）；cmpt 见 P9（ADR-0010）；3D Tiles 1.1 见 P10
+> （ADR-0011）；代理/证书走系统默认；rebase 不是完整 ENU 姿态变换。
+> 详见 ADR-0005、ADR-0008、ADR-0009、ADR-0010、ADR-0011、ADR-0026。
 
 ### P6：内存与资源健壮性（见 ADR-0007）
 

@@ -9,6 +9,15 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- P27: i3dm GPU instancing investigated, boundary stands (ADR-0026).
+  No code change: Filament v1.77's `InstanceBuffer` needs shader-side
+  cooperation (`instanced=true` + `getInstanceIndex()`), which the
+  precompiled gltfio ubershader lacks, and gltfio exposes no hook to
+  attach instance buffers to its renderables; the engine's automatic
+  instancing (`instanceify`) is material-agnostic but opportunistic
+  (sort-order dependent, no one-draw-per-mesh guarantee) and a global
+  flag with no measurable benefit on Mesa. The P7 CPU expansion stays
+  the correctness path; revisit conditions documented in ADR-0026.
 - P26: image-based lighting (IBL), on by default (ADR-0025). A Filament
   `IndirectLight` driven by a small procedural environment generated
   deterministically at initialize(): 64x64x6 RGBA8 cubemap (analytic

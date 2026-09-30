@@ -96,8 +96,20 @@ explicitly out of scope.
 
 - **State:** `EXT_mesh_gpu_instancing` is expanded to plain glTF nodes
   at load (ADR-0008) — N draw calls. Correct pixels, poor scaling.
-- **Takes:** Filament-side instanced rendering path (gltfio v1.77 only
-  *parses* the extension) or a custom instancing bridge.
+  P27 investigated replacing it with GPU instancing and concluded it
+  is a **documented boundary** (ADR-0026): Filament v1.77's
+  `InstanceBuffer` requires shader cooperation (`instanced=true` +
+  `getInstanceIndex()`), which the precompiled gltfio ubershader does
+  not have, and gltfio exposes no hook to attach instance buffers to
+  its renderables; the engine's automatic instancing (`instanceify`)
+  is material-agnostic but opportunistic (sort-order dependent, cannot
+  promise one draw per mesh) and a global flag with no measurable
+  benefit on Mesa.
+- **Takes:** a Filament version whose gltfio executes
+  `EXT_mesh_gpu_instancing` natively (or exposes a Builder/post-build
+  hook), or a measured perf reason on real hardware to enable
+  `setAutomaticInstancingEnabled(true)` (see ADR-0026 for the
+  revisit conditions).
 - **Why P1:** performance, which we cannot even measure on Mesa
   software rendering — so this stays P1 until G1 gives us a device to
   measure on. Doing it blind risks optimizing the wrong thing.
