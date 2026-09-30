@@ -103,19 +103,19 @@ explicitly out of scope.
 
 ## P1 — worth doing
 
-### G3. KTX2 / BasisU textures not wired
+### G3. KTX2 / BasisU textures — ✅ wired (P25, ADR-0024)
 
-- **State:** the render bridge registers texture providers only for
-  `image/png` and `image/jpeg` (`src/tileset.cpp`, P15). A glTF using
-  `KHR_texture_basisu` / `image/ktx2` gets gltfio's "Missing texture
-  provider" warning and renders **black** — same silent-black failure
-  mode P15 fixed for PNG/JPEG.
-- **Takes:** a KTX2/BasisU transcoder (e.g. basisu native library)
-  integrated per platform + `addTextureProvider("image/ktx2", …)` +
-  pixel-verified fixture. Non-trivial dependency work on 4 toolchains.
-- **Why P1:** KTX2 is the standard compressed texture format for glTF;
-  real-world tilesets use it. Not P0 because uncompressed PNG/JPEG
-  tilesets (the common case for our fixtures) work.
+- **State:** closed 2026-09-29. The P24-era premise ("only PNG/JPEG
+  providers registered") was fixed by P25: cesium builds (Linux) use an
+  internal provider (`src/ktx2_libktx_provider.cpp`) that decodes via
+  cesium's own libktx to RGBA32 — exactly one `basist::` copy per
+  binary, avoiding the heap-corruption symbol collision between
+  cesium's libktx and Filament's basis_transcoder (verified by link
+  experiment, see ADR-0024). Non-cesium platforms (Win/Android/iOS) use
+  Filament's `createKtx2Provider`. Pixel-verified: UASTC fixture renders
+  bit-identical to its PNG twin; corrupt KTX2 fails gracefully.
+- **Remaining honest boundary:** transcodes to RGBA32, not GPU block
+  compression (BasisU VRAM advantage is future work).
 
 ### G4. TreeTraversalState pinning defeats `maximumCachedBytes` on shallow-wide trees
 
@@ -132,15 +132,18 @@ explicitly out of scope.
   tilesets; but deep/realistic trees evict correctly, so impact is
   bounded.
 
-### G5. No IBL (image-based lighting)
+### G5. IBL (image-based lighting) — ✅ done (P26)
 
-- **State:** PBR verified against a single directional light (P15);
-  metals show only the sun's specular lobe and otherwise go dark.
-  Honest look, documented — but not product-grade visuals.
-- **Takes:** an environment map / IBL probe pipeline + **re-freeze of
-  all golden screenshots** (every golden changes).
-- **Why P1:** visual quality, not correctness. Gated behind a deliberate
-  product decision because it invalidates the golden baseline.
+- **State:** closed 2026-09-30. `Renderer::initialize()` now builds a
+  deterministic procedural 6x64x64 RGBA8 cubemap (analytic sky gradient
+  + sun toward the P3 sun direction) plus a 3-band spherical-harmonics
+  fit of the same function (Fibonacci 2048 samples) as the
+  IndirectLight; GPU generates mipmaps. Zero new dependencies, zero
+  binary blobs. Public API added exactly one method,
+  `Renderer::setIblEnabled(bool)` (default on); demo flag `--no-ibl`
+  for A/B. Measured: metallic=1 box mean 5.6 → 55.2 (~10x). All golden
+  baselines re-frozen (default lighting changed); ctest 26/26,
+  sanitizer_ibl clean, SDK zero SDL.
 
 ### G6. i3dm is CPU-expanded, not GPU instancing
 
