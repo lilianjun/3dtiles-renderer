@@ -71,6 +71,11 @@ struct DemoArgs {
     // 0 = disabled. Requires a loaded tileset and a --screenshot target.
     int settleBeforeScreenshot = 0;
     bool exitOnLoading = false;
+    // On-device smoke banner (mirrors samples/android-smoke): at the end of
+    // the run print a concise SMOKE PASS/FAIL verdict with tile counters and
+    // set the exit code accordingly. Intended for real-device runs where a
+    // human reads the console (e.g. Windows on li's PC).
+    bool smoke = false;
     // P18: on the first frame with any tile load in flight, push the camera
     // far out (deselecting child tiles) and keep rendering. Exercises
     // request cancellation/drain for tiles that fall out of selection.
@@ -137,6 +142,8 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
         } else if (arg == "--settle-before-screenshot") {
             if (!needValue("--settle-before-screenshot", value)) return false;
             out.settleBeforeScreenshot = std::stoi(value);
+        } else if (arg == "--smoke") {
+            out.smoke = true;
         } else if (arg == "--exit-on-loading") {
             out.exitOnLoading = true;
         } else if (arg == "--zoom-out-on-loading") {
@@ -169,7 +176,7 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
                          "[--until-loaded N] [--exit-on-loading] "
                          "[--zoom-out-on-loading] [--cache-budget BYTES] "
                          "[--print-rss] "
-                         "[--settle-before-screenshot N] "
+                         "[--settle-before-screenshot N] [--smoke] "
                          "[--switch-tileset PATH --switch-at-frame N]... "
                          "[--no-ibl]"
                       << std::endl;
@@ -656,6 +663,26 @@ int main(int argc, char** argv) {
             } else {
                 std::cout << "[demo] screenshot: " << args.screenshot << " ("
                           << sw << "x" << sh << ")" << std::endl;
+            }
+        }
+        if (args.smoke) {
+            // On-device smoke verdict (mirrors samples/android-smoke).
+            // Runs before shutdown() while tile stats are still valid.
+            const auto fst = tiles_renderer::Renderer::tileStats();
+            const int renderedTiles =
+                tilesetLoaded ? static_cast<int>(
+                                    tiles_renderer::Renderer::renderedTileCount())
+                              : 0;
+            const bool pass = tilesetLoaded && rendered > 0 &&
+                              renderedTiles > 0 && fst.tilesFailed == 0 &&
+                              (args.untilLoaded == 0 || settled);
+            std::cout << (pass ? "SMOKE PASS" : "SMOKE FAIL") << "\n"
+                      << "tiles: loaded=" << fst.tilesLoaded
+                      << " failed=" << fst.tilesFailed
+                      << " rendered=" << renderedTiles << "\n"
+                      << "frames=" << rendered << std::endl;
+            if (!pass) {
+                exitCode = 1;
             }
         }
         if (args.printRss) {

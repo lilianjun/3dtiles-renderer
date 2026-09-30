@@ -102,7 +102,7 @@ jobs:
 
   # -------------------------------------------------------------- windows
   windows:
-    name: Windows (MSVC + Filament)
+    name: Windows (MSVC)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -112,9 +112,23 @@ jobs:
         # No -G: the preset leaves the generator unset so CMake picks the
         # newest installed Visual Studio (MinGW cannot link Filament's
         # MSVC-built .lib files).
-        run: cmake --preset windows -DTILES_WITH_FILAMENT=ON
+        # TILES_WITH_CESIUM_NATIVE=ON: without it the SDK builds as a stub
+        # (the same packaging bug the first android-smoke APK shipped).
+        # TILES_WITH_SDL3=ON builds tiles_demo, which doubles as the
+        # on-device smoke harness (tiles_demo --smoke).
+        run: cmake --preset windows -DTILES_WITH_FILAMENT=ON -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_SDL3=ON
       - name: Build
         run: cmake --build --preset windows --config Release
+      - name: Upload smoke package
+        # tiles_demo.exe + the p3 fixture it was post-build-copied next to.
+        # li runs this on his real Windows PC:
+        #   tiles_demo.exe --tileset p3_box_tileset --until-loaded 600 --smoke
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smoke
+          path: |
+            build/windows/Release/tiles_demo.exe
+            build/windows/Release/p3_box_tileset
 
   # -------------------------------------------------------------- android
   android:

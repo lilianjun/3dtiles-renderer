@@ -64,6 +64,16 @@ explicitly out of scope.
     (vcpkg-built spdlog/curl need API 28+ libc symbols; ANDROID_PLATFORM
     and app minSdk raised 24 → 28, commit d8e3089). G1 is now
     **partially closed (Android only)**.
+  - **Windows (2026-09-30, in progress):** li approved a real-device run
+    on his Windows PC; iOS is deferred (no iPhone available). The desktop
+    `tiles_demo` doubles as the harness: new `--smoke` flag prints a
+    `SMOKE PASS/FAIL` banner with tile counters (same format as the
+    Android app) and sets the exit code. CI's windows job now configures
+    with `-DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_SDL3=ON` (previously
+    it built a stub SDK with no demo at all) and uploads `tiles_demo.exe`
+    + the p3 fixture as the `windows-smoke` artifact. li downloads, runs
+    `tiles_demo.exe --tileset p3_box_tileset --until-loaded 600 --smoke`,
+    and sends back the console output.
 
 ### G2. Corrupt cmpt can SIGSEGV the host (upstream #1457, open, 0 comments)
 

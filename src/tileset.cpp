@@ -68,6 +68,7 @@
 #include <cstring>
 #include <iterator>
 
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -1176,6 +1177,17 @@ struct TilesetRenderer::Impl {
             std::ifstream probe(localPath, std::ios::binary);
             if (!probe) {
                 lastError = "file not found: " + urlOrPath;
+                std::cerr << "[tiles_renderer] loadTileset: " << lastError
+                          << std::endl;
+                return false;
+            }
+            // ifstream opens directories successfully on POSIX; reading one
+            // as a tileset crashes downstream in the asset pipeline. Fail
+            // fast instead (same class of bug as P23's corrupt-tileset
+            // fail-fast).
+            std::error_code ec;
+            if (!std::filesystem::is_regular_file(localPath, ec) || ec) {
+                lastError = "not a file: " + urlOrPath;
                 std::cerr << "[tiles_renderer] loadTileset: " << lastError
                           << std::endl;
                 return false;
