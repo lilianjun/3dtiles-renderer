@@ -50,6 +50,10 @@ public:
     // itself is async internally; update() pumps it).
     bool load(const std::string& urlOrPath);
 
+    // P31: load with explicit options (see Renderer::TilesetOptions).
+    bool load(const std::string& urlOrPath,
+              const Renderer::TilesetOptions& options);
+
     // P12: why the last load() failed (empty when it succeeded).
     std::string lastError() const;
 
@@ -77,6 +81,20 @@ public:
     // Tileset::getOptions()); values <= 0 restore the cesium-native default
     // (512MB). Must be called on the render thread.
     void setMaxCachedBytes(std::int64_t bytes);
+
+    // P31: live LOD screen-space error budget. Stashed for the next load()
+    // and forwarded to a loaded tileset via Tileset::getOptions() (takes
+    // effect on the next frame; no reload needed). Values < 0 restore the
+    // default of 16. Must be called on the render thread.
+    void setMaximumScreenSpaceError(double sse);
+
+    // P31: effective maximumScreenSpaceError (live tileset's value, else the
+    // pending setMaximumScreenSpaceError() value, else the default 16).
+    double maximumScreenSpaceError() const;
+
+    // P31: options the currently loaded tileset was constructed with
+    // (diagnostic). Default options when no tileset is loaded.
+    Renderer::TilesetOptions currentOptions() const;
 
 private:
     struct Impl;

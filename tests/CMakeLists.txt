@@ -63,6 +63,24 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
   endif()
 endif()
 
+# P31: tileset load options + live maximumScreenSpaceError (cesium.js
+# alignment). Behavioral: SSE changes tile selection both at construction
+# and live mid-run; passthrough: all 11 TilesetOptions fields dumped and
+# asserted.
+if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME tileset_options
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_options_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
+    set_tests_properties(tileset_options PROPERTIES TIMEOUT 900)
+  else()
+    message(WARNING "[P31] Python3 not found — tileset_options test skipped")
+  endif()
+endif()
+
 # P5: fill the three P3 gaps, each with its own headless pixel assertion.
 if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   find_package(Python3 COMPONENTS Interpreter)

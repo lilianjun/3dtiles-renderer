@@ -19,6 +19,7 @@
 #include <Cesium3DTilesSelection/TilesetExternals.h>
 #include <Cesium3DTilesSelection/TilesetOptions.h>
 #include <Cesium3DTilesSelection/ViewState.h>
+#include <CesiumGeospatial/Ellipsoid.h> // P31: TilesetOptions.ellipsoid
 #include <Cesium3DTilesContent/registerAllTileContentTypes.h>
 #include <CesiumAsync/AsyncSystem.h>
 #include <CesiumAsync/IAssetAccessor.h>
@@ -1163,8 +1164,60 @@ struct TilesetRenderer::Impl {
     // and live-mutated afterwards. -1 = cesium-native default (512MB).
     std::int64_t maxCachedBytes = -1;
 
+    // P31: pending live SSE override from setMaximumScreenSpaceError();
+    // applied at construction. hasPendingMaxSse tracks "explicitly set"
+    // (a negative stash means "restore default", not "unset"); the stashed
+    // value is already normalized (>= 0) at stash time.
+    double pendingMaxSse = 16.0;
+    bool hasPendingMaxSse = false;
+
+    // P31: options the live tileset was constructed with (diagnostic).
+    Renderer::TilesetOptions appliedOptions;
+
     bool loadTileset(const std::string& urlOrPath) {
+        return loadTileset(urlOrPath, Renderer::TilesetOptions{});
+    }
+
+    bool loadTileset(const std::string& urlOrPath,
+                     const Renderer::TilesetOptions& sdkOptions) {
         lastError.clear();
+        // P31: validate/normalize the SDK options before touching the
+        // filesystem or network. Invalid values fail fast (the live
+        // tileset, if any, is untouched — same as any other failed load).
+        Renderer::TilesetOptions eff = sdkOptions;
+        {
+            // Negative (or NaN) SSE restores the default 16 — same
+            // semantics as the live setMaximumScreenSpaceError().
+            if (!(eff.maximumScreenSpaceError >= 0.0)) {
+                eff.maximumScreenSpaceError = 16.0;
+            }
+            // 0 simultaneous loads would make cesium-native's load pump
+            // exit early forever (no tile ever loads); 0 is meaningless,
+            // so restore the default.
+            if (eff.maximumSimultaneousTileLoads == 0) {
+                eff.maximumSimultaneousTileLoads = 20;
+            }
+            if (eff.loadingDescendantLimit == 0) {
+                eff.loadingDescendantLimit = 20;
+            }
+            // lodTransitionLength feeds a division (deltaTime / length);
+            // non-positive or NaN is meaningless.
+            if (!(eff.lodTransitionLength > 0.0f)) {
+                eff.lodTransitionLength = 1.0f;
+            }
+            // The ellipsoid feeds real transforms; silently replacing a
+            // user's bogus radii with WGS84 would be dishonest, so fail.
+            for (int i = 0; i < 3; ++i) {
+                const double r = eff.ellipsoidRadii[i];
+                if (!(r > 0.0) || !std::isfinite(r)) {
+                    lastError = "invalid ellipsoidRadii: all three radii "
+                                "must be finite and > 0";
+                    std::cerr << "[tiles_renderer] loadTileset: " << lastError
+                              << std::endl;
+                    return false;
+                }
+            }
+        }
         std::string url = urlOrPath;
         std::string localPath;
         if (url.compare(0, 7, "file://") == 0) {
@@ -1244,6 +1297,27 @@ struct TilesetRenderer::Impl {
             std::make_shared<CesiumUtility::CreditSystem>()};
 
         Cesium3DTilesSelection::TilesetOptions options;
+        // P31: map the SDK-level options (cesium.js-aligned subset) onto
+        // cesium-native. A pending setMaximumScreenSpaceError() wins over
+        // the construction value, mirroring the setMaxCachedBytes pattern.
+        // `eff` is the validated/normalized copy from above; the pending
+        // value was normalized at stash time.
+        if (hasPendingMaxSse) {
+            eff.maximumScreenSpaceError = pendingMaxSse;
+        }
+        options.maximumScreenSpaceError = eff.maximumScreenSpaceError;
+        options.forbidHoles = eff.forbidHoles;
+        options.preloadAncestors = eff.preloadAncestors;
+        options.preloadSiblings = eff.preloadSiblings;
+        options.enableFrustumCulling = eff.enableFrustumCulling;
+        options.enableFogCulling = eff.enableFogCulling;
+        options.maximumSimultaneousTileLoads = eff.maximumSimultaneousTileLoads;
+        options.loadingDescendantLimit = eff.loadingDescendantLimit;
+        options.enableLodTransitionPeriod = eff.enableLodTransitionPeriod;
+        options.lodTransitionLength = eff.lodTransitionLength;
+        options.ellipsoid = CesiumGeospatial::Ellipsoid(glm::dvec3(
+            eff.ellipsoidRadii[0], eff.ellipsoidRadii[1],
+            eff.ellipsoidRadii[2]));
         // P19: honor a host-set cache budget (default: cesium-native's
         // 512MB). unloadCachedBytes() reads _options.maximumCachedBytes
         // every update, so this also stays live-mutable via
@@ -1284,6 +1358,8 @@ struct TilesetRenderer::Impl {
         // construction, so retain our own copy too.
         prepareResources = pPrepare;
         tileset = std::move(newTileset);
+        // P31: remember the effective options for currentTilesetOptions().
+        appliedOptions = eff;
         // P5 rebase: pick the tileset's world-space center as the local
         // origin so huge coordinates (e.g. ECEF) survive the float32 render
         // transform. For small local tilesets this is ~(0,0,0) = no-op.
@@ -1490,6 +1566,21 @@ bool TilesetRenderer::load(const std::string& urlOrPath) {
 #endif
 }
 
+// P31: load with explicit options.
+bool TilesetRenderer::load(const std::string& urlOrPath,
+                           const Renderer::TilesetOptions& options) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->loadTileset(urlOrPath, options);
+#else
+    (void)urlOrPath;
+    (void)options;
+    std::cerr << "[tiles_renderer] loadTileset: not available (built without "
+                 "cesium-native + Filament)"
+              << std::endl;
+    return false;
+#endif
+}
+
 std::string TilesetRenderer::lastError() const {
 #if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
     return _impl->lastError;
@@ -1612,6 +1703,45 @@ void TilesetRenderer::setMaxCachedBytes(std::int64_t bytes) {
     }
 #else
     (void)bytes;
+#endif
+}
+
+// P31: live SSE budget. Same stash-then-forward pattern as
+// setMaxCachedBytes: applies to the next load() via pendingMaxSse and to a
+// loaded tileset via Tileset::getOptions() (read every updateViewGroup, so
+// it takes effect on the next frame). Values < 0 (or NaN) restore the
+// default 16 — normalized at stash time so pre-load and live agree.
+void TilesetRenderer::setMaximumScreenSpaceError(double sse) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    const double normalized = sse >= 0.0 ? sse : 16.0;
+    _impl->hasPendingMaxSse = true;
+    _impl->pendingMaxSse = normalized;
+    if (_impl->loaded && _impl->tileset != nullptr) {
+        _impl->tileset->getOptions().maximumScreenSpaceError = normalized;
+        _impl->appliedOptions.maximumScreenSpaceError = normalized;
+    }
+#else
+    (void)sse;
+#endif
+}
+
+double TilesetRenderer::maximumScreenSpaceError() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    if (_impl->loaded && _impl->tileset != nullptr) {
+        return _impl->tileset->getOptions().maximumScreenSpaceError;
+    }
+    if (_impl->hasPendingMaxSse) {
+        return _impl->pendingMaxSse;
+    }
+#endif
+    return 16.0;
+}
+
+Renderer::TilesetOptions TilesetRenderer::currentOptions() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->appliedOptions;
+#else
+    return Renderer::TilesetOptions{};
 #endif
 }
 

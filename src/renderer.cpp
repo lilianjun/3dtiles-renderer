@@ -79,6 +79,14 @@ namespace {
 // with "use of undeclared identifier", P22 CI).
 std::int64_t g_pendingMaxCachedBytes = -1;
 
+// P31: pending live SSE override (setMaximumScreenSpaceError before any
+// tileset is loaded). g_hasPendingMaxSse tracks "explicitly set" so a
+// negative stash (documented as "restore default 16") is not confused
+// with "never set". Same unguarded placement rule as
+// g_pendingMaxCachedBytes above.
+double g_pendingMaxSse = 16.0;
+bool g_hasPendingMaxSse = false;
+
 #ifdef TILES_WITH_FILAMENT
 
 // P2 demo geometry: a single triangle. Static storage so the Filament buffer
@@ -693,6 +701,11 @@ void Renderer::shutdown() {
 }
 
 bool Renderer::loadTileset(const std::string& tilesetUrl) {
+    return loadTileset(tilesetUrl, TilesetOptions{});
+}
+
+bool Renderer::loadTileset(const std::string& tilesetUrl,
+                           const TilesetOptions& options) {
     if (!g_initialized) {
         setLastError("loadTileset: not initialized");
         return false;
@@ -707,12 +720,16 @@ bool Renderer::loadTileset(const std::string& tilesetUrl) {
     auto tileset = std::make_unique<TilesetRenderer>(s.engine, s.scene);
     // P19: apply a budget set before load (no-op when never set).
     tileset->setMaxCachedBytes(g_pendingMaxCachedBytes);
+    // P31: apply a pending live SSE override (no-op when never set).
+    if (g_hasPendingMaxSse) {
+        tileset->setMaximumScreenSpaceError(g_pendingMaxSse);
+    }
     // P22: build-then-commit. The new TilesetRenderer is fully loaded
     // before it replaces the old one, so a failed loadTileset() (bad
     // path, corrupt tileset.json, timeout) leaves the currently-loaded
     // tileset untouched and rendering. The old code reset s.tileset up
     // front, destroying the working tileset even when the new load failed.
-    if (!tileset->load(tilesetUrl)) {
+    if (!tileset->load(tilesetUrl, options)) {
         setLastError("loadTileset: " + tileset->lastError());
         return false;
     }
@@ -847,6 +864,45 @@ void Renderer::setMaxCachedBytes(std::int64_t bytes) {
         g_state.tileset->setMaxCachedBytes(bytes);
     }
 #endif
+}
+
+// P31: live LOD screen-space error budget. Same stash-then-forward pattern
+// as setMaxCachedBytes: applies to the next loadTileset() when no tileset
+// is loaded, and takes effect on the next frame when one is. Values < 0
+// (or NaN) restore the default of 16 — normalized at stash time so the
+// pre-load and live paths agree.
+void Renderer::setMaximumScreenSpaceError(double sse) {
+    if (!g_initialized) {
+        return;
+    }
+    g_hasPendingMaxSse = true;
+    g_pendingMaxSse = sse >= 0.0 ? sse : 16.0;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setMaximumScreenSpaceError(g_pendingMaxSse);
+    }
+#endif
+}
+
+double Renderer::maximumScreenSpaceError() {
+    if (!g_initialized) {
+        return 16.0;
+    }
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        return g_state.tileset->maximumScreenSpaceError();
+    }
+#endif
+    return g_hasPendingMaxSse ? g_pendingMaxSse : 16.0;
+}
+
+Renderer::TilesetOptions Renderer::currentTilesetOptions() {
+#ifdef TILES_WITH_FILAMENT
+    if (g_initialized && g_state.tileset != nullptr) {
+        return g_state.tileset->currentOptions();
+    }
+#endif
+    return TilesetOptions{};
 }
 
 // P26: toggle the default procedural IBL. Cheap: only attaches/detaches the

@@ -8,6 +8,23 @@ A = Android, i = iOS, wasm = WebAssembly.
 
 ## [Unreleased]
 
+### Added
+- P31: cesium.js-aligned tileset options (first tileset-API alignment
+  phase, roadmap `docs/tileset-api-roadmap.md`). New public API:
+  `Renderer::TilesetOptions` (11 fields — maximumScreenSpaceError,
+  forbidHoles, preloadAncestors/Siblings, enableFrustumCulling/FogCulling,
+  maximumSimultaneousTileLoads, loadingDescendantLimit,
+  enableLodTransitionPeriod, lodTransitionLength, ellipsoidRadii),
+  two-arg `loadTileset()` overload, live
+  `setMaximumScreenSpaceError()`/`maximumScreenSpaceError()`/
+  `currentTilesetOptions()`. Validation: negative/NaN SSE → 16, 0 load
+  limits → 20, bad `lodTransitionLength` → 1.0, bogus ellipsoidRadii fail
+  the load (P22-style: live tileset untouched). cesium.js-only traversal
+  policy (skipLOD, dynamic SSE, foveated, progressive resolution)
+  deliberately not replicated. New `tileset_options` test (behavioral:
+  SSE changes the render selection at construction AND live mid-run).
+  ADR-0030.
+
 ### Removed
 - WASM/Emscripten target removed entirely (2026-09-30, li's decision):
   wasm preset, CI job, `TILES_PLATFORM_WASM` code branches (renderer.cpp,

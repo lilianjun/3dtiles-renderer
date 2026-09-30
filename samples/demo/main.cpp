@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <iostream>
 #include <optional>
+#include <sstream> // P31: --ellipsoid-radii parsing
 #include <string>
 #ifdef __linux__
 #include <unistd.h> // P19: sysconf for --print-rss
@@ -84,6 +85,24 @@ struct DemoArgs {
     // prints process RSS (KB) after init and after the last frame.
     std::int64_t cacheBudget = 0;
     bool printRss = false;
+    // P31: tileset load options (cesium.js-aligned subset). maxSse < 0 =
+    // unset unless maxSseSet (SDK default 16); setSseAtFrame applies
+    // setMaximumScreenSpaceError() live before the given rendered frame.
+    // A separate bool (not a sentinel) so a negative --max-sse is passed
+    // through the SDK validation path (negative -> default 16) instead of
+    // being mistaken for "unset".
+    double maxSse = -1.0;
+    bool maxSseSet = false;
+    // P31: call setMaximumScreenSpaceError() once BEFORE loadTileset()
+    // (tests the pre-load stash path). presetSseSet tracks "flag given".
+    double presetSse = 0.0;
+    bool presetSseSet = false;
+    std::vector<std::pair<int, double>> setSseAtFrame;
+    bool noFrustumCulling = false;
+    bool printTilesetOptions = false;
+    // P31: override the reference ellipsoid radii (meters, "a,b,c").
+    double ellipsoidRadii[3] = {0.0, 0.0, 0.0};
+    bool ellipsoidSet = false;
     // P22: mid-run tileset switching (test/dev only). Each --switch-tileset
     // PATH appends a switch; the matching --switch-at-frame N (logical
     // rendered-frame index, same order) fires Renderer::loadTileset(PATH)
@@ -153,6 +172,48 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             out.cacheBudget = std::stoll(value);
         } else if (arg == "--print-rss") {
             out.printRss = true;
+        } else if (arg == "--max-sse") {
+            if (!needValue("--max-sse", value)) return false;
+            out.maxSse = std::stod(value);
+            out.maxSseSet = true;
+        } else if (arg == "--preset-sse") {
+            // P31: setMaximumScreenSpaceError() once BEFORE loadTileset().
+            if (!needValue("--preset-sse", value)) return false;
+            out.presetSse = std::stod(value);
+            out.presetSseSet = true;
+        } else if (arg == "--ellipsoid-radii") {
+            // Format "a,b,c" in meters. Passed straight into
+            // TilesetOptions.ellipsoidRadii (invalid values fail the load).
+            if (!needValue("--ellipsoid-radii", value)) return false;
+            std::stringstream ss(value);
+            std::string part;
+            int i = 0;
+            while (std::getline(ss, part, ',') && i < 3) {
+                out.ellipsoidRadii[i++] = std::stod(part);
+            }
+            if (i != 3) {
+                std::cerr << "[demo] --ellipsoid-radii needs a,b,c"
+                          << std::endl;
+                return false;
+            }
+            out.ellipsoidSet = true;
+        } else if (arg == "--set-sse-at-frame") {
+            // Format N:V — apply setMaximumScreenSpaceError(V) live before
+            // rendered frame N.
+            if (!needValue("--set-sse-at-frame", value)) return false;
+            const auto colon = value.find(':');
+            if (colon == std::string::npos) {
+                std::cerr << "[demo] --set-sse-at-frame needs N:V"
+                          << std::endl;
+                return false;
+            }
+            out.setSseAtFrame.emplace_back(
+                std::stoi(value.substr(0, colon)),
+                std::stod(value.substr(colon + 1)));
+        } else if (arg == "--no-frustum-culling") {
+            out.noFrustumCulling = true;
+        } else if (arg == "--print-tileset-options") {
+            out.printTilesetOptions = true;
         } else if (arg == "--switch-tileset") {
             std::string v;
             if (!needValue("--switch-tileset", v)) return false;
@@ -178,7 +239,10 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
                          "[--print-rss] "
                          "[--settle-before-screenshot N] [--smoke] "
                          "[--switch-tileset PATH --switch-at-frame N]... "
-                         "[--no-ibl]"
+                         "[--no-ibl] [--max-sse N] [--set-sse-at-frame N:V] "
+                         "[--preset-sse N] "
+                         "[--no-frustum-culling] [--print-tileset-options] "
+                         "[--ellipsoid-radii a,b,c]"
                       << std::endl;
             return false;
         } else {
@@ -339,13 +403,70 @@ int main(int argc, char** argv) {
                              "path (pass --tileset explicitly)"
                           << std::endl;
                 exitCode = 1;
-            } else if (!tiles_renderer::Renderer::loadTileset(tilesetPath)) {
-                std::cerr << "[demo] failed to load tileset: " << tilesetPath
-                          << std::endl;
-                exitCode = 1;
             } else {
-                tilesetLoaded = true;
-                std::cout << "[demo] tileset: " << tilesetPath << std::endl;
+                // P31: explicit load options when any P31 flag was given.
+                // --preset-sse fires BEFORE loadTileset to test the
+                // stash-then-forward path (mirrors setMaxCachedBytes).
+                if (args.presetSseSet) {
+                    tiles_renderer::Renderer::setMaximumScreenSpaceError(
+                        args.presetSse);
+                    std::cout << "[preset-sse] value=" << args.presetSse
+                              << std::endl;
+                }
+                const bool useOptions = args.maxSseSet ||
+                                        args.noFrustumCulling ||
+                                        args.ellipsoidSet;
+                bool ok = false;
+                if (useOptions) {
+                    tiles_renderer::Renderer::TilesetOptions opts;
+                    if (args.maxSseSet) {
+                        opts.maximumScreenSpaceError = args.maxSse;
+                    }
+                    opts.enableFrustumCulling = !args.noFrustumCulling;
+                    if (args.ellipsoidSet) {
+                        for (int i = 0; i < 3; ++i) {
+                            opts.ellipsoidRadii[i] = args.ellipsoidRadii[i];
+                        }
+                    }
+                    ok = tiles_renderer::Renderer::loadTileset(tilesetPath,
+                                                               opts);
+                } else {
+                    ok = tiles_renderer::Renderer::loadTileset(tilesetPath);
+                }
+                if (!ok) {
+                    std::cerr << "[demo] failed to load tileset: "
+                              << tilesetPath << std::endl;
+                    exitCode = 1;
+                } else {
+                    tilesetLoaded = true;
+                    std::cout << "[demo] tileset: " << tilesetPath
+                              << std::endl;
+                    if (args.printTilesetOptions) {
+                        const auto co = tiles_renderer::Renderer::
+                            currentTilesetOptions();
+                        std::cout << "[tileset-options]"
+                                  << " maximumScreenSpaceError="
+                                  << co.maximumScreenSpaceError
+                                  << " forbidHoles=" << co.forbidHoles
+                                  << " preloadAncestors=" << co.preloadAncestors
+                                  << " preloadSiblings=" << co.preloadSiblings
+                                  << " enableFrustumCulling="
+                                  << co.enableFrustumCulling
+                                  << " enableFogCulling=" << co.enableFogCulling
+                                  << " maximumSimultaneousTileLoads="
+                                  << co.maximumSimultaneousTileLoads
+                                  << " loadingDescendantLimit="
+                                  << co.loadingDescendantLimit
+                                  << " enableLodTransitionPeriod="
+                                  << co.enableLodTransitionPeriod
+                                  << " lodTransitionLength="
+                                  << co.lodTransitionLength
+                                  << " ellipsoidRadii="
+                                  << co.ellipsoidRadii[0] << ","
+                                  << co.ellipsoidRadii[1] << ","
+                                  << co.ellipsoidRadii[2] << std::endl;
+                    }
+                }
             }
         }
         // P16: trajectory replay (ADR-0014). The player maps a logical frame
@@ -496,6 +617,15 @@ int main(int argc, char** argv) {
                                   << tiles_renderer::Renderer::lastError();
                     }
                     std::cout << std::endl;
+                }
+            }
+            // P31: live SSE change. Fires before the frame's render so frame
+            // N is the first frame under the new budget.
+            for (const auto& [atFrame, sse] : args.setSseAtFrame) {
+                if (atFrame == rendered) {
+                    tiles_renderer::Renderer::setMaximumScreenSpaceError(sse);
+                    std::cout << "[set-sse] frame=" << rendered
+                              << " value=" << sse << std::endl;
                 }
             }
             if (tiles_renderer::Renderer::renderFrame()) {

@@ -64,6 +64,73 @@ public:
     // shutdown() or by loading another one.
     static bool loadTileset(const std::string& tilesetUrl);
 
+    // P31: tileset load options, aligned with the cesium.js Cesium3DTileset
+    // constructor options that have real cesium-native semantics (see
+    // docs/tileset-api-roadmap.md). Only options with a direct mapping are
+    // exposed; cesium.js-only traversal strategies (skipLevelOfDetail,
+    // dynamicScreenSpaceError, foveated*, progressiveResolutionHeightFraction)
+    // are deliberately not replicated.
+    //
+    // Validation at loadTileset(): negative/NaN maximumScreenSpaceError
+    // restores 16; 0 maximumSimultaneousTileLoads / loadingDescendantLimit
+    // restore 20 (0 simultaneous loads would deadlock tile loading);
+    // non-positive/NaN lodTransitionLength restores 1.0. Invalid
+    // ellipsoidRadii (non-finite or <= 0) fail the load with lastError —
+    // they are not silently replaced.
+    struct TilesetOptions {
+        // LOD driver: tiles refine while their screen-space error exceeds
+        // this (pixels). Smaller = finer detail, more tiles. cesium.js
+        // default 16. Live-mutable via setMaximumScreenSpaceError().
+        double maximumScreenSpaceError = 16.0;
+        // Never render with holes: refuse to refine a parent until all its
+        // children are ready. Slower loads, no blank spots while moving.
+        bool forbidHoles = false;
+        // Preload ancestors/siblings of rendered tiles (better zoom-out/pan
+        // at the cost of more tile loads).
+        bool preloadAncestors = true;
+        bool preloadSiblings = true;
+        // Tile culling stages.
+        bool enableFrustumCulling = true;
+        bool enableFogCulling = true;
+        // Tile loading pipeline tuning.
+        std::uint32_t maximumSimultaneousTileLoads = 20;
+        std::uint32_t loadingDescendantLimit = 20;
+        // Smooth LOD transitions (fade between detail levels over
+        // lodTransitionLength seconds). Off by default.
+        bool enableLodTransitionPeriod = false;
+        float lodTransitionLength = 1.0f;
+        // Reference ellipsoid radii in meters (WGS84 default). Only used for
+        // geospatial tilesets.
+        double ellipsoidRadii[3] = {6378137.0, 6378137.0, 6356752.3142451793};
+    };
+
+    // P31: loadTileset with explicit options (see TilesetOptions). The
+    // single-argument overload uses default options. Options apply at
+    // construction; changing them requires reloading (except
+    // maximumScreenSpaceError, which is live-mutable via
+    // setMaximumScreenSpaceError()). Like the plain overload, loading a new
+    // tileset replaces the old one, and a failed load leaves the current
+    // tileset untouched.
+    static bool loadTileset(const std::string& tilesetUrl,
+                            const TilesetOptions& options);
+
+    // P31: change the LOD screen-space error budget live (takes effect on
+    // the next renderFrame; no reload needed). Applies to the next
+    // loadTileset() when called before any tileset is loaded. Values < 0
+    // (or NaN) restore the default of 16. Must be called on the render
+    // thread.
+    static void setMaximumScreenSpaceError(double sse);
+
+    // P31: the effective maximumScreenSpaceError: the live tileset's value
+    // when one is loaded, else a pending setMaximumScreenSpaceError() value,
+    // else the default 16.
+    static double maximumScreenSpaceError();
+
+    // P31: the options the currently loaded tileset was constructed with
+    // (diagnostic; e.g. verifying what a host passed). Default options when
+    // no tileset is loaded.
+    static TilesetOptions currentTilesetOptions();
+
     // P3: orbit camera used for tile selection and the Filament view.
     // Only takes effect while a tileset is loaded; otherwise the P2 fixed
     // camera is kept. yaw/pitch in degrees, distance in the tileset's units.
