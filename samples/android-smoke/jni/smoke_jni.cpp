@@ -127,7 +127,12 @@ void renderThreadMain(std::string filesDir) {
     SMOKE_LOG("surface %dx%d", w, h);
 
     tiles_renderer::RendererConfig cfg;
-    cfg.window = g_window;
+    // tiles_renderer::ANativeWindow is an intentionally opaque forward
+    // declaration (the SDK never includes <android/native_window.h>);
+    // the host casts the real pointer, mirroring the SDK's own
+    // reinterpret_cast<void*> at the swapchain boundary.
+    cfg.window =
+        reinterpret_cast<tiles_renderer::NativeWindowHandle>(g_window);
     cfg.width = static_cast<std::uint32_t>(w > 0 ? w : 0);
     cfg.height = static_cast<std::uint32_t>(h > 0 ? h : 0);
     if (!tiles_renderer::Renderer::initialize(cfg)) {
@@ -200,7 +205,8 @@ void renderThreadMain(std::string filesDir) {
 
     // Machine-readable copy for the report.
     const std::string resultPath = filesDir + "/smoke_result.txt";
-    if (std::ofstream out(resultPath)) {
+    std::ofstream out(resultPath);
+    if (out) {
         out << "result=" << verdict << "\n"
             << "detail=" << detail << "\n"
             << "tilesLoaded=" << tilesLoaded << "\n"
