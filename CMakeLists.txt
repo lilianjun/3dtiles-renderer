@@ -70,6 +70,15 @@ if(TILES_PLATFORM STREQUAL "windows" AND MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif()
 
+# Windows: keep windows.h from #defining min/max macros. Without NOMINMAX,
+# any TU that (transitively) includes both windows.h and a header using
+# std::min/std::max (e.g. filament's utils/bitset.h) fails with
+# C2589 "'(' : illegal token on right side of '::'", plus cascading bogus
+# errors. WIN32_LEAN_AND_MEAN keeps the header light as a bonus.
+if(TILES_PLATFORM STREQUAL "windows")
+  add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
 # ---------------------------------------------------------------------------
 # Dependency switches.
 # P0: OFF by default so configure/build works with zero downloads.
