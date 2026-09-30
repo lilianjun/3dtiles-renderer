@@ -106,7 +106,7 @@
   boundingSphere 与 fixture 已知值对照。
 - 诚实边界：selection/LOD 仍用 authored transform（cesium-native 无 runtime root transform API）。
 
-### P34：缓存 / 统计 / 方法对齐 ✅ 完成（2026-10-01，commit 待填）
+### P34：缓存 / 统计 / 方法对齐 ✅ 完成（2026-10-01，commit `4c6457f`）
 - `totalMemoryUsageInBytes()`（语义：content bytes，非 GPU 估计；与 `bytesLoaded` 同值，头文件注明）。
 - `trimLoadedTiles()`（one-shot：下一帧临时 zero `maximumCachedBytes` 走 public `loadTiles()` 流程卸载，再 RAII 恢复；不碰 internal/private API）。
 - `hasExtension(name)`（`loadTileset` 时缓存 `tileset.json` 的 `extensionsUsed`，精确匹配）。
