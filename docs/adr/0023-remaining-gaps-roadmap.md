@@ -52,6 +52,18 @@ explicitly out of scope.
     `android-smoke-apk` artifact → li downloads, installs, opens the app,
     waits ~30s, screenshots the PASS/FAIL overlay and sends it back.
   - iOS/Windows real-device runs remain open (need hardware).
+  - **Result (2026-09-30): Android PASS on first real-device run.**
+    Redmi K70 Ultra, CI run 36674302583 (`android-smoke-apk`, commit
+    d8e3089): `PASS / tiles: loaded=4 failed=0 rendered=1 /
+    frames=22 settle=323ms`. Renderer initialized on the ANativeWindow,
+    Cesium Native loaded the bundled p3 fixture (4 tiles, 0 failed),
+    Filament rendered actual pixels (box visible in screenshot). Two
+    packaging bugs were caught and fixed along the way: the first APK
+    shipped a stub SDK (android job missed `-DTILES_WITH_CESIUM_NATIVE=ON`,
+    commit b313666) and the first full build failed to link
+    (vcpkg-built spdlog/curl need API 28+ libc symbols; ANDROID_PLATFORM
+    and app minSdk raised 24 → 28, commit d8e3089). G1 is now
+    **partially closed (Android only)**.
 
 ### G2. Corrupt cmpt can SIGSEGV the host (upstream #1457, open, 0 comments)
 
