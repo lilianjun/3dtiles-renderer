@@ -2,11 +2,11 @@ cmake_minimum_required(VERSION 3.21)
 
 # ---------------------------------------------------------------------------
 # Target platform selection.
-# Values: linux | windows | android | ios | wasm
+# Values: linux | windows | android | ios
 # Declared before project() so the cross-toolchain wiring below can read it.
 # ---------------------------------------------------------------------------
 set(TILES_PLATFORM "linux" CACHE STRING "Target platform")
-set_property(CACHE TILES_PLATFORM PROPERTY STRINGS linux windows android ios wasm)
+set_property(CACHE TILES_PLATFORM PROPERTY STRINGS linux windows android ios)
 
 # ---------------------------------------------------------------------------
 # P4: cross-compilation toolchain auto-wiring (must run before project()).
@@ -25,9 +25,6 @@ set(TILES_CROSS_TOOLCHAIN "")
 if(TILES_PLATFORM STREQUAL "android"
     AND CMAKE_TOOLCHAIN_FILE MATCHES "android\\.toolchain\\.cmake")
   set(TILES_CROSS_TOOLCHAIN "android-ndk")
-elseif(TILES_PLATFORM STREQUAL "wasm"
-    AND CMAKE_TOOLCHAIN_FILE MATCHES "Emscripten\\.cmake")
-  set(TILES_CROSS_TOOLCHAIN "emscripten")
 elseif(TILES_PLATFORM STREQUAL "ios" AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
   set(TILES_CROSS_TOOLCHAIN "ios")
 endif()
@@ -45,12 +42,6 @@ if(NOT TILES_CROSS_TOOLCHAIN AND NOT CMAKE_TOOLCHAIN_FILE)
       set(ANDROID_PLATFORM "android-28" CACHE STRING "Android API level")
       set(ANDROID_STL "c++_shared" CACHE STRING "Android STL")
       set(TILES_CROSS_TOOLCHAIN "android-ndk")
-    endif()
-  elseif(TILES_PLATFORM STREQUAL "wasm")
-    if(DEFINED ENV{EMSDK}
-        AND EXISTS "$ENV{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")
-      set(CMAKE_TOOLCHAIN_FILE "$ENV{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")
-      set(TILES_CROSS_TOOLCHAIN "emscripten")
     endif()
   elseif(TILES_PLATFORM STREQUAL "ios" AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
     # Real iOS cross build on macOS hosts (CI). Xcode clang handles
@@ -175,14 +166,6 @@ elseif(TILES_PLATFORM STREQUAL "ios")
       "[P0] iOS builds require macOS + Xcode — this host cannot produce an iOS binary.\n"
       "      Configure continues as a HOST STUB build.")
   endif()
-elseif(TILES_PLATFORM STREQUAL "wasm")
-  if(TILES_CROSS_TOOLCHAIN STREQUAL "emscripten")
-    message(STATUS "[P4] Emscripten toolchain wired: $ENV{EMSDK}")
-  else()
-    message(WARNING
-      "[P0] EMSDK not set or Emscripten.cmake not found — install & activate the Emscripten SDK for a real WASM build.\n"
-      "      Configure continues as a HOST STUB build.")
-  endif()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -253,8 +236,8 @@ if(TILES_WITH_CESIUM_NATIVE)
   # glm only reaches us transitively via cesium-native's glm::glm (through
   # CesiumUtility PUBLIC). That propagation proved unreliable: the vcpkg
   # include dir lands on our compile line on Linux, but was missing on
-  # Windows/Android/iOS/WASM CI (C1083 / 'glm/gtc/matrix_transform.hpp'
-  # file not found), breaking all four. Resolve the headers explicitly from
+  # Windows/Android/iOS CI (C1083 / 'glm/gtc/matrix_transform.hpp'
+  # file not found), breaking all three. Resolve the headers explicitly from
   # cesium-native's vcpkg tree instead of relying on the transitive link.
   # PRIVATE: our public headers never mention glm.
   if(NOT TILES_GLM_INCLUDE_DIR)
@@ -293,9 +276,9 @@ endif()
 # --- Filament: rendering. Goes into the SDK. ---
 # Filament is very expensive to build from source, so we consume the
 # official prebuilt binaries for the pinned release (per-platform archives).
-# P4 wires linux / android / windows / ios. wasm has no C++ release (the
-# official web package is filament.js only), so Filament stays off there
-# and the SDK builds as a stub — see docs/adr/0006-platform-backends.md.
+# P4 wires linux / android / windows / ios (no Web target — the Emscripten
+# stub was removed 2026-09-30; a future web renderer will be a separate JS
+# project on filament.js, see ADR-0023 G9).
 if(TILES_WITH_FILAMENT)
   set(TILES_FILAMENT_VERSION "1.77.0")
   set(_filament_base_url
@@ -371,8 +354,6 @@ if(TILES_WITH_FILAMENT)
           "-framework QuartzCore" "-framework IOKit" "-framework CFNetwork"
           "-framework OpenGLES")
     endif()
-  elseif(TILES_PLATFORM STREQUAL "wasm")
-    message(STATUS "[P4] No C++ Filament release for Web (official web package is filament.js only) — Filament disabled on wasm (stub SDK). See docs/adr/0006-platform-backends.md.")
   endif()
 
   if(_filament_pkg)

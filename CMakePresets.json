@@ -21,10 +21,6 @@
       "name": "ios"
     },
     {
-      "configurePreset": "wasm",
-      "name": "wasm"
-    },
-    {
       "configurePreset": "windows-mingw",
       "name": "windows-mingw"
     }
@@ -95,18 +91,6 @@
       "displayName": "iOS (Xcode cross)",
       "generator": "Unix Makefiles",
       "name": "ios"
-    },
-    {
-      "binaryDir": "${sourceDir}/build/wasm",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "TILES_PLATFORM": "wasm",
-        "BUILD_TESTING": false
-      },
-      "description": "Auto-wires the Emscripten toolchain from EMSDK when present (P4); otherwise configures as a host stub with a warning (P0 policy).",
-      "displayName": "WebAssembly (Emscripten)",
-      "generator": "Unix Makefiles",
-      "name": "wasm"
     },
     {
       "binaryDir": "${sourceDir}/build/windows-mingw",

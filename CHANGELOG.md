@@ -8,6 +8,16 @@ A = Android, i = iOS, wasm = WebAssembly.
 
 ## [Unreleased]
 
+### Removed
+- WASM/Emscripten target removed entirely (2026-09-30, li's decision):
+  wasm preset, CI job, `TILES_PLATFORM_WASM` code branches (renderer.cpp,
+  renderer.h, demo main.cpp), and README/integration-doc references deleted.
+  Rationale: a compile-only stub is not WASM support, and keeping it green
+  masked that fact; official Filament Web ships only filament.js (no
+  linkable C++ library, ADR-0006). Future web renderer will be a separate
+  JS project (JS loading/parsing + filament.js rendering), re-evaluated
+  after the C++ SDK is complete (ADR-0023 G9).
+
 ### Fixed
 - P30: settle-gated screenshots — kills the fixed-frame screenshot race
   behind the P26/P27/P28 flakes (`golden_regression` p7_i3dm,

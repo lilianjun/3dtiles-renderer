@@ -225,8 +225,6 @@ tiles_renderer::NativeWindowHandle nativeHandle(SDL_Window* window) {
 #elif defined(SDL_PLATFORM_IOS)
     return static_cast<tiles_renderer::NativeWindowHandle>(
         SDL_GetPointerProperty(props, SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, nullptr));
-#elif defined(SDL_PLATFORM_EMSCRIPTEN)
-    return "#canvas";
 #else
     // Linux/macOS desktop: prefer Wayland surface, fall back to X11 window.
     // Filament's createSwapChain consumes these as void*.

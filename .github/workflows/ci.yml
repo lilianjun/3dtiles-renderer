@@ -17,8 +17,9 @@ concurrency:
 # - android: NDK r27d + Filament android prebuilt + Cesium Native
 #           (SDK + linkcheck .so link + smoke APK with the real renderer)
 # - ios:     macOS host, real iOS arm64 cross compile + Filament xcframework
-# - wasm:    Emscripten cross compile of the SDK (stub: official Filament
-#            v1.77.0 web release ships no C++ libs, see ADR-0006)
+#   (Web: no WASM target — the Emscripten stub was removed 2026-09-30 per
+#   user decision; a future web renderer will be a separate JS project on
+#   filament.js, re-evaluated after the C++ SDK is complete.)
 
 jobs:
   # ---------------------------------------------------------------- linux
@@ -219,18 +220,3 @@ jobs:
         run: cmake --preset ios -DTILES_WITH_FILAMENT=ON
       - name: Build
         run: cmake --build --preset ios -j"$(sysctl -n hw.ncpu)"
-
-  # ---------------------------------------------------------------- wasm
-  wasm:
-    name: WebAssembly (Emscripten SDK stub)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Emscripten
-        uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: 6.0.10
-      - name: Configure
-        run: cmake --preset wasm
-      - name: Build
-        run: cmake --build --preset wasm -j"$(nproc)"

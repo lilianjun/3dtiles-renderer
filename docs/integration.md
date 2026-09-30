@@ -165,26 +165,14 @@ void onSurfaceDestroyed() {
 - (void)dealloc { tiles_renderer::Renderer::shutdown(); }
 ```
 
-## Web (canvas + WebGL) — stub, not yet rendering
+## Web — out of scope for this C++ SDK
 
-> Honest status: the wasm build compiles the SDK with Filament **disabled**
-> (the official Filament web release is `filament.js` only; there is no C++
-> library to link — see `docs/adr/0006-platform-backends.md`). The snippet
-> below shows the intended API shape once a WebGL C++ backend exists;
-> today `initialize` validates the config, `renderFrame` is a no-op
-> returning `true`, and `loadTileset` returns `false`.
-
-```cpp
-#include "tiles_renderer/renderer.h"
-// WASM build: NativeWindowHandle is the canvas CSS selector string.
-// The string must outlive the SDK (a literal is fine).
-
-tiles_renderer::RendererConfig cfg;
-cfg.window = "#canvas";
-cfg.width = 1280; cfg.height = 720;
-tiles_renderer::Renderer::initialize(cfg);   // stub: config check only
-// loadTileset() returns false on wasm today (lastError explains why).
-```
+> 2026-09-30 (li's decision): the WASM/Emscripten target was removed
+> entirely (see ADR-0023 G9). This C++ SDK targets Windows / Android /
+> iOS / Linux only. A future web renderer will be a separate JS project
+> (JS-written loading and data parsing, rendering via `filament.js`);
+> it will be re-evaluated after the C++ SDK is complete. There is no
+> WebGL backend in this repository.
 
 ## Checklist for host developers
 
@@ -192,8 +180,7 @@ tiles_renderer::Renderer::initialize(cfg);   // stub: config check only
 2. `renderFrame()` every frame; tolerate `false` (retry next frame).
 3. Resize the OS surface first, then `resize()` — never the reverse.
 4. Check `lastError()` whenever a `bool` API returns `false`.
-5. Keep the WASM canvas-selector string alive for the SDK's lifetime.
-6. `loadTileset` blocks up to ~30 s on first metadata — don't call it
+5. `loadTileset` blocks up to ~30 s on first metadata — don't call it
    on the UI thread without a loading state. (A corrupt tileset.json
    fails in milliseconds instead — P23; the 30 s is the bound for deep
    semantic failures / unresponsive servers.)

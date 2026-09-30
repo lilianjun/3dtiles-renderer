@@ -15,9 +15,6 @@ namespace tiles_renderer {
 #if defined(__ANDROID__)
 struct ANativeWindow;
 using NativeWindowHandle = ANativeWindow*;
-#elif defined(__EMSCRIPTEN__)
-// Web: the <canvas> element selector, e.g. "#canvas".
-using NativeWindowHandle = const char*;
 #else
 // Windows (HWND), Apple (UIView*/NSView*), Linux (X11 Window / wl_surface*):
 // all arrive as an opaque pointer. Filament's createSwapChain takes void*

@@ -15,11 +15,12 @@
    | Android | `Backend::VULKAN` | `ANativeWindow*`（Java 层 `Surface` 传下） |
    | Windows | `Backend::VULKAN` | `HWND`（`void*` 透传） |
    | iOS | `Backend::METAL` | `UIView*`（`void*` 透传） |
-   | Web (WASM) | `Backend::DEFAULT`（= WebGL） | canvas CSS selector（`const char*` 长期存活字符串） |
 
    选择依据：Filament 官方各平台示例的默认 backend；Android 上 Vulkan 是
    Filament 移动端主路径（API 24+ 可用）；iOS 只有 Metal 可用；
-   Windows 上 Vulkan 避免 OpenGL 驱动碎片化；WASM 只有 WebGL。
+   Windows 上 Vulkan 避免 OpenGL 驱动碎片化。
+   （Web/WASM 行已于 2026-09-30 删除：Emscripten stub 构建整体移除，
+   见 ADR-0023 G9。）
 
 2. SDK 公开的 `NativeWindowHandle` 保持平台相关类型
    （`include/tiles_renderer/renderer.h`），各平台传参即原生句柄，
@@ -34,7 +35,7 @@
    | android | `filament-v1.77.0-android-native.tgz` | `lib/arm64-v8a/*.a`（`libbluevk.a`，**无 bluegl**；`gltfio` 实名为 `libgltfio_core.a`），`include/` |
    | windows | `filament-v1.77.0-windows.tgz` | `lib/x86_64/md/*.lib`（注意多一层 `md/`，对应 /MD 运行时），`bin/matc.exe` |
    | ios | `filament-v1.77.0-ios.tgz` | `.xcframework`，用 `ios-arm64` slice（`ios-arm64/libfilament.a` + `Headers/`） |
-   | web | `filament-v1.77.0-web.tgz` | **只有 `filament.js` / `filament.wasm` / `filament.d.ts`，无 C++ 头文件与静态库** |
+   | web | `filament-v1.77.0-web.tgz` | **只有 `filament.js` / `filament.wasm` / `filament.d.ts`，无 C++ 头文件与静态库**（此行保留作依据：这就是本仓库无 Web 目标的原因） |
 
    材质统一用**宿主** `matc -a all` 编译（`matc` 不可交叉运行，必须用
    host 工具），跨平台 `filamat` 二进制兼容。
@@ -48,12 +49,11 @@
   是 SDK 在 Android 上的**真实传递依赖**，已写入 `filament_prebuilt`
   的 INTERFACE。注意：链接通过 ≠ 真机运行验证（无 Android 真机，
   见下）。
-- **Web（WASM）边界**：官方 v1.77.0 web 包不是 C++ SDK，当前 Emscripten
-  预设只能做 SDK stub 的真交叉编译（`libtiles_renderer.a` for wasm32，
-  本地 emcc 构建通过）；renderer.cpp 的 WASM 分支
-  （`Backend::DEFAULT` + canvas selector）已用 emcc + 真实 Filament 头文件
-  做 `-fsyntax-only` 语法验证。要真跑 WebGL，需自行从源码构建 Filament
-  for Web（或走 `filament.js` 桥接），留作后续事项——**不声称已接通**。
+- **Web（WASM）边界（2026-09-30 已移除）**：官方 v1.77.0 web 包不是
+  C++ SDK，此前 Emscripten 预设只能做 SDK stub 的真交叉编译。经 li
+  决策，WASM 构建已整体移除（preset/CI job/代码分支/README 引用全删），
+  不再声称任何 Web 支持。未来 web 渲染器走独立 JS 项目（JS 写加载与
+  数据解析、filament.js 渲染），待 C++ SDK 完成后重估 —— 见 ADR-0023 G9。
 - **工具链自动接线**：`ANDROID_NDK_HOME` / `EMSDK` 存在即自动用真实
   toolchain；缺失则警告 + host stub（P0 策略不变）。`TILES_CROSS_TOOLCHAIN`
   每轮 configure 从已缓存状态**确定性推导**（不靠 cache 记忆），
@@ -71,7 +71,6 @@
 | Android | ✅ NDK r27d arm64（SDK + linkcheck.so）| ✅ | ❌ 无真机 |
 | Windows | ❌ 本地无 MSVC | ✅ MSVC + Filament | ❌ 无实机 |
 | iOS | ❌ 本地无 Xcode | ✅ iOS arm64 交叉 | ❌ 无设备 |
-| WASM | ✅ emcc stub 交叉编译 | ✅ | ❌ 无浏览器验证；Filament C++ 未接 |
 
 ## CI 实战记录（2026-09-29，PR #1）
 
@@ -95,5 +94,6 @@
 ## 后续事项
 
 - P3 遗留：HTTP(S) asset accessor、b3dm/i3dm 内容类型、ECEF→ENU rebase。
-- Web：Filament 源码构建 for Web，或 `filament.js` 桥接方案。
-- 真机/实机冒烟：Android APK、iOS app、Windows exe、浏览器。
+- Web：不在本 C++ 仓库范围内（2026-09-30 决策：WASM 构建已移除；未来
+  web 渲染器为独立 JS 项目，filament.js 渲染，C++ SDK 完成后重估）。
+- 真机/实机冒烟：Android APK、iOS app、Windows exe。

@@ -1,6 +1,6 @@
 # 3dtiles-renderer
 
-跨平台 C++ 3D Tiles 渲染器 **SDK**：一次编码，随处运行 —— Windows / Android / iOS / WebAssembly。
+跨平台 C++ 3D Tiles 渲染器 **SDK**：一次编码，随处运行 —— Windows / Android / iOS。
 
 > 当前阶段：**P3 数据上屏**（真实 tileset.json + GLB 经 Cesium 调度、gltfio 解码、Filament 渲染，见 ADR-0005）。
 
@@ -21,7 +21,7 @@
 | 分层 | 选型 | 锁定版本（P1） | 接入方式 |
 |---|---|---|---|
 | 3D Tiles 加载 / 调度 / LOD | [cesium-native](https://github.com/CesiumGS/cesium-native) | `v0.64.0` | FetchContent 源码构建（ezvcpkg 自动构建其第三方 port） |
-| 渲染 | [Filament](https://github.com/google/filament) | `v1.77.0` | 官方预构建二进制包（Linux 已真实渲染；Win/Android/iOS/WASM 接线为 TODO，见 ADR-0004） |
+| 渲染 | [Filament](https://github.com/google/filament) | `v1.77.0` | 官方预构建二进制包（Linux 已真实渲染；Win/Android/iOS 接线为 TODO，见 ADR-0004） |
 | 窗口 / 输入（仅 demo/测试） | [SDL3](https://github.com/libsdl-org/SDL) | `release-3.4.16` | FetchContent 源码构建；**不进 SDK**（ADR-0003） |
 | 语言 | C++20 | | |
 | 构建 | CMake ≥ 3.21 + Presets | | 依赖经 `FetchContent` 声明，tag 锁定 |
@@ -40,7 +40,7 @@
 ├── docs/adr/                # 架构决策记录
 ├── .github/workflows/       # CI：四平台构建矩阵
 ├── CMakeLists.txt
-└── CMakePresets.json        # linux / windows / android / ios / wasm
+└── CMakePresets.json        # linux / windows / android / ios
 ```
 
 ## 构建
@@ -66,7 +66,6 @@ source ~/toolchains/env.sh   # ninja 1.12.1 / clang 23.1.2 / emcc 6.0.10 / NDK r
 | Windows | Visual Studio 2022, cmake |
 | Android | Android NDK（设 `ANDROID_NDK_HOME`），API ≥ 24 |
 | iOS | macOS + Xcode 15+ |
-| WASM | Emscripten SDK（激活后 `emcc` 在 PATH 中） |
 
 ### Linux（本机已验证）
 
@@ -81,7 +80,6 @@ ctest --preset linux       # smoke 测试链接 SDK 静态库并运行
 ```bash
 cmake --preset android   # 需 ANDROID_NDK_HOME（r27d）；自动接 NDK toolchain + Filament android 预编译包
 cmake --preset ios       # 需 macOS + Xcode；自动做 iOS arm64 交叉 + Filament xcframework
-cmake --preset wasm      # 需 EMSDK；自动接 Emscripten（Filament 官方 web 包无 C++ 库，SDK 为 stub）
 cmake --preset windows   # 在 Windows 上执行；自动接 Filament windows 预编译包
 ```
 
@@ -96,10 +94,9 @@ cmake --preset windows   # 在 Windows 上执行；自动接 Filament windows �
 | Android | Vulkan | ✅ NDK r27d arm64（SDK + linkcheck.so 链接通过） | ✅ | ❌ 无真机 |
 | Windows | Vulkan | ❌ 本地无 MSVC | ✅ MSVC + Filament 预编译包 | ❌ 无实机 |
 | iOS | Metal | ❌ 本地无 Xcode | ✅ iOS arm64 交叉 + xcframework | ❌ 无设备 |
-| Web (WASM) | WebGL（预留） | ✅ emcc SDK stub 交叉编译；renderer.cpp WASM 分支经 emcc + 真实 Filament 头文件语法验证 | ✅ | ❌ 无浏览器验证；官方 v1.77.0 web 包只有 `filament.js`，C++ 接线待办 |
 
 > 诚实边界：只有 Linux 无头渲染经过真实像素验证；Android 链接通过不等于
-> 真机运行成功；Web 的 Filament C++ 接线需自行源码构建（见 ADR-0006）。
+> 真机运行成功。Web 端不在本仓库范围内（见下）。
 
 ### 打开第三方依赖（P1 已接入，默认仍关闭以保持零下载可配置）
 
@@ -259,14 +256,16 @@ clang/libc++ 构建，Linux 消费方链接时会带上 `c++`/`c++abi`（与消�
   （灰/橙/青三盒）；`ViewUpdateResult` 驱动可见性；`xvfb-run` 像素断言 —— ✅ 已完成
   （本机 linux 全依赖构建 + 4/4 测试通过；SDK 零 SDL；见 ADR-0005）
 - **P4 四端接线与 CI**：各平台 Filament backend 选定（Linux/OpenGL、
-  Android/Vulkan、Windows/Vulkan、iOS/Metal、Web 预留 WebGL）；
-  工具链自动接线（NDK r27d / Emscripten / Xcode）；Filament v1.77.0
-  预编译包按平台接线（android/windows/ios 真链接，web 官方包无 C++ 库故 stub）；
-  CI 四平台真实构建 —— ✅ 已完成
-  （本地：linux 4/4、android NDK 链接通过、wasm emcc 交叉通过；
+  Android/Vulkan、Windows/Vulkan、iOS/Metal）；
+  工具链自动接线（NDK r27d / Xcode）；Filament v1.77.0
+  预编译包按平台接线（android/windows/ios 真链接）；
+  CI 真实构建 ✅ 已完成
+  （本地：linux 全依赖构建、android NDK 链接通过；
   windows/ios 编译靠 CI；运行验证仅 linux 无头；见 ADR-0006）
-- **P5 真机与 Web**：Android APK / iOS app 真机冒烟、Windows 实机、
-  浏览器运行；Filament for Web 源码构建或 filament.js 桥接；
+- **P5 真机与 Web**：Android APK / iOS app 真机冒烟、Windows 实机；
+  Web 端不在本 C++ 仓库范围内：2026-09-30 经 li 决策，WASM stub
+  构建已整体移除，未来 web 渲染器走独立 JS 项目（JS 写加载与数据解析、
+  filament.js 渲染），待 C++ SDK 完成后重估（见 ADR-0023 G9）；
   P3 遗留（i3dm、完整 ENU 姿态变换）—— HTTP(S)、b3dm、local-origin rebase
   已在本阶段完成并验证（见 ADR-0005）
 - **P6 内存与资源健壮性**：ASan+LSan+UBSan 门禁（`linux-asan` preset，

@@ -50,9 +50,6 @@
 //   android : Vulkan (ANativeWindow*; android prebuilt ships bluevk only)
 //   windows : Vulkan (HWND)
 //   ios     : Metal (UIView*)
-//   wasm    : default backend (WebGL); nativeWindow is the canvas CSS
-//             selector string, used opaquely (see Filament jsbindings
-//             _createSwapChainForCanvas)
 #ifdef TILES_WITH_FILAMENT
 #if defined(TILES_PLATFORM_ANDROID)
 #define TILES_FILAMENT_BACKEND filament::Engine::Backend::VULKAN
@@ -63,9 +60,6 @@
 #elif defined(TILES_PLATFORM_IOS)
 #define TILES_FILAMENT_BACKEND filament::Engine::Backend::METAL
 #define TILES_PLATFORM_NAME "iOS/Metal"
-#elif defined(TILES_PLATFORM_WASM)
-#define TILES_FILAMENT_BACKEND filament::Engine::Backend::DEFAULT
-#define TILES_PLATFORM_NAME "Web/WebGL"
 #elif defined(TILES_PLATFORM_LINUX)
 #define TILES_FILAMENT_BACKEND filament::Engine::Backend::OPENGL
 #define TILES_PLATFORM_NAME "Linux/OpenGL"
@@ -81,8 +75,8 @@ namespace {
 // applied in loadTileset() before the cesium Tileset is constructed.
 // P22-hotfix: this is a plain std::int64_t with no Filament dependency, so
 // it lives OUTSIDE the TILES_WITH_FILAMENT guard — setMaxCachedBytes()
-// references it unconditionally, and the WASM stub build (Filament OFF)
-// failed with "use of undeclared identifier" (P22 CI).
+// references it unconditionally (a Filament-OFF build once failed here
+// with "use of undeclared identifier", P22 CI).
 std::int64_t g_pendingMaxCachedBytes = -1;
 
 #ifdef TILES_WITH_FILAMENT
@@ -298,9 +292,7 @@ struct FilamentState {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     // P12: the native window handle passed to initialize(), kept so resize()
-    // can recreate the swap chain for the same window. For WASM this points
-    // at the host's canvas-selector string (host must keep it alive — same
-    // rule as in initialize()).
+    // can recreate the swap chain for the same window.
     void* nativeWindow = nullptr;
     // P3: optional tileset integration (null when no tileset loaded).
     std::unique_ptr<TilesetRenderer> tileset;
@@ -438,24 +430,7 @@ bool Renderer::initialize(const RendererConfig& config) {
     //   android : ANativeWindow* (NativeWindowHandle is already that type)
     //   windows : HWND (void*)
     //   ios     : UIView* (void*)
-    //   wasm    : canvas CSS selector, e.g. "#canvas" (const char*)
-    void* nativeWindow = nullptr;
-#if defined(TILES_PLATFORM_WASM)
-    const char* canvasSelector = config.window;
-    if (canvasSelector == nullptr || canvasSelector[0] == '\0') {
-        setLastError("initialize: web backend needs a canvas selector "
-                     "(e.g. \"#canvas\")");
-        filament::Engine::destroy(s.engine);
-        s.engine = nullptr;
-        return false;
-    }
-    // Filament's WebGL platform uses the selector opaquely (never
-    // dereferenced as a pointer); the string must outlive the swap chain,
-    // so the host must keep it alive (string literals are fine).
-    nativeWindow = const_cast<char*>(canvasSelector);
-#else
-    nativeWindow = reinterpret_cast<void*>(config.window);
-#endif
+    void* nativeWindow = reinterpret_cast<void*>(config.window);
     s.swapChain = s.engine->createSwapChain(nativeWindow);
     if (s.swapChain == nullptr) {
         setLastError("initialize: createSwapChain failed");

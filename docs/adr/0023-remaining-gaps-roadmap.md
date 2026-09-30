@@ -14,7 +14,7 @@ REPLACE/ADD refinement, region bounding volumes, weak-network gates,
 cache-budget boundedness, tileset switch safety, corrupt-input
 fail-fast, golden regression, sanitizer gates, install packaging, and a
 first fully-green six-job CI (Linux/sanitizers/Windows/Android/iOS/
-WASM). This ADR honestly lists what is still **not** done, what each
+WASM — the WASM job was later removed 2026-09-30, see G9). This ADR honestly lists what is still **not** done, what each
 item would take, and a priority from a production-SDK viewpoint.
 "Won't fix (for now)" is a valid, documented outcome — the rule is no
 silent gaps.
@@ -193,13 +193,20 @@ explicitly out of scope.
 - **Takes:** custom point-cloud material/render path bypassing gltfio.
 - **Why P2:** cosmetic; points are visible and correctly colored.
 
-### G9. WASM is a stub
+### G9. WASM target removed (2026-09-30, user decision)
 
-- **State:** the official Filament Web distribution ships filament.js
-  with no linkable C++ library (ADR-0006), so the WASM SDK build is a
-  compile-only stub. Cannot be fixed from our side.
-- **Why P2 / won't fix:** blocked on upstream Filament shipping a C++
-  WebAssembly library. Revisit if that ever happens.
+- **State:** the Emscripten/WASM build (compile-only stub — official
+  Filament Web distribution ships filament.js with no linkable C++
+  library, ADR-0006) has been **removed entirely**: wasm preset, CI job,
+  `TILES_PLATFORM_WASM` code branches, and README references deleted.
+  A stub that compiles is not WASM support, and keeping it green was
+  masking that fact.
+- **Future direction (per li):** the web renderer will be a **separate
+  JS project** — loading and data parsing written in JS, rendering via
+  filament.js. Cesium Native on Emscripten is out of scope (too costly
+  for the value). Re-evaluate after the C++ SDK is complete.
+- **Why not P2 / won't fix in this repo:** the C++ SDK will never
+  target Web; web is a different project, not a gap in this one.
 
 ### G10. ECEF rebase is a local-origin translation, not full ENU
 
