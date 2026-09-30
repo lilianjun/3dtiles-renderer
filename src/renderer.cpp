@@ -744,15 +744,7 @@ bool Renderer::loadTileset(const std::string& tilesetUrl,
     // the new TilesetRenderer gets the current values before loading.
     tileset->setShow(g_show);
     tileset->setPreloadWhenHidden(g_preloadWhenHidden);
-    {
-        glm::dmat4 m;
-        for (int c = 0; c < 4; ++c) {
-            for (int r = 0; r < 4; ++r) {
-                m[c][r] = g_modelMatrix[c * 4 + r];
-            }
-        }
-        tileset->setModelMatrix(m);
-    }
+    tileset->setModelMatrix(g_modelMatrix);
     // P22: build-then-commit. The new TilesetRenderer is fully loaded
     // before it replaces the old one, so a failed loadTileset() (bad
     // path, corrupt tileset.json, timeout) leaves the currently-loaded
@@ -1028,13 +1020,7 @@ void Renderer::setModelMatrix(const double matrix[16]) {
     }
 #ifdef TILES_WITH_FILAMENT
     if (g_state.tileset != nullptr) {
-        glm::dmat4 m;
-        for (int c = 0; c < 4; ++c) {
-            for (int r = 0; r < 4; ++r) {
-                m[c][r] = matrix[c * 4 + r];
-            }
-        }
-        g_state.tileset->setModelMatrix(m);
+        g_state.tileset->setModelMatrix(matrix);
     }
 #endif
 }
@@ -1042,10 +1028,10 @@ void Renderer::setModelMatrix(const double matrix[16]) {
 void Renderer::modelMatrix(double out[16]) {
     double* src = g_modelMatrix;
 #ifdef TILES_WITH_FILAMENT
-    glm::dmat4 live;
+    double live[16];
     if (g_initialized && g_state.tileset != nullptr) {
-        live = g_state.tileset->modelMatrix();
-        src = &live[0][0];
+        g_state.tileset->modelMatrix(live);
+        src = live;
     }
 #endif
     for (int i = 0; i < 16; ++i) {

@@ -2228,11 +2228,17 @@ bool TilesetRenderer::isPreloadWhenHidden() const {
 #endif
 }
 
-void TilesetRenderer::setModelMatrix(const glm::dmat4& matrix) {
+void TilesetRenderer::setModelMatrix(const double matrix[16]) {
 #if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
-    _impl->modelMatrix = matrix;
+    glm::dmat4 m;
+    for (int c = 0; c < 4; ++c) {
+        for (int r = 0; r < 4; ++r) {
+            m[c][r] = matrix[c * 4 + r];
+        }
+    }
+    _impl->modelMatrix = m;
     if (_impl->prepareResources != nullptr) {
-        _impl->prepareResources->setModelMatrix(matrix);
+        _impl->prepareResources->setModelMatrix(m);
     }
     // Re-apply to already-loaded tiles immediately: recompose each tile's
     // Filament transform from its stored double-precision pieces. Render
@@ -2261,7 +2267,7 @@ void TilesetRenderer::setModelMatrix(const glm::dmat4& matrix) {
                                 FilamentPrepareResources::
                                     composeRenderTransform(
                                         *pTile, pData->rtcCenter,
-                                        pData->upAxisFix, matrix,
+                                        pData->upAxisFix, m,
                                         _impl->localOrigin));
                         }
                     }
@@ -2277,11 +2283,18 @@ void TilesetRenderer::setModelMatrix(const glm::dmat4& matrix) {
 #endif
 }
 
-glm::dmat4 TilesetRenderer::modelMatrix() const {
+void TilesetRenderer::modelMatrix(double out[16]) const {
 #if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
-    return _impl->modelMatrix;
+    const glm::dmat4& m = _impl->modelMatrix;
+    for (int c = 0; c < 4; ++c) {
+        for (int r = 0; r < 4; ++r) {
+            out[c * 4 + r] = m[c][r];
+        }
+    }
 #else
-    return glm::dmat4(1.0);
+    for (int i = 0; i < 16; ++i) {
+        out[i] = (i % 5 == 0) ? 1.0 : 0.0;
+    }
 #endif
 }
 

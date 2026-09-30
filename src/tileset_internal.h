@@ -18,7 +18,12 @@
 #include <string>
 #include <vector>
 
-#include <glm/mat4x4.hpp> // P33: setModelMatrix / modelMatrix (glm::dmat4)
+// P33-fix: no glm in this header. Windows/Android/iOS CI build the SDK
+// WITHOUT cesium-native (P22 rule), so a <glm/...> include here breaks
+// those three platforms. The model matrix crosses this interface as a
+// plain double[16] (column-major, same as the public API); the glm
+// conversion lives in tileset.cpp inside the TILES_WITH_CESIUM_NATIVE
+// guard.
 
 #include "tiles_renderer/renderer.h" // P17: TileStats
 
@@ -118,8 +123,8 @@ public:
     bool isShow() const;
     void setPreloadWhenHidden(bool preload);
     bool isPreloadWhenHidden() const;
-    void setModelMatrix(const glm::dmat4& matrix);
-    glm::dmat4 modelMatrix() const;
+    void setModelMatrix(const double matrix[16]);
+    void modelMatrix(double out[16]) const;
 
     // P33: read-only tileset state (see renderer.h). Defaults when no
     // tileset is loaded. Must be called on the render thread.
