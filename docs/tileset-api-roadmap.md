@@ -94,7 +94,7 @@
   另修 P22 遗留 demo bug：`--switch-at-frame` 在 renderFrame 失败时重复触发，
   现为 one-shot。
 
-### P33：显示 / 变换 / 只读属性 ✅ 完成（2026-09-30，commit 待填）
+### P33：显示 / 变换 / 只读属性 ✅ 完成（2026-09-30，commit `ca316db`）
 - `setShow(bool)` / `isShow()`；`show=false` 时跳过 Filament 场景提交；
   `preloadWhenHidden` 决定是否继续 `updateViewGroup` 遍历。
 - `setModelMatrix(const double[16])`（column-major；复合公式
