@@ -63,17 +63,26 @@ explicitly out of scope.
     commit b313666) and the first full build failed to link
     (vcpkg-built spdlog/curl need API 28+ libc symbols; ANDROID_PLATFORM
     and app minSdk raised 24 → 28, commit d8e3089). G1 is now
-    **partially closed (Android only)**.
-  - **Windows (2026-09-30, in progress):** li approved a real-device run
-    on his Windows PC; iOS is deferred (no iPhone available). The desktop
-    `tiles_demo` doubles as the harness: new `--smoke` flag prints a
-    `SMOKE PASS/FAIL` banner with tile counters (same format as the
-    Android app) and sets the exit code. CI's windows job now configures
-    with `-DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_SDL3=ON` (previously
-    it built a stub SDK with no demo at all) and uploads `tiles_demo.exe`
-    + the p3 fixture as the `windows-smoke` artifact. li downloads, runs
-    `tiles_demo.exe --tileset p3_box_tileset --until-loaded 600 --smoke`,
-    and sends back the console output.
+    **partially closed (Android + Windows)** — see Windows bullet below.
+  - **Windows (2026-09-30): PASS on first real-device run.** li ran
+    the CI-built `windows-smoke` artifact (run 36707534325, commit
+    9dd407b) on his Windows PC: NVIDIA GeForce RTX 3060, Filament
+    resolved the **Vulkan** backend, created a real 800x600 swapchain,
+    `SMOKE PASS / tiles: loaded=4 failed=0 rendered=3 / frames=22`.
+    Renderer initialized on the HWND, Cesium Native loaded the bundled
+    p3 fixture (4 tiles, 0 failed), Filament rendered actual pixels on
+    a real GPU. Two link bugs were caught and fixed getting there:
+    `backend.lib`'s WGL/OpenGL objects needed `bluegl` + `opengl32`
+    (180 unresolved symbols, commit 9dd407b), and downloading the
+    official windows tgz proved it always shipped `stb.lib` — the old
+    "no libstb on Windows" claim was wrong; the detector only accepted
+    the Unix name `libstb.a`, silently disabling texture decoding on
+    Windows (same commit fixed it). The `windows-smoke` artifact was
+    package-verified before shipping to li: PE32+ x86-64, only system
+    DLL imports, real Cesium/Filament symbols (not stubs), valid
+    `tileset.json` + 3 GLBs.
+  - G1 is now **partially closed (Android + Windows)**; iOS remains open
+    (deferred — li has no iPhone).
 
 ### G2. Corrupt cmpt can SIGSEGV the host (upstream #1457, open, 0 comments)
 
