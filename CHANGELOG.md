@@ -8,6 +8,19 @@ A = Android, i = iOS, wasm = WebAssembly.
 
 ## [Unreleased]
 
+### Fixed
+- P30: settle-gated screenshots — kills the fixed-frame screenshot race
+  behind the P26/P27/P28 flakes (`golden_regression` p7_i3dm,
+  `tileset_switch` S3). Demo: new `--settle-before-screenshot N`
+  (fixed-frame scenario, then up to N extra frames until the tileset
+  settles, then screenshot; streak carries over from the main loop so a
+  converged scenario costs ~0 extra frames); all static-camera pixel
+  tests now use `--until-loaded` (settle budget 4x the old fixed count)
+  instead of bare `--frames`. Settle-gated captures are bit-identical
+  to the frozen goldens (0 px diff — gating changes *when* the shutter
+  fires, not *what* it captures); golden baselines NOT re-frozen.
+  Test-only: zero SDK changes, zero public API changes. ADR-0029.
+
 ### Added
 - P29: Draco (KHR_draco_mesh_compression) verified working — no code
   change. The G7 premise ("no Draco decoder in the dependency tree")

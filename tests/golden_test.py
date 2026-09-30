@@ -2,7 +2,9 @@
 """P11: golden screenshot regression gate.
 
 Re-renders one representative fixture per phase with *fixed* parameters
-(fixed frame count, fixed 800x600 window, fixed orbit camera inside
+(settle-gated frame count — P30: the demo renders until the tileset
+converges instead of a fixed N frames, so screenshots never race async
+loading; fixed 800x600 window, fixed orbit camera inside
 tiles_demo) and compares the result pixel-for-pixel against the frozen
 golden in tests/golden/.
 
@@ -74,13 +76,17 @@ MAX_ALLOWED_FRAC = 0.005  # hard ceiling for the escape hatch (0.5% = 2400 px
 
 
 def render_demo(demo, tileset_dir, out, frames):
-    cmd = [demo, "--frames", str(frames),
-           "--width", str(WIDTH), "--height", str(HEIGHT)]
+    cmd = [demo, "--width", str(WIDTH), "--height", str(HEIGHT)]
     if tileset_dir is None:
-        cmd.append("--no-tileset")
+        # P2 clear-screen baseline: no tileset, nothing async to wait for.
+        cmd += ["--frames", str(frames), "--no-tileset"]
     else:
-        cmd += ["--tileset",
-                os.path.join(DATA, tileset_dir, "tileset.json")]
+        # P30: wait for the tileset to converge instead of racing a fixed
+        # frame count (the P26-P28 p7_i3dm flake). Budget is 4x the old
+        # fixed count; the settled frame is pixel-identical to a converged
+        # fixed-frame render (static camera, deterministic pipeline).
+        cmd += ["--until-loaded", str(4 * frames),
+                "--tileset", os.path.join(DATA, tileset_dir, "tileset.json")]
     cmd += ["--screenshot", out]
     if not os.environ.get("DISPLAY"):
         cmd = ["xvfb-run", "-a", "-s", "-screen 0 1024x768x24"] + cmd

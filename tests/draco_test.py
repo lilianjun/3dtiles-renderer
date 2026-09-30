@@ -37,7 +37,11 @@ PLAIN_TILESET = os.path.join(REPO, "tests", "data", "p29_draco_tileset",
                              "tileset_plain.json")
 
 WIDTH, HEIGHT = 800, 600
-FRAMES = 60
+# P30: settle budget (max frames until the tileset converges). The old
+# fixed 60-frame render raced async loading the same way the golden
+# p7_i3dm flake did; the settled frame is pixel-identical for the twin
+# comparison (static camera, deterministic pipeline).
+SETTLE_BUDGET = 240
 
 # Tight: -qp 14 quantization is invisible here; this only absorbs
 # rasterizer wobble. Measured on 2026-09-30: 0 pixels differ.
@@ -46,7 +50,7 @@ MEAN_DIFF = 2.0
 
 
 def run_demo(demo, tileset, screenshot, sanitized=False):
-    cmd = [demo, "--frames", str(FRAMES), "--width", str(WIDTH),
+    cmd = [demo, "--until-loaded", str(SETTLE_BUDGET), "--width", str(WIDTH),
            "--height", str(HEIGHT), "--tileset", tileset,
            "--screenshot", screenshot]
     if sanitized:

@@ -46,7 +46,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--demo", required=True)
     ap.add_argument("--tileset", required=True)
-    ap.add_argument("--frames", type=int, default=60)
+    ap.add_argument("--frames", type=int, default=60,
+                      help="P30: max frames — the demo renders until the "
+                           "tileset settles (then screenshots), giving up "
+                           "after this many frames")
     ap.add_argument("--width", type=int, default=800)
     ap.add_argument("--height", type=int, default=600)
     ap.add_argument("--out", required=True)
@@ -54,7 +57,12 @@ def main():
     ap.add_argument("--expect", default="orange,teal")
     args = ap.parse_args()
 
-    cmd = [args.demo, "--frames", str(args.frames),
+    # P30: settle-gated capture — the screenshot must not race async tile
+    # loading (the P26-P28 golden/switch flake class). args.frames is the
+    # give-up budget (4x the old fixed count, which occasionally proved
+    # too short); the settled frame is pixel-identical to a converged
+    # fixed-frame render (static camera, deterministic pipeline).
+    cmd = [args.demo, "--until-loaded", str(4 * args.frames),
            "--width", str(args.width), "--height", str(args.height),
            "--tileset", args.tileset, "--screenshot", args.out]
     if not os.environ.get("DISPLAY"):

@@ -41,7 +41,8 @@ LX, RX = 340, 460  # left/right region split (dead zone in the middle)
 
 
 def run_demo(demo, tileset, screenshot, no_ibl=False, sanitized=False):
-    cmd = [demo, "--frames", str(FRAMES), "--width", str(WIDTH),
+    # P30: settle-gated capture (kills the fixed-frame screenshot race).
+    cmd = [demo, "--until-loaded", str(4 * FRAMES), "--width", str(WIDTH),
            "--height", str(HEIGHT), "--tileset", tileset,
            "--screenshot", screenshot]
     if no_ibl:

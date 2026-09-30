@@ -62,6 +62,14 @@ struct DemoArgs {
     // aborts (through the normal shutdown path) on the first frame where
     // any tile load is in flight — this exercises mid-load teardown.
     int untilLoaded = 0;  // 0 = disabled; >0 = max frames for settle polling
+    // P30: screenshot-test determinism. After the fixed-frame scenario
+    // above, keep rendering (up to N extra frames) until the tileset
+    // settles (same 20-frame streak rule as --until-loaded), then take
+    // --screenshot. Eliminates the fixed-frame screenshot race behind the
+    // P26-P28 golden/switch flakes. Unlike --until-loaded the scenario's
+    // frame count is preserved (frame-indexed assertions keep working);
+    // 0 = disabled. Requires a loaded tileset and a --screenshot target.
+    int settleBeforeScreenshot = 0;
     bool exitOnLoading = false;
     // P18: on the first frame with any tile load in flight, push the camera
     // far out (deselecting child tiles) and keep rendering. Exercises
@@ -126,6 +134,9 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             out.untilLoaded = std::stoi(value);
             out.frames = out.untilLoaded;
             out.framesExplicit = true;
+        } else if (arg == "--settle-before-screenshot") {
+            if (!needValue("--settle-before-screenshot", value)) return false;
+            out.settleBeforeScreenshot = std::stoi(value);
         } else if (arg == "--exit-on-loading") {
             out.exitOnLoading = true;
         } else if (arg == "--zoom-out-on-loading") {
@@ -158,6 +169,7 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
                          "[--until-loaded N] [--exit-on-loading] "
                          "[--zoom-out-on-loading] [--cache-budget BYTES] "
                          "[--print-rss] "
+                         "[--settle-before-screenshot N] "
                          "[--switch-tileset PATH --switch-at-frame N]... "
                          "[--no-ibl]"
                       << std::endl;
@@ -168,6 +180,7 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
         }
     }
     if (out.frames < 1) out.frames = 1;
+    if (out.settleBeforeScreenshot < 0) out.settleBeforeScreenshot = 0;
     if (out.width < 1) out.width = 1;
     if (out.height < 1) out.height = 1;
     for (int f : out.switchAtFrames) {
@@ -449,6 +462,10 @@ int main(int argc, char** argv) {
         // between the tileset.json fetch and the child tile requests).
         int settleStreak = 0;
         bool settled = false;
+        // P30: parallel settle streak for --settle-before-screenshot, so
+        // the post-scenario phase below can start from the main loop's
+        // tail instead of re-proving convergence from zero.
+        int shotStreak = 0;
         const int kSettleFrames = 20;
         bool zoomedOut = false; // P18: --zoom-out-on-loading fired once
         while (rendered < args.frames && alive) {
@@ -484,7 +501,7 @@ int main(int argc, char** argv) {
                 // P18: settle polling / mid-load abort hooks (dev/test).
                 bool stopEarly = false;
                 if (args.untilLoaded > 0 || args.exitOnLoading ||
-                    args.zoomOutOnLoading) {
+                    args.zoomOutOnLoading || args.settleBeforeScreenshot > 0) {
                     const auto st = tiles_renderer::Renderer::tileStats();
                     if (args.exitOnLoading && st.tilesLoading > 0) {
                         std::cout << "[demo] abort: load in flight at frame "
@@ -517,6 +534,14 @@ int main(int argc, char** argv) {
                             }
                         } else {
                             settleStreak = 0;
+                        }
+                    }
+                    // P30: feed the screenshot-phase streak in parallel.
+                    if (args.settleBeforeScreenshot > 0) {
+                        if (st.tilesLoading == 0 && st.tilesLoaded > 0) {
+                            ++shotStreak;
+                        } else {
+                            shotStreak = 0;
                         }
                     }
                 }
@@ -567,6 +592,52 @@ int main(int argc, char** argv) {
             std::cout << "[demo] tiles rendered (last frame): "
                       << tiles_renderer::Renderer::renderedTileCount()
                       << std::endl;
+        }
+
+        // P30: post-scenario settle extension for screenshot tests. The
+        // fixed-frame scenario above may end while async tile loads are
+        // still in flight; the screenshot below must not race them. Keeps
+        // rendering (same camera; in trajectory mode the player clamps
+        // past the last keyframe) until the tileset settles or the budget
+        // is exhausted. The streak carries over from the main loop, so an
+        // already-converged scenario costs ~0 extra frames. Exit 1 on
+        // budget exhaustion: an unconverged screenshot would fail the
+        // pixel comparison anyway, this just says why.
+        if (exitCode == 0 && args.settleBeforeScreenshot > 0 &&
+            tilesetLoaded && !args.screenshot.empty()) {
+            bool shotSettled = shotStreak >= kSettleFrames;
+            int extra = 0;
+            while (!shotSettled && extra < args.settleBeforeScreenshot &&
+                   alive) {
+                alive = pumpEvents(!trajectoryMode);
+                if (trajectoryMode && player) {
+                    const auto pose = player->at(rendered);
+                    tiles_renderer::Renderer::setOrbitCamera(
+                        static_cast<float>(pose.yawDeg),
+                        static_cast<float>(pose.pitchDeg),
+                        static_cast<float>(pose.distance));
+                }
+                if (tiles_renderer::Renderer::renderFrame()) {
+                    ++rendered;
+                    ++extra;
+                    const auto st = tiles_renderer::Renderer::tileStats();
+                    if (st.tilesLoading == 0 && st.tilesLoaded > 0) {
+                        shotSettled = (++shotStreak >= kSettleFrames);
+                    } else {
+                        shotStreak = 0;
+                    }
+                } else {
+                    SDL_Delay(4);
+                }
+            }
+            if (shotSettled) {
+                std::cout << "[demo] settled-before-screenshot: +" << extra
+                          << " frames" << std::endl;
+            } else {
+                std::cerr << "[demo] NOT settled before screenshot after +"
+                          << extra << " frames" << std::endl;
+                exitCode = 1;
+            }
         }
 
         if (exitCode == 0 && !args.screenshot.empty()) {

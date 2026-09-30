@@ -61,11 +61,16 @@ SWITCH_RE = re.compile(r"\[switch\] frame=(\d+) ok=(\d)(?: error=(.*))?")
 
 
 def run_demo(args, tileset, frames, warmup=WARMUP, extra=(),
-             sanitized=False, timeout=300):
+             sanitized=False, timeout=300, settle=0):
     cmd = [args.demo, "--tileset", tileset, "--trajectory", TRAJ,
            "--warmup", str(warmup), "--frames", str(frames),
            "--width", str(WIDTH), "--height", str(HEIGHT),
            "--stats", "--print-selected"] + list(extra)
+    if settle > 0:
+        # P30: keep rendering after the fixed scenario until the tileset
+        # settles, then screenshot. The p22 trajectory is camera-static,
+        # so the settled frame is comparable with the reference run.
+        cmd += ["--settle-before-screenshot", str(settle)]
     if sanitized:
         cmd = ([sys.executable, RUN_SAN, "--suppressions", args.suppressions,
                 "--"] + cmd)
@@ -112,7 +117,7 @@ def scenario_switch_clean(args, tmp, failures, sanitized):
     ref = os.path.join(tmp, "s1_direct.png")
     p = run_demo(args, P3, FRAMES, extra=(
         "--switch-tileset", P8, "--switch-at-frame", str(SWITCH_AT),
-        "--screenshot", shot), sanitized=sanitized)
+        "--screenshot", shot), sanitized=sanitized, settle=120)
     check(p.returncode == 0, "S1: demo exit %d" % p.returncode, failures)
     stats, selected, switches = parse(p.stdout + p.stderr)
     check(switches.get(SWITCH_AT, (0,))[0] == 1,
@@ -135,7 +140,8 @@ def scenario_switch_clean(args, tmp, failures, sanitized):
           "S1: some tile failed to load", failures)
     # Pixel proof: identical to loading p8 directly.
     p2 = run_demo(args, P8, FRAMES,
-                  extra=("--screenshot", ref), sanitized=sanitized)
+                  extra=("--screenshot", ref), sanitized=sanitized,
+                  settle=120)
     check(p2.returncode == 0, "S1 ref: demo exit %d" % p2.returncode,
           failures)
     check(md5(shot) == md5(ref),
@@ -182,7 +188,7 @@ def scenario_reload_same(args, tmp, failures, sanitized):
     ref = os.path.join(tmp, "s3_direct.png")
     p = run_demo(args, P3, 120, extra=(
         "--switch-tileset", P3, "--switch-at-frame", str(SWITCH_AT),
-        "--screenshot", shot), sanitized=sanitized)
+        "--screenshot", shot), sanitized=sanitized, settle=120)
     check(p.returncode == 0, "S3: demo exit %d" % p.returncode, failures)
     _, selected, switches = parse(p.stdout + p.stderr)
     check(switches.get(SWITCH_AT, (0,))[0] == 1,
@@ -190,7 +196,7 @@ def scenario_reload_same(args, tmp, failures, sanitized):
     check("root.glb" in selected.get(119, set()),
           "S3: final frame should select root.glb", failures)
     p2 = run_demo(args, P3, 120, extra=("--screenshot", ref),
-                  sanitized=sanitized)
+                  sanitized=sanitized, settle=120)
     check(p2.returncode == 0, "S3 ref: demo exit %d" % p2.returncode,
           failures)
     check(md5(shot) == md5(ref),
