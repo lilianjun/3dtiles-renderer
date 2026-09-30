@@ -12,7 +12,9 @@ then shows **PASS/FAIL** plus the key numbers on screen and writes
 1. Download **`app-debug.apk`** from the CI run's Artifacts
    (`android-smoke-apk`).
 2. Install it on the phone (tap the APK; allow "install unknown apps"
-   once). Debug-signed, `arm64-v8a` only, minSdk 24.
+   once). Debug-signed, `arm64-v8a` only, minSdk 28 (the SDK's native
+   code links against the android-28 platform: cesium-native's vcpkg
+   archives need API 28+ libc symbols).
 3. Open **TilesSmoke**, keep the screen on, wait ~30 seconds.
 4. The top overlay will show `PASS` (or `FAIL` + reason) with
    `loaded/failed/rendered` tile counts, frame count and settle time.

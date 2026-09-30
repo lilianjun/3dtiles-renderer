@@ -38,7 +38,11 @@ if(NOT TILES_CROSS_TOOLCHAIN AND NOT CMAKE_TOOLCHAIN_FILE)
         AND EXISTS "$ENV{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake")
       set(CMAKE_TOOLCHAIN_FILE "$ENV{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake")
       set(ANDROID_ABI "arm64-v8a" CACHE STRING "Android ABI")
-      set(ANDROID_PLATFORM "android-24" CACHE STRING "Android API level")
+      # P31-fix: android-28 is the minimum that links cesium-native's vcpkg
+      # deps: vcpkg builds spdlog/curl against >= 28 headers
+      # (fwrite_unlocked entered libc at API 28); linking those archives
+      # against the android-24 platform stub fails with undefined symbols.
+      set(ANDROID_PLATFORM "android-28" CACHE STRING "Android API level")
       set(ANDROID_STL "c++_shared" CACHE STRING "Android STL")
       set(TILES_CROSS_TOOLCHAIN "android-ndk")
     endif()

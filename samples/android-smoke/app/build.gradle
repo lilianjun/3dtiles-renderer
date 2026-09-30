@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId 'com.tiles.smoke'
-        minSdk 24
+        minSdk 28 // matches the SDK's ANDROID_PLATFORM (cesium-native's vcpkg deps need API 28+)
         targetSdk 34
         versionCode 1
         versionName '1.0'
