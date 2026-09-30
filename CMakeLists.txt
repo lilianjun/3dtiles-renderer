@@ -343,12 +343,15 @@ if(TILES_WITH_FILAMENT)
     set(_filament_pkg "filament-v${TILES_FILAMENT_VERSION}-windows.tgz")
     # Note the extra md/ level (libs built against the /MD runtime).
     set(_filament_libdir "lib/x86_64/md")
-    set(_filament_libs filament backend bluevk filabridge filaflat
+    # bluegl: backend.lib's WGL/OpenGL driver objects (PlatformWGL,
+    # OpenGLDriver) reference bluegl_* symbols — it ships as bluegl.lib.
+    set(_filament_libs filament backend bluegl bluevk filabridge filaflat
         utils geometry smol-v ibl gltfio gltfio_core uberarchive uberzlib image)
     # MSVC resolves cyclic static deps without --start-group.
     # zstd.lib ships in the package (used by MaterialParser, as on Linux).
     # ws2_32/dbghelp: usual Windows system deps of Filament's utils/backend.
-    set(_filament_syslibs zstd ws2_32 dbghelp)
+    # opengl32: wgl* functions referenced by backend.lib's PlatformWGL.
+    set(_filament_syslibs zstd ws2_32 dbghelp opengl32)
   elseif(TILES_PLATFORM STREQUAL "ios")
     if(NOT TILES_CROSS_TOOLCHAIN STREQUAL "ios")
       message(WARNING "[P4] Filament's ios prebuilt needs a macOS host — skipping Filament (stub SDK).")
@@ -388,6 +391,11 @@ if(TILES_WITH_FILAMENT)
     if(_filament_xcframework)
       set(_stb_lib_path
         "${filament_bin_SOURCE_DIR}/lib/libstb.xcframework/ios-arm64/libstb.a")
+    elseif(TILES_PLATFORM STREQUAL "windows")
+      # Windows prebuilt names it stb.lib (no lib prefix / .a suffix);
+      # the old libstb.a-only check silently disabled texture decoding.
+      set(_stb_lib_path
+        "${filament_bin_SOURCE_DIR}/${_filament_libdir}/stb.lib")
     else()
       set(_stb_lib_path
         "${filament_bin_SOURCE_DIR}/${_filament_libdir}/libstb.a")
