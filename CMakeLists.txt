@@ -183,7 +183,8 @@ configure_file(
 # Public API: include/tiles_renderer/renderer.h — takes a platform-native
 # window handle + size from the host app. The SDK NEVER depends on SDL3.
 # ---------------------------------------------------------------------------
-add_library(tiles_renderer STATIC src/renderer.cpp src/tileset.cpp)
+add_library(tiles_renderer STATIC src/renderer.cpp src/tileset.cpp
+            src/converter_guard.cpp)
 tiles_apply_sanitizers(tiles_renderer)
 target_include_directories(tiles_renderer PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"

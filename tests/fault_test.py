@@ -374,6 +374,61 @@ def main():
         else:
             print("PASS: case %s (1.1 bad input skipped, no crash)" % case)
 
+    # P28 cases P/Q/R/S: structurally corrupt cmpt tile content that used
+    # to SIGSEGV the host (upstream CesiumGS/cesium-native#1457:
+    # CmptToGltfConverter reports structural failures via emplaceWarning
+    # only, leaving result.model empty, and TilesetJsonLoader dereferences
+    # the empty optional). The SDK now hardens the registered converters
+    # (src/converter_guard.cpp): empty model + warnings-only becomes a
+    # hard error, so the tile fails gracefully. Same contract as case C:
+    # the bad tile is skipped, the demo exits 0, no crash.
+    # Absolute file:// URIs: the demo resolves relative content URIs
+    # against the tileset path in a way that 404s for these.
+    print("=== cases P/Q/R/S: SIGSEGV-class corrupt cmpt (P28 guard) ===")
+    guard_dir = os.path.join(workdir, "cmpt_guard")
+    shutil.rmtree(guard_dir, ignore_errors=True)
+    os.makedirs(guard_dir)
+    # P: byteLength == 16, tilesLength == 1 -> no convertible inner tiles.
+    with open(os.path.join(guard_dir, "tile_p.cmpt"), "wb") as f:
+        f.write(b"cmpt" + _struct.pack("<III", 1, 16, 1))
+    # Q: version != 1.
+    with open(os.path.join(guard_dir, "tile_q.cmpt"), "wb") as f:
+        f.write(b"cmpt" + _struct.pack("<III", 2, 16, 0))
+    # R: byteLength exceeds the available bytes.
+    with open(os.path.join(guard_dir, "tile_r.cmpt"), "wb") as f:
+        f.write(b"cmpt" + _struct.pack("<III", 1, 4096, 0))
+    # S: shorter than the 16-byte header.
+    with open(os.path.join(guard_dir, "tile_s.cmpt"), "wb") as f:
+        f.write(b"cmpt\x01\x00")
+    for case in ("P", "Q", "R", "S"):
+        ts_path = os.path.join(guard_dir, "tileset_%s.json" % case)
+        with open(ts_path, "w") as f:
+            _json.dump({
+                "asset": {"version": "1.0"},
+                "root": {
+                    "boundingVolume": {
+                        "box": [0, 0, 0, 14, 0, 0, 0, 5, 0, 0, 0, 5]},
+                    "geometricError": 0.0,
+                    "content": {"uri": "file://" + os.path.join(
+                        guard_dir, "tile_%s.cmpt" % case.lower())},
+                },
+            }, f)
+        shot = os.path.join(workdir, "cmpt_guard_%s.png" % case)
+        rc = run_demo(args.demo, ["--frames", "30", "--tileset", ts_path,
+                                  "--screenshot", shot])
+        if rc is None:
+            failures += 1
+        elif crashed(rc):
+            print("FAIL: case %s crashed (exit %d)" % (case, rc))
+            failures += 1
+        elif rc != 0:
+            print("FAIL: case %s: expected exit 0 (bad tile skipped), "
+                  "got %d" % (case, rc))
+            failures += 1
+        else:
+            print("PASS: case %s (SIGSEGV-class cmpt skipped, no crash)"
+                  % case)
+
     if failures:
         print("FAIL: fault_test (%d case(s) failed)" % failures)
         return 1

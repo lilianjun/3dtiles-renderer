@@ -8,6 +8,19 @@ A = Android, i = iOS, wasm = WebAssembly.
 
 ## [Unreleased]
 
+### Fixed
+- P28: SDK-side guard for the corrupt-cmpt SIGSEGV (upstream
+  CesiumGS/cesium-native#1457, still open; ADR-0027). The five
+  magic-dispatched content converters are re-registered through the
+  public `GltfConverters::registerMagic` (overwrite semantics) with
+  wrappers that promote "empty model + warnings-only" to a hard error,
+  so a structurally corrupt cmpt (short header, bad version, oversized
+  byteLength, tilesLength with no inner tiles — all reproduced locally
+  as SIGSEGV/SIGFPE before the fix) now fails as a graceful failed
+  tile instead of crashing the host. No public API change; valid tiles
+  provably unaffected (a usable conversion always yields a model).
+  New fault_test cases P/Q/R/S; ADR-0023 G2 marked fixed SDK-side.
+
 ### Added
 - P27: i3dm GPU instancing investigated, boundary stands (ADR-0026).
   No code change: Filament v1.77's `InstanceBuffer` needs shader-side

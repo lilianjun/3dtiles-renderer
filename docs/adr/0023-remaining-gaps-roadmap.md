@@ -39,14 +39,17 @@ explicitly out of scope.
 
 ### G2. Corrupt cmpt can SIGSEGV the host (upstream #1457, open, 0 comments)
 
-- **State:** `CmptToGltfConverter` leaves an empty model with only a
-  warning on structural failure; `TilesetJsonLoader` then dereferences
-  it → SIGSEGV (reproduced locally, exit 139). Filed as
-  `CesiumGS/cesium-native#1457` on 2026-09-29; still open, no upstream
-  response.
-- **Takes:** either an upstream fix, or a defensive SDK-side guard
-  (validate converter result before handing to the loader — needs care
-  not to fork loader behavior).
+- **State (2026-09-30, P28): FIXED SDK-side.** The P9 ADR-0010 claim
+  "no clean interception point" was re-examined and found wrong:
+  `GltfConverters::registerMagic` overwrites, so the SDK now
+  re-registers hardened wrappers for the five magic-dispatched
+  converters after its one-time `registerAllTileContentTypes()` call.
+  "Empty model + warnings-only" is promoted to a hard error, and the
+  tile fails gracefully (`failed` counter, process alive) instead of
+  the unchecked `*result.model` dereference in `TilesetJsonLoader`
+  (UB, SIGSEGV). See ADR-0027. Upstream #1457 itself remains open.
+- **Takes:** nothing further unless upstream changes `registerMagic`
+  overwrite semantics.
 - **Why P0:** a malformed tile crashing the host process is a
   security-relevant robustness hole; everything else in P6/P23 was
   built to fail gracefully.

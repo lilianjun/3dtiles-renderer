@@ -5,6 +5,7 @@
 // renderables with gltfio (+ ubershader materials).
 
 #include "tileset_internal.h"
+#include "converter_guard.h" // P28: empty-model guard for content converters
 
 #include <unordered_set>
 
@@ -1188,6 +1189,12 @@ struct TilesetRenderer::Impl {
         static std::once_flag contentTypesRegisteredFlag;
         std::call_once(contentTypesRegisteredFlag, []() {
             Cesium3DTilesContent::registerAllTileContentTypes();
+            // P28: wrap the magic-dispatched converters so a converter
+            // result with an empty model and warnings-only errors becomes
+            // a hard error (graceful tile failure) instead of the
+            // unchecked `*result.model` dereference in TilesetJsonLoader
+            // (UB, SIGSEGV in practice; upstream #1457).
+            tiles::registerHardenedContentConverters();
         });
 
         auto pAccessor = std::make_shared<RoutingAssetAccessor>();

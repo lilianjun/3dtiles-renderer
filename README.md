@@ -160,7 +160,9 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
 
 ```bash
 # 1) 普通回归（25/25）：smoke、demo、截图、tileset、http、b3dm、rebase、
-#    i3dm、pnts、cmpt、tiles11、golden_regression、lifecycle、fault_inputs、
+#    i3dm、pnts、cmpt、tiles11、golden_regression、lifecycle、
+#    fault_inputs（P6/P28：损坏输入优雅失败；P28 新增 P/Q/R/S：曾 SIGSEGV
+#    的结构性损坏 cmpt 经 converter guard 转为 failed tile）、
 #    host_integration（P12：宿主视角 API 集成检查）、
 #    pbr_materials_screenshot（P15：PBR 材质管线验证）、
 #    trajectory_determinism（P16：确定性相机轨迹回放）、
