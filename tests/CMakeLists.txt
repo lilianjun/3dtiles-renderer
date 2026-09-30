@@ -95,6 +95,12 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json"
               --bad-tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p32_bad_child_tileset/tileset.json")
     set_tests_properties(tileset_events PROPERTIES TIMEOUT 900)
+    add_test(NAME tileset_properties
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_properties_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
+    set_tests_properties(tileset_properties PROPERTIES TIMEOUT 900)
   else()
     message(WARNING "[P32] Python3 not found — tileset_events test skipped")
   endif()
@@ -736,6 +742,16 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
       sanitizer_pnts sanitizer_cmpt sanitizer_11 sanitizer_pbr sanitizer_http
       sanitizer_trajectory sanitizer_faults
       PROPERTIES TIMEOUT 900)
+    # P33: show / modelMatrix / preloadWhenHidden + read-only state under
+    # ASan/LSan/UBSan — the per-frame tree walk, the transform recompose
+    # path, and the bounding-sphere math, with the core assertions.
+    add_test(NAME sanitizer_properties
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_properties_test.py"
+              --sanitized
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
+    set_tests_properties(sanitizer_properties PROPERTIES TIMEOUT 900)
   else()
     message(WARNING "[P6] Python3 not found — sanitizer scenario tests skipped")
   endif()

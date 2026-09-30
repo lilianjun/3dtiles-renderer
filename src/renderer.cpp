@@ -92,6 +92,14 @@ bool g_hasPendingMaxSse = false;
 // forwarded to each new TilesetRenderer at load.
 Renderer::TilesetEventCallbacks g_eventCallbacks;
 
+// P33: show / preloadWhenHidden / modelMatrix stash. Persist across
+// loadTileset() calls; forwarded to each new TilesetRenderer at load.
+// The matrix is stored column-major (matches the public API).
+bool g_show = true;
+bool g_preloadWhenHidden = false;
+double g_modelMatrix[16] = {1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+                            0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0};
+
 #ifdef TILES_WITH_FILAMENT
 
 // P2 demo geometry: a single triangle. Static storage so the Filament buffer
@@ -732,6 +740,19 @@ bool Renderer::loadTileset(const std::string& tilesetUrl,
     // P32: event callbacks persist across loads; the new TilesetRenderer
     // gets the current set before loading.
     tileset->setEventCallbacks(g_eventCallbacks);
+    // P33: show / preloadWhenHidden / modelMatrix persist across loads;
+    // the new TilesetRenderer gets the current values before loading.
+    tileset->setShow(g_show);
+    tileset->setPreloadWhenHidden(g_preloadWhenHidden);
+    {
+        glm::dmat4 m;
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                m[c][r] = g_modelMatrix[c * 4 + r];
+            }
+        }
+        tileset->setModelMatrix(m);
+    }
     // P22: build-then-commit. The new TilesetRenderer is fully loaded
     // before it replaces the old one, so a failed loadTileset() (bad
     // path, corrupt tileset.json, timeout) leaves the currently-loaded
@@ -944,6 +965,129 @@ void Renderer::clearEventCallbacks() {
         g_state.tileset->setEventCallbacks(g_eventCallbacks);
     }
 #endif
+}
+
+// P33: show / preloadWhenHidden / modelMatrix (see renderer.h). Stored in
+// the g_* stash (persist across loadTileset) and forwarded to the live
+// TilesetRenderer when one exists; each new TilesetRenderer gets the
+// stash at load.
+void Renderer::setShow(bool show) {
+    if (!g_initialized) {
+        return;
+    }
+    g_show = show;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setShow(show);
+    }
+#endif
+}
+
+bool Renderer::isShow() {
+    if (!g_initialized) {
+        return true;
+    }
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        return g_state.tileset->isShow();
+    }
+#endif
+    return g_show;
+}
+
+void Renderer::setPreloadWhenHidden(bool preload) {
+    if (!g_initialized) {
+        return;
+    }
+    g_preloadWhenHidden = preload;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setPreloadWhenHidden(preload);
+    }
+#endif
+}
+
+bool Renderer::isPreloadWhenHidden() {
+    if (!g_initialized) {
+        return false;
+    }
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        return g_state.tileset->isPreloadWhenHidden();
+    }
+#endif
+    return g_preloadWhenHidden;
+}
+
+void Renderer::setModelMatrix(const double matrix[16]) {
+    if (!g_initialized) {
+        return;
+    }
+    for (int i = 0; i < 16; ++i) {
+        g_modelMatrix[i] = matrix[i];
+    }
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        glm::dmat4 m;
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                m[c][r] = matrix[c * 4 + r];
+            }
+        }
+        g_state.tileset->setModelMatrix(m);
+    }
+#endif
+}
+
+void Renderer::modelMatrix(double out[16]) {
+    double* src = g_modelMatrix;
+#ifdef TILES_WITH_FILAMENT
+    glm::dmat4 live;
+    if (g_initialized && g_state.tileset != nullptr) {
+        live = g_state.tileset->modelMatrix();
+        src = &live[0][0];
+    }
+#endif
+    for (int i = 0; i < 16; ++i) {
+        out[i] = src[i];
+    }
+}
+
+bool Renderer::tilesLoaded() {
+#ifdef TILES_WITH_FILAMENT
+    if (g_initialized && g_state.tileset != nullptr) {
+        return g_state.tileset->tilesLoaded();
+    }
+#endif
+    return false;
+}
+
+Renderer::BoundingSphere Renderer::boundingSphere() {
+    Renderer::BoundingSphere out{{0.0, 0.0, 0.0}, 0.0};
+#ifdef TILES_WITH_FILAMENT
+    if (g_initialized && g_state.tileset != nullptr) {
+        return g_state.tileset->boundingSphere();
+    }
+#endif
+    return out;
+}
+
+std::int64_t Renderer::timeSinceLoadMs() {
+#ifdef TILES_WITH_FILAMENT
+    if (g_initialized && g_state.tileset != nullptr) {
+        return g_state.tileset->timeSinceLoadMs();
+    }
+#endif
+    return 0;
+}
+
+std::string Renderer::rootTileId() {
+#ifdef TILES_WITH_FILAMENT
+    if (g_initialized && g_state.tileset != nullptr) {
+        return g_state.tileset->rootTileId();
+    }
+#endif
+    return "";
 }
 
 // P26: toggle the default procedural IBL. Cheap: only attaches/detaches the

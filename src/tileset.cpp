@@ -564,12 +564,16 @@ bool preflightTilesetRoot(
 // ---------------------------------------------------------------------------
 // Per-tile render data, created in prepareInMainThread and freed in free().
 // The glb bytes are kept alive for the asset's lifetime (gltfio references
-// the caller's buffer).
+// the caller's buffer). rtcCenter/upAxisFix are the double-precision
+// transform pieces from LoadThreadData, kept so setModelMatrix() (P33) can
+// recompose the tile's render transform without re-loading its content.
 // ---------------------------------------------------------------------------
 struct TileRenderData {
     std::vector<std::uint8_t> glbBytes;
     filament::gltfio::FilamentAsset* asset = nullptr;
     bool inScene = false;
+    glm::dvec3 rtcCenter{0.0, 0.0, 0.0};
+    glm::dmat4 upAxisFix{1.0};
 };
 
 // ---------------------------------------------------------------------------
@@ -1041,32 +1045,12 @@ public:
             return nullptr;
         }
 
-        // Compose the tile's world transform in double precision:
-        //   world = tileTransform * translate(rtcCenter) * upAxisFix
-        //           - localOrigin
-        // The b3dm RTC_CENTER (if any) is applied here in double precision
-        // instead of being baked into the float glTF node, and localOrigin
-        // (P5 rebase) keeps huge ECEF-style coordinates renderable in
-        // float32. upAxisFix cancels the up-axis conjugation the i3dm
-        // converter applies to instance transforms (identity for b3dm /
-        // raw glb). Both rtcCenter and upAxisFix are no-ops for the small
-        // local test tilesets.
-        glm::dmat4 worldT = tile.getTransform();
-        if (rtcCenter != glm::dvec3(0.0)) {
-            glm::dmat4 rtcT(1.0);
-            rtcT[3][0] = rtcCenter.x;
-            rtcT[3][1] = rtcCenter.y;
-            rtcT[3][2] = rtcCenter.z;
-            worldT = worldT * rtcT;
-        }
-        worldT = worldT * upAxisFix;
-        worldT[3] -= glm::dvec4(_localOrigin, 0.0);
-        filament::math::mat4f m;
-        for (int c = 0; c < 4; ++c) {
-            for (int r = 0; r < 4; ++r) {
-                m[c][r] = static_cast<float>(worldT[c][r]);
-            }
-        }
+        // P33: keep the double-precision transform pieces so setModelMatrix()
+        // can recompose this tile's render transform without re-loading.
+        pData->rtcCenter = rtcCenter;
+        pData->upAxisFix = upAxisFix;
+        const filament::math::mat4f m = composeRenderTransform(
+            tile, rtcCenter, upAxisFix, _modelMatrix, _localOrigin);
         auto& transformManager = _engine->getTransformManager();
         const auto rootInstance =
             transformManager.getInstance(pData->asset->getRoot());
@@ -1076,9 +1060,57 @@ public:
         return pData;
     }
 
+    // P33: compose a tile's Filament render transform in double precision:
+    //   render = modelMatrix * tileTransform * translate(rtcCenter)
+    //            * upAxisFix - localOrigin
+    // The b3dm RTC_CENTER (if any) is applied here in double precision
+    // instead of being baked into the float glTF node, and localOrigin
+    // (P5 rebase) keeps huge ECEF-style coordinates renderable in
+    // float32. upAxisFix cancels the up-axis conjugation the i3dm
+    // converter applies to instance transforms (identity for b3dm /
+    // raw glb). modelMatrix (P33, default identity) transforms the whole
+    // tileset in world space; localOrigin stays FIXED (it is a pure
+    // float32-precision device, not part of the user transform), so the
+    // tileset visibly moves relative to the orbit camera target — the
+    // cesium.js behavior.
+    // Shared by prepareInMainThread (new tiles) and
+    // TilesetRenderer::Impl::setModelMatrix (already-loaded tiles).
+    static filament::math::mat4f composeRenderTransform(
+        const Cesium3DTilesSelection::Tile& tile,
+        const glm::dvec3& rtcCenter, const glm::dmat4& upAxisFix,
+        const glm::dmat4& modelMatrix, const glm::dvec3& localOrigin) {
+        glm::dmat4 worldT = tile.getTransform();
+        if (rtcCenter != glm::dvec3(0.0)) {
+            glm::dmat4 rtcT(1.0);
+            rtcT[3][0] = rtcCenter.x;
+            rtcT[3][1] = rtcCenter.y;
+            rtcT[3][2] = rtcCenter.z;
+            worldT = worldT * rtcT;
+        }
+        worldT = worldT * upAxisFix;
+        worldT = modelMatrix * worldT;
+        // P33: localOrigin is a fixed float32-precision device — it does
+        // NOT move with modelMatrix, so the user transform visibly moves
+        // the tileset relative to the orbit camera target.
+        worldT[3] -= glm::dvec4(localOrigin, 0.0);
+        filament::math::mat4f m;
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                m[c][r] = static_cast<float>(worldT[c][r]);
+            }
+        }
+        return m;
+    }
+
     // P5 rebase origin (world coordinates, double). Set once per tileset
     // after the root tile loads; defaults to (0,0,0) = no rebase.
     void setLocalOrigin(const glm::dvec3& origin) { _localOrigin = origin; }
+
+    // P33: whole-tileset model matrix (world space, double). Applied to
+    // tiles prepared after the call; already-loaded tiles are re-applied
+    // by TilesetRenderer::Impl::setModelMatrix. Render thread only.
+    void setModelMatrix(const glm::dmat4& matrix) { _modelMatrix = matrix; }
+    const glm::dmat4& modelMatrix() const { return _modelMatrix; }
 
     void free(
         Cesium3DTilesSelection::Tile& /*tile*/, void* pLoadThreadResult,
@@ -1148,6 +1180,9 @@ private:
     // P5 rebase origin (world coordinates, double); subtracted from every
     // tile translation in double precision before the float32 conversion.
     glm::dvec3 _localOrigin{0.0, 0.0, 0.0};
+    // P33: whole-tileset model matrix (world space, double); identity =
+    // no user transform.
+    glm::dmat4 _modelMatrix{1.0};
 };
 
 #endif // TILES_WITH_CESIUM_NATIVE && TILES_WITH_FILAMENT
@@ -1191,6 +1226,13 @@ struct TilesetRenderer::Impl {
         initialTilesLoadedFired = false;
         lastProgressPending = -1;
         lastProgressProcessing = -1;
+        lastTilesLoaded = false;
+        // P33: the update clock restarts for the new tileset. (show /
+        // preloadWhenHidden / modelMatrix are re-applied to the fresh
+        // TilesetRenderer by Renderer::loadTileset from its stash — see
+        // renderer.cpp.)
+        hasFirstUpdate = false;
+        loadTime = std::chrono::steady_clock::now();
         if (loadFailureQueue) {
             std::lock_guard<std::mutex> lock(loadFailureQueue->mutex);
             loadFailureQueue->pending.clear();
@@ -1200,9 +1242,10 @@ struct TilesetRenderer::Impl {
         // tileset, if any, is untouched — same as any other failed load).
         Renderer::TilesetOptions eff = sdkOptions;
         {
-            // Negative (or NaN) SSE restores the default 16 — same
+            // Negative, NaN, or +inf SSE restores the default 16 — same
             // semantics as the live setMaximumScreenSpaceError().
-            if (!(eff.maximumScreenSpaceError >= 0.0)) {
+            if (!(eff.maximumScreenSpaceError >= 0.0) ||
+                !std::isfinite(eff.maximumScreenSpaceError)) {
                 eff.maximumScreenSpaceError = 16.0;
             }
             // 0 simultaneous loads would make cesium-native's load pump
@@ -1390,6 +1433,10 @@ struct TilesetRenderer::Impl {
         // Tileset only holds the shared_ptr from externals during
         // construction, so retain our own copy too.
         prepareResources = pPrepare;
+        // P33: the model matrix may have been set before load (stash-then-
+        // forward) — push it into the fresh prepare resources so tiles
+        // prepared after this point use it.
+        prepareResources->setModelMatrix(modelMatrix);
         tileset = std::move(newTileset);
         // P31: remember the effective options for currentTilesetOptions().
         appliedOptions = eff;
@@ -1469,9 +1516,10 @@ struct TilesetRenderer::Impl {
     //
     // tileLoad/tileUnload/tileFailed come from TileLoadState transitions
     // observed in a single tree walk, which also yields the in-flight
-    // content count for loadProgress/allTilesLoaded. The walk only runs
-    // when at least one state/progress callback is registered; tileVisible
-    // only iterates the render selection when its callback is registered.
+    // content count for loadProgress/allTilesLoaded and for P33's
+    // tilesLoaded(). The walk runs every frame (it is O(tiles) pointer
+    // chasing with no per-tile allocation); only the transition bookkeeping
+    // and the event payloads allocate.
     void dispatchFrameEvents(
         const Cesium3DTilesSelection::ViewUpdateResult& viewResult) {
         const Renderer::TilesetEventCallbacks& cb = eventCallbacks;
@@ -1493,48 +1541,66 @@ struct TilesetRenderer::Impl {
 
         const bool wantTransitions =
             cb.onTileLoad || cb.onTileUnload || cb.onTileFailed;
-        const bool wantProgress =
-            wantTransitions || cb.onLoadProgress || cb.onAllTilesLoaded ||
-            cb.onInitialTilesLoaded;
 
-        // 2. Single tree walk: transitions + in-flight count.
+        // 2. Single tree walk: transitions + in-flight count. Always runs
+        // (P33 tilesLoaded); transition events only fire when observed.
         std::int64_t inFlightContent = 0;
-        if (wantProgress && tileset != nullptr) {
+        if (tileset != nullptr) {
             const Cesium3DTilesSelection::Tile* pRoot =
                 tileset->getRootTile();
             if (pRoot != nullptr) {
-                std::unordered_set<std::string> seen;
+                std::unordered_set<const Cesium3DTilesSelection::Tile*> seen;
                 std::vector<const Cesium3DTilesSelection::Tile*> stack{pRoot};
                 using Cesium3DTilesSelection::TileLoadState;
                 while (!stack.empty()) {
                     const auto* pTile = stack.back();
                     stack.pop_back();
-                    const std::string id =
-                        Cesium3DTilesSelection::TileIdUtilities::
-                            createTileIdString(pTile->getTileID());
-                    seen.insert(id);
+                    seen.insert(pTile);
                     const TileLoadState state = pTile->getState();
-                    const auto it = tileStates.find(id);
+                    auto it = tileStates.find(pTile);
                     const bool known = it != tileStates.end();
                     const TileLoadState prev =
-                        known ? it->second : TileLoadState::Unloaded;
-                    if (wantTransitions && (!known || prev != state)) {
-                        const bool wasDone = known && prev == TileLoadState::Done;
+                        known ? it->second.state : TileLoadState::Unloaded;
+                    if (!known) {
+                        // Materialize the ID string once per tile (event
+                        // payloads + the pruned-tile unload sweep below).
+                        TileStateRecord rec;
+                        rec.id = Cesium3DTilesSelection::
+                            TileIdUtilities::createTileIdString(
+                                pTile->getTileID());
+                        rec.state = state;
+                        it = tileStates.emplace(pTile, std::move(rec)).first;
+                    }
+                    if (wantTransitions && prev != state) {
+                        const bool wasDone = prev == TileLoadState::Done;
                         const bool isDone = state == TileLoadState::Done;
                         const bool wasFailed =
-                            known &&
-                            (prev == TileLoadState::Failed ||
-                             prev == TileLoadState::FailedTemporarily);
+                            prev == TileLoadState::Failed ||
+                            prev == TileLoadState::FailedTemporarily;
                         const bool isFailed =
                             state == TileLoadState::Failed ||
                             state == TileLoadState::FailedTemporarily;
                         if (isDone && !wasDone && cb.onTileLoad) {
-                            cb.onTileLoad(tileEventInfo(*pTile));
+                            Renderer::TileEventInfo info;
+                            info.tileId = it->second.id;
+                            if (const std::string* pUrl = std::get_if<
+                                    std::string>(&pTile->getTileID());
+                                pUrl != nullptr) {
+                                info.url = *pUrl;
+                            }
+                            cb.onTileLoad(info);
                         } else if (!isDone && wasDone && cb.onTileUnload) {
-                            cb.onTileUnload(tileEventInfo(*pTile));
+                            Renderer::TileEventInfo info;
+                            info.tileId = it->second.id;
+                            if (const std::string* pUrl = std::get_if<
+                                    std::string>(&pTile->getTileID());
+                                pUrl != nullptr) {
+                                info.url = *pUrl;
+                            }
+                            cb.onTileUnload(info);
                         } else if (isFailed && !wasFailed && cb.onTileFailed) {
                             Renderer::TileFailedInfo info;
-                            info.tileId = id;
+                            info.tileId = it->second.id;
                             if (const std::string* pUrl = std::get_if<
                                     std::string>(&pTile->getTileID());
                                 pUrl != nullptr) {
@@ -1546,7 +1612,7 @@ struct TilesetRenderer::Impl {
                             cb.onTileFailed(info);
                         }
                     }
-                    tileStates[id] = state;
+                    it->second.state = state;
                     if (state == TileLoadState::ContentLoading ||
                         state == TileLoadState::ContentLoaded) {
                         ++inFlightContent;
@@ -1557,36 +1623,28 @@ struct TilesetRenderer::Impl {
                 }
                 // Tiles pruned from the tree (implicit tiling): a tile that
                 // was Done and vanished had its content released.
-                if (wantTransitions && cb.onTileUnload) {
-                    for (auto it = tileStates.begin();
-                         it != tileStates.end();) {
-                        if (seen.find(it->first) == seen.end()) {
-                            if (it->second ==
+                for (auto it = tileStates.begin(); it != tileStates.end();) {
+                    if (seen.find(it->first) == seen.end()) {
+                        if (wantTransitions && cb.onTileUnload &&
+                            it->second.state ==
                                 Cesium3DTilesSelection::TileLoadState::Done) {
-                                Renderer::TileEventInfo info;
-                                info.tileId = it->first;
-                                cb.onTileUnload(info);
-                            }
-                            it = tileStates.erase(it);
-                        } else {
-                            ++it;
+                            Renderer::TileEventInfo info;
+                            info.tileId = it->second.id;
+                            cb.onTileUnload(info);
                         }
-                    }
-                } else if (!wantTransitions) {
-                    // Keep the map from growing when nobody observes
-                    // transitions but progress events need the walk: drop
-                    // entries for pruned tiles.
-                    for (auto it = tileStates.begin();
-                         it != tileStates.end();) {
-                        if (seen.find(it->first) == seen.end()) {
-                            it = tileStates.erase(it);
-                        } else {
-                            ++it;
-                        }
+                        it = tileStates.erase(it);
+                    } else {
+                        ++it;
                     }
                 }
             }
         }
+
+        // P33: the fully-loaded verdict, queryable via tilesLoaded()
+        // without event callbacks.
+        const std::int64_t pending = static_cast<std::int64_t>(lastWorkerQueue) +
+                                     static_cast<std::int64_t>(lastMainQueue);
+        lastTilesLoaded = (pending <= 0 && inFlightContent <= 0);
 
         // 3. tileVisible: the traversal's render selection, in order.
         if (cb.onTileVisible) {
@@ -1596,10 +1654,10 @@ struct TilesetRenderer::Impl {
         }
 
         // 4. loadProgress / allTilesLoaded / initialTilesLoaded.
+        const bool wantProgress = wantTransitions || cb.onLoadProgress ||
+                                  cb.onAllTilesLoaded ||
+                                  cb.onInitialTilesLoaded;
         if (wantProgress) {
-            const std::int64_t pending =
-                static_cast<std::int64_t>(lastWorkerQueue) +
-                static_cast<std::int64_t>(lastMainQueue);
             if (cb.onLoadProgress &&
                 (pending != lastProgressPending ||
                  inFlightContent != lastProgressProcessing)) {
@@ -1607,12 +1665,10 @@ struct TilesetRenderer::Impl {
                 lastProgressProcessing = inFlightContent;
                 cb.onLoadProgress(pending, inFlightContent);
             }
-            const bool fullyLoaded =
-                pending <= 0 && inFlightContent <= 0;
-            if (fullyLoaded && cb.onAllTilesLoaded) {
+            if (lastTilesLoaded && cb.onAllTilesLoaded) {
                 cb.onAllTilesLoaded();
             }
-            if (fullyLoaded && !initialTilesLoadedFired &&
+            if (lastTilesLoaded && !initialTilesLoadedFired &&
                 cb.onInitialTilesLoaded) {
                 initialTilesLoadedFired = true;
                 cb.onInitialTilesLoaded();
@@ -1633,61 +1689,84 @@ struct TilesetRenderer::Impl {
             return;
         }
 
-        // Orbit camera -> cesium ViewState. The orbit target is the tileset's
-        // rebase origin (double precision); rendering shows the same tiles
-        // rebased around (0,0,0) — see FilamentPrepareResources.
-        const double yaw = cam.yawDegrees * kPi / 180.0;
-        const double pitch = cam.pitchDegrees * kPi / 180.0;
-        const glm::dvec3 target =
-            hasOrigin ? localOrigin
-                      : glm::dvec3(cam.targetX, cam.targetY, cam.targetZ);
-        const glm::dvec3 eye(
-            target.x + cam.distance * std::cos(pitch) * std::sin(yaw),
-            target.y + cam.distance * std::sin(pitch),
-            target.z + cam.distance * std::cos(pitch) * std::cos(yaw));
-        const glm::dvec3 direction = glm::normalize(target - eye);
-        const glm::dvec3 up(0.0, 1.0, 0.0);
-        constexpr double kVfov = 45.0 * kPi / 180.0; // matches SDK camera
-        const double aspect = viewportWidth / viewportHeight;
-        const double kHfov = 2.0 * std::atan(std::tan(kVfov / 2.0) * aspect);
-        Cesium3DTilesSelection::ViewState viewState(
-            eye, direction, up, glm::dvec2(viewportWidth, viewportHeight),
-            kHfov, kVfov);
-        const Cesium3DTilesSelection::ViewUpdateResult& viewResult =
-            tileset->updateViewGroup(
-                tileset->getDefaultViewGroup(), {viewState});
-        // updateViewGroup only fills the traversal's load queue; loadTiles()
-        // actually starts/processes the queued tile content loads.
-        tileset->loadTiles();
-
-        // P17: capture the traversal's diagnostics for tileStats().
-        lastSelected =
-            static_cast<int>(viewResult.tilesToRenderThisFrame.size());
-        lastWorkerQueue = viewResult.workerThreadTileLoadQueueLength;
-        lastMainQueue = viewResult.mainThreadTileLoadQueueLength;
-        // P20: per-tile identity of the render selection (diagnostic).
-        lastSelectedIds.clear();
-        lastSelectedIds.reserve(viewResult.tilesToRenderThisFrame.size());
-        for (const auto& pTile : viewResult.tilesToRenderThisFrame) {
-            lastSelectedIds.push_back(
-                Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
-                    pTile->getTileID()));
+        // P33: first successful frame after load — starts the
+        // timeSinceLoadMs() clock.
+        if (!hasFirstUpdate) {
+            hasFirstUpdate = true;
+            firstUpdateTime = std::chrono::steady_clock::now();
         }
 
-        // P32: cesium.js-style tileset events, dispatched on the render
-        // thread at the end of the traversal.
-        dispatchFrameEvents(viewResult);
+        // P33: show=false hides the tileset (cesium.js show /
+        // preloadWhenHidden). Without preloadWhenHidden the traversal is
+        // skipped entirely — tiles neither load nor render and the tileset
+        // is frozen. With preloadWhenHidden, tiles keep loading (events
+        // still fire) but nothing is ever added to the Filament scene.
+        const bool hidden = !show;
+        const bool doTraversal = !hidden || preloadWhenHidden;
 
-        // Use the traversal's explicit render selection to drive Scene
-        // visibility (not tile.isRenderable(), which is true for every loaded
-        // tile). Include fading-out tiles so LOD transitions don't pop.
+        // The traversal's explicit render selection drives Scene visibility
+        // (not tile.isRenderable(), which is true for every loaded tile).
+        // Include fading-out tiles so LOD transitions don't pop. When
+        // hidden, the set stays empty so the scene is swept clean.
         std::unordered_set<Cesium3DTilesSelection::Tile::ConstPointer>
             wantVisible;
-        for (const auto& pTile : viewResult.tilesToRenderThisFrame) {
-            wantVisible.insert(pTile);
-        }
-        for (const auto& pTile : viewResult.tilesFadingOut) {
-            wantVisible.insert(pTile);
+        if (doTraversal) {
+            // Orbit camera -> cesium ViewState. The orbit target is the
+            // tileset's rebase origin (double precision); rendering shows
+            // the same tiles rebased around (0,0,0) — see
+            // FilamentPrepareResources.
+            const double yaw = cam.yawDegrees * kPi / 180.0;
+            const double pitch = cam.pitchDegrees * kPi / 180.0;
+            const glm::dvec3 target =
+                hasOrigin ? localOrigin
+                          : glm::dvec3(cam.targetX, cam.targetY, cam.targetZ);
+            const glm::dvec3 eye(
+                target.x + cam.distance * std::cos(pitch) * std::sin(yaw),
+                target.y + cam.distance * std::sin(pitch),
+                target.z + cam.distance * std::cos(pitch) * std::cos(yaw));
+            const glm::dvec3 direction = glm::normalize(target - eye);
+            const glm::dvec3 up(0.0, 1.0, 0.0);
+            constexpr double kVfov = 45.0 * kPi / 180.0; // matches SDK camera
+            const double aspect = viewportWidth / viewportHeight;
+            const double kHfov =
+                2.0 * std::atan(std::tan(kVfov / 2.0) * aspect);
+            Cesium3DTilesSelection::ViewState viewState(
+                eye, direction, up, glm::dvec2(viewportWidth, viewportHeight),
+                kHfov, kVfov);
+            const Cesium3DTilesSelection::ViewUpdateResult& viewResult =
+                tileset->updateViewGroup(
+                    tileset->getDefaultViewGroup(), {viewState});
+            // updateViewGroup only fills the traversal's load queue;
+            // loadTiles() actually starts/processes the queued tile content
+            // loads.
+            tileset->loadTiles();
+
+            // P17: capture the traversal's diagnostics for tileStats().
+            lastSelected =
+                static_cast<int>(viewResult.tilesToRenderThisFrame.size());
+            lastWorkerQueue = viewResult.workerThreadTileLoadQueueLength;
+            lastMainQueue = viewResult.mainThreadTileLoadQueueLength;
+            // P20: per-tile identity of the render selection (diagnostic).
+            lastSelectedIds.clear();
+            lastSelectedIds.reserve(viewResult.tilesToRenderThisFrame.size());
+            for (const auto& pTile : viewResult.tilesToRenderThisFrame) {
+                lastSelectedIds.push_back(
+                    Cesium3DTilesSelection::TileIdUtilities::
+                        createTileIdString(pTile->getTileID()));
+            }
+
+            // P32: cesium.js-style tileset events, dispatched on the render
+            // thread at the end of the traversal.
+            dispatchFrameEvents(viewResult);
+
+            if (!hidden) {
+                for (const auto& pTile : viewResult.tilesToRenderThisFrame) {
+                    wantVisible.insert(pTile);
+                }
+                for (const auto& pTile : viewResult.tilesFadingOut) {
+                    wantVisible.insert(pTile);
+                }
+            }
         }
 
         // Toggle per-tile visibility from the traversal's render selection.
@@ -1759,16 +1838,34 @@ struct TilesetRenderer::Impl {
     // P32: event callbacks (see Renderer::TilesetEventCallbacks), set via
     // TilesetRenderer::setEventCallbacks().
     Renderer::TilesetEventCallbacks eventCallbacks;
-    // P32: last observed TileLoadState per tile ID, for load/unload/failed
-    // transition detection in dispatchFrameEvents(). Reset on loadTileset().
-    std::unordered_map<std::string,
-                       Cesium3DTilesSelection::TileLoadState>
+    // P32/P33: last observed TileLoadState per tile, for load/unload/failed
+    // transition detection in dispatchFrameEvents(). Keyed by tile pointer
+    // (not ID string — the traversal root and implicit tiles can share an
+    // empty ID); the ID string is materialized once per tile for event
+    // payloads. Reset on loadTileset().
+    struct TileStateRecord {
+        std::string id;
+        Cesium3DTilesSelection::TileLoadState state;
+    };
+    std::unordered_map<const Cesium3DTilesSelection::Tile*, TileStateRecord>
         tileStates;
     // P32: initialTilesLoaded fires once per loadTileset().
     bool initialTilesLoadedFired = false;
     // P32: last loadProgress payload, for change detection (-1 = never).
     std::int64_t lastProgressPending = -1;
     std::int64_t lastProgressProcessing = -1;
+    // P33: last frame's fully-loaded verdict (P32's allTilesLoaded
+    // condition), updated by every dispatchFrameEvents() walk so
+    // tilesLoaded() is queryable without event callbacks.
+    bool lastTilesLoaded = false;
+    // P33: show / preloadWhenHidden / modelMatrix (see renderer.h).
+    bool show = true;
+    bool preloadWhenHidden = false;
+    glm::dmat4 modelMatrix{1.0};
+    // P33: load/update timestamps for timeSinceLoadMs().
+    std::chrono::steady_clock::time_point loadTime{};
+    std::chrono::steady_clock::time_point firstUpdateTime{};
+    bool hasFirstUpdate = false;
     // P32: tileset.json-level failures arrive via
     // TilesetOptions::loadErrorCallback (contract allows worker threads).
     // The callback is owned by the Tileset, so during teardown it could
@@ -1950,11 +2047,12 @@ void TilesetRenderer::setMaxCachedBytes(std::int64_t bytes) {
 // P31: live SSE budget. Same stash-then-forward pattern as
 // setMaxCachedBytes: applies to the next load() via pendingMaxSse and to a
 // loaded tileset via Tileset::getOptions() (read every updateViewGroup, so
-// it takes effect on the next frame). Values < 0 (or NaN) restore the
+// it takes effect on the next frame). Values < 0, NaN, or +inf restore the
 // default 16 — normalized at stash time so pre-load and live agree.
 void TilesetRenderer::setMaximumScreenSpaceError(double sse) {
 #if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
-    const double normalized = sse >= 0.0 ? sse : 16.0;
+    const double normalized =
+        (sse >= 0.0 && std::isfinite(sse)) ? sse : 16.0;
     _impl->hasPendingMaxSse = true;
     _impl->pendingMaxSse = normalized;
     if (_impl->loaded && _impl->tileset != nullptr) {
@@ -2015,12 +2113,9 @@ void TilesetRenderer::fireTileUnloadEvents() {
     while (!stack.empty()) {
         const auto* pTile = stack.back();
         stack.pop_back();
-        const std::string id =
-            Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
-                pTile->getTileID());
-        const auto it = _impl->tileStates.find(id);
+        const auto it = _impl->tileStates.find(pTile);
         if (it != _impl->tileStates.end() &&
-            it->second == Cesium3DTilesSelection::TileLoadState::Done) {
+            it->second.state == Cesium3DTilesSelection::TileLoadState::Done) {
             _impl->eventCallbacks.onTileUnload(
                 TilesetRenderer::Impl::tileEventInfo(*pTile));
         }
@@ -2028,6 +2123,225 @@ void TilesetRenderer::fireTileUnloadEvents() {
             stack.push_back(&child);
         }
     }
+#endif
+}
+
+// P33: show / preloadWhenHidden / modelMatrix + read-only state.
+void TilesetRenderer::setShow(bool show) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->show = show;
+#else
+    (void)show;
+#endif
+}
+
+bool TilesetRenderer::isShow() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->show;
+#else
+    return true;
+#endif
+}
+
+void TilesetRenderer::setPreloadWhenHidden(bool preload) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->preloadWhenHidden = preload;
+#else
+    (void)preload;
+#endif
+}
+
+bool TilesetRenderer::isPreloadWhenHidden() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->preloadWhenHidden;
+#else
+    return false;
+#endif
+}
+
+void TilesetRenderer::setModelMatrix(const glm::dmat4& matrix) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->modelMatrix = matrix;
+    if (_impl->prepareResources != nullptr) {
+        _impl->prepareResources->setModelMatrix(matrix);
+    }
+    // Re-apply to already-loaded tiles immediately: recompose each tile's
+    // Filament transform from its stored double-precision pieces. Render
+    // thread only (same thread as prepareInMainThread).
+    if (_impl->tileset != nullptr && _impl->engine != nullptr) {
+        const Cesium3DTilesSelection::Tile* pRoot =
+            _impl->tileset->getRootTile();
+        if (pRoot != nullptr) {
+            auto& transformManager =
+                _impl->engine->getTransformManager();
+            std::vector<Cesium3DTilesSelection::Tile*> stack{
+                const_cast<Cesium3DTilesSelection::Tile*>(pRoot)};
+            while (!stack.empty()) {
+                auto* pTile = stack.back();
+                stack.pop_back();
+                auto* pContent = pTile->getContent().getRenderContent();
+                if (pContent != nullptr) {
+                    auto* pData = static_cast<TileRenderData*>(
+                        pContent->getRenderResources());
+                    if (pData != nullptr && pData->asset != nullptr) {
+                        const auto instance = transformManager.getInstance(
+                            pData->asset->getRoot());
+                        if (instance.isValid()) {
+                            transformManager.setTransform(
+                                instance,
+                                FilamentPrepareResources::
+                                    composeRenderTransform(
+                                        *pTile, pData->rtcCenter,
+                                        pData->upAxisFix, matrix,
+                                        _impl->localOrigin));
+                        }
+                    }
+                }
+                for (auto& child : pTile->getChildren()) {
+                    stack.push_back(&child);
+                }
+            }
+        }
+    }
+#else
+    (void)matrix;
+#endif
+}
+
+glm::dmat4 TilesetRenderer::modelMatrix() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->modelMatrix;
+#else
+    return glm::dmat4(1.0);
+#endif
+}
+
+bool TilesetRenderer::tilesLoaded() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->loaded && _impl->lastTilesLoaded;
+#else
+    return false;
+#endif
+}
+
+Renderer::BoundingSphere TilesetRenderer::boundingSphere() const {
+    Renderer::BoundingSphere out{{0.0, 0.0, 0.0}, 0.0};
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    if (!_impl->loaded || _impl->tileset == nullptr) {
+        return out;
+    }
+    const Cesium3DTilesSelection::Tile* pRoot =
+        _impl->tileset->getRootTile();
+    if (pRoot == nullptr) {
+        return out;
+    }
+    // Root bounding volume -> sphere (world space, authored transform).
+    glm::dvec3 center(0.0);
+    double radius = 0.0;
+    bool ok = false;
+    const Cesium3DTilesSelection::BoundingVolume& bv =
+        pRoot->getBoundingVolume();
+    if (const auto* pBox = std::get_if<CesiumGeometry::OrientedBoundingBox>(
+            &bv);
+        pBox != nullptr) {
+        center = pBox->getCenter();
+        const glm::dmat3& h = pBox->getHalfAxes();
+        radius = std::sqrt(
+            glm::dot(h[0], h[0]) + glm::dot(h[1], h[1]) +
+            glm::dot(h[2], h[2]));
+        ok = true;
+    } else if (const auto* pSphere =
+                   std::get_if<CesiumGeometry::BoundingSphere>(&bv);
+               pSphere != nullptr) {
+        center = pSphere->getCenter();
+        radius = pSphere->getRadius();
+        ok = true;
+    } else {
+        // Region / region-with-loose-heights -> their bounding box.
+        const CesiumGeometry::OrientedBoundingBox* pB = nullptr;
+        std::optional<CesiumGeometry::OrientedBoundingBox> box;
+        if (const auto* pRegion =
+                std::get_if<CesiumGeospatial::BoundingRegion>(&bv);
+            pRegion != nullptr) {
+            box = pRegion->getBoundingBox();
+        } else if (const auto* pLoose = std::get_if<
+                       CesiumGeospatial::BoundingRegionWithLooseFittingHeights>(
+                       &bv);
+                   pLoose != nullptr) {
+            box = pLoose->getBoundingRegion().getBoundingBox();
+        }
+        if (box.has_value()) {
+            pB = &box.value();
+        }
+        if (pB != nullptr) {
+            center = pB->getCenter();
+            const glm::dmat3& h = pB->getHalfAxes();
+            radius = std::sqrt(
+                glm::dot(h[0], h[0]) + glm::dot(h[1], h[1]) +
+                glm::dot(h[2], h[2]));
+            ok = true;
+        }
+    }
+    if (!ok) {
+        return out;
+    }
+    // P33: apply modelMatrix (cesium.js applies it to boundingSphere).
+    // Radius scales by the matrix's maximum axis scale (conservative for
+    // non-uniform scale).
+    const glm::dmat4& m = _impl->modelMatrix;
+    const glm::dvec3 wc = glm::dvec3(m * glm::dvec4(center, 1.0));
+    const double s = std::max(
+        {glm::length(m[0]), glm::length(m[1]), glm::length(m[2])});
+    out.center[0] = wc.x;
+    out.center[1] = wc.y;
+    out.center[2] = wc.z;
+    out.radius = radius * s;
+    return out;
+#else
+    return out;
+#endif
+}
+
+std::int64_t TilesetRenderer::timeSinceLoadMs() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    if (!_impl->loaded || !_impl->hasFirstUpdate) {
+        return 0;
+    }
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now() - _impl->firstUpdateTime)
+        .count();
+#else
+    return 0;
+#endif
+}
+
+std::string TilesetRenderer::rootTileId() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    if (!_impl->loaded || _impl->tileset == nullptr) {
+        return "";
+    }
+    const Cesium3DTilesSelection::Tile* pRoot =
+        _impl->tileset->getRootTile();
+    if (pRoot == nullptr) {
+        return "";
+    }
+    // Unwrap cesium-native's internal empty-ID wrapper tile: the real
+    // tileset.json root is its single child.
+    const Cesium3DTilesSelection::Tile* p = pRoot;
+    while (p != nullptr &&
+           Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
+               p->getTileID())
+                   .empty() &&
+           p->getChildren().size() == 1) {
+        p = &p->getChildren()[0];
+    }
+    if (p == nullptr) {
+        return "";
+    }
+    return Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
+        p->getTileID());
+#else
+    return "";
 #endif
 }
 

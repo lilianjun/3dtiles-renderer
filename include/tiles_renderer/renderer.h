@@ -187,6 +187,51 @@ public:
     // P32: remove all event callbacks. Must be called on the render thread.
     static void clearEventCallbacks();
 
+    // P33: cesium.js-style show / modelMatrix / preloadWhenHidden, plus
+    // read-only tileset state. All must be called on the render thread.
+    //
+    // show (default true): whether the tileset is rendered. When false, no
+    // tile content is submitted to the Filament scene. preloadWhenHidden
+    // (default false) decides what else happens while hidden: when true,
+    // the traversal keeps running so tiles keep loading (but never
+    // render); when false, the traversal is skipped entirely and the
+    // tileset is frozen.
+    //
+    // modelMatrix (default identity, column-major 4x4): transforms the
+    // whole tileset in world space for rendering. It applies to already
+    // loaded tiles immediately and to tiles loaded later. The rebase
+    // origin (P5) is a fixed float32-precision device and does NOT move
+    // with the matrix, so the tileset visibly moves relative to the
+    // orbit camera target — the cesium.js behavior. Honest difference
+    // from cesium.js: tile selection and LOD still use the tileset's
+    // authored (untransformed) tile transforms, so for large placements
+    // prefer setting the matrix before (or right after) loadTileset.
+    //
+    // Read-only state (defaults when no tileset is loaded):
+    // - tilesLoaded(): every tile needed for the current view is loaded
+    //   (same condition as P32's allTilesLoaded, but queryable any time).
+    // - boundingSphere(): the tileset's bounding sphere in world space,
+    //   with modelMatrix applied (center + radius; radius uses the
+    //   matrix's maximum axis scale).
+    // - timeSinceLoadMs(): ms since the tileset was loaded and first
+    //   updated; 0 when no tileset is loaded or no frame ran yet.
+    // - rootTileId(): the tileset.json root tile's ID (cesium-native's
+    //   internal empty-ID wrapper tile is unwrapped); "" when none.
+    static void setShow(bool show);
+    static bool isShow();
+    static void setPreloadWhenHidden(bool preload);
+    static bool isPreloadWhenHidden();
+    static void setModelMatrix(const double matrix[16]);
+    static void modelMatrix(double out[16]);
+    static bool tilesLoaded();
+    struct BoundingSphere {
+        double center[3];
+        double radius;
+    };
+    static BoundingSphere boundingSphere();
+    static std::int64_t timeSinceLoadMs();
+    static std::string rootTileId();
+
     // P3: orbit camera used for tile selection and the Filament view.
     // Only takes effect while a tileset is loaded; otherwise the P2 fixed
     // camera is kept. yaw/pitch in degrees, distance in the tileset's units.

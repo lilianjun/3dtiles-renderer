@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include <glm/mat4x4.hpp> // P33: setModelMatrix / modelMatrix (glm::dmat4)
+
 #include "tiles_renderer/renderer.h" // P17: TileStats
 
 namespace filament {
@@ -106,6 +108,25 @@ public:
     // Renderer::loadTileset before a successful load replaces this
     // TilesetRenderer. Must be called on the render thread.
     void fireTileUnloadEvents();
+
+    // P33: show / preloadWhenHidden / modelMatrix (see renderer.h). The
+    // show/preload flags and the matrix are stashed per TilesetRenderer;
+    // Renderer::set* forwards to the live one (or stashes pre-load).
+    // setModelMatrix re-applies the transform to already-loaded tiles
+    // immediately. Must be called on the render thread.
+    void setShow(bool show);
+    bool isShow() const;
+    void setPreloadWhenHidden(bool preload);
+    bool isPreloadWhenHidden() const;
+    void setModelMatrix(const glm::dmat4& matrix);
+    glm::dmat4 modelMatrix() const;
+
+    // P33: read-only tileset state (see renderer.h). Defaults when no
+    // tileset is loaded. Must be called on the render thread.
+    bool tilesLoaded() const;
+    Renderer::BoundingSphere boundingSphere() const;
+    std::int64_t timeSinceLoadMs() const;
+    std::string rootTileId() const;
 
 private:
     struct Impl;

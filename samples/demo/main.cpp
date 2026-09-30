@@ -56,6 +56,14 @@ struct DemoArgs {
     bool printSelected = false; // P20: print per-frame selected tile IDs
     bool eventLog = false;  // P32: stream tileset events as [event] lines
     int clearEventsAtFrame = -1; // P32: clearEventCallbacks() before frame N
+    // P33: show / preloadWhenHidden / modelMatrix / read-only state hooks.
+    bool hide = false;           // setShow(false) right after load
+    bool preloadHidden = false;  // setPreloadWhenHidden(true) after load
+    double modelMatrixTx = 0.0;  // translate the model matrix by (tx,0,0)
+    bool hasModelMatrixTx = false;
+    int modelMatrixTxAtFrame = -1; // apply --model-matrix-tx before frame N
+    bool printTilesetInfo = false; // print tilesLoaded/boundingSphere/
+                                   // timeSinceLoadMs/rootTileId at the end
     bool noIbl = false;     // P26: disable the default image-based lighting
                             // (renders with the P3 directional sun only)
     // P18: weak-network test hooks (dev/test only, not for production use).
@@ -161,6 +169,27 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             std::string v;
             if (!needValue("--clear-events-at-frame", v)) return false;
             out.clearEventsAtFrame = std::stoi(v);
+        } else if (arg == "--hide") {
+            // P33: setShow(false) right after load (test hook).
+            out.hide = true;
+        } else if (arg == "--preload-hidden") {
+            // P33: setPreloadWhenHidden(true) right after load (test hook).
+            out.preloadHidden = true;
+        } else if (arg == "--model-matrix-tx") {
+            // P33: translate the model matrix by (tx,0,0) after load.
+            std::string v;
+            if (!needValue("--model-matrix-tx", v)) return false;
+            out.modelMatrixTx = std::stod(v);
+            out.hasModelMatrixTx = true;
+        } else if (arg == "--model-matrix-tx-at-frame") {
+            // P33: apply --model-matrix-tx before frame N (tests the live
+            // re-apply path for already-loaded tiles).
+            std::string v;
+            if (!needValue("--model-matrix-tx-at-frame", v)) return false;
+            out.modelMatrixTxAtFrame = std::stoi(v);
+        } else if (arg == "--print-tileset-info") {
+            // P33: print read-only tileset state at the end (test hook).
+            out.printTilesetInfo = true;
         } else if (arg == "--no-ibl") {
             out.noIbl = true;
         } else if (arg == "--until-loaded") {
@@ -245,6 +274,9 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
                          "[--frame-dir dir] [--warmup N] [--stats] "
                          "[--print-selected] [--event-log] "
                          "[--clear-events-at-frame N] "
+                         "[--hide] [--preload-hidden] "
+                         "[--model-matrix-tx X] [--model-matrix-tx-at-frame N] "
+                         "[--print-tileset-info] "
                          "[--until-loaded N] [--exit-on-loading] "
                          "[--zoom-out-on-loading] [--cache-budget BYTES] "
                          "[--print-rss] "
@@ -424,8 +456,26 @@ int main(int argc, char** argv) {
                     std::cout << "[preset-sse] value=" << args.presetSse
                               << std::endl;
                 }
-                // P32: stream tileset events as [event] lines (test hook).
+                // P33: show / preloadWhenHidden / modelMatrix test hooks.
+                if (args.hide) {
+                    tiles_renderer::Renderer::setShow(false);
+                    std::cout << "[p33] show=false" << std::endl;
+                }
+                if (args.preloadHidden) {
+                    tiles_renderer::Renderer::setPreloadWhenHidden(true);
+                    std::cout << "[p33] preloadWhenHidden=true" << std::endl;
+                }
+                if (args.hasModelMatrixTx &&
+                    args.modelMatrixTxAtFrame < 0) {
+                    double m[16] = {1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+                                    0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0};
+                    m[12] = args.modelMatrixTx; // column-major translation X
+                    tiles_renderer::Renderer::setModelMatrix(m);
+                    std::cout << "[p33] modelMatrix tx=" << args.modelMatrixTx
+                              << std::endl;
+                }
                 if (args.eventLog) {
+                    // P32: stream tileset events as [event] lines (test hook).
                     tiles_renderer::Renderer::TilesetEventCallbacks cb;
                     cb.onTileLoad = [](const auto& info) {
                         std::cout << "[event] tileLoad id=" << info.tileId
@@ -683,6 +733,17 @@ int main(int argc, char** argv) {
                 tiles_renderer::Renderer::clearEventCallbacks();
                 std::cout << "[clear-events] frame=" << rendered << std::endl;
             }
+            // P33: apply the model-matrix translation before frame N
+            // (tests the live re-apply path for already-loaded tiles).
+            if (args.hasModelMatrixTx &&
+                args.modelMatrixTxAtFrame == rendered) {
+                double m[16] = {1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+                                0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0};
+                m[12] = args.modelMatrixTx; // column-major translation X
+                tiles_renderer::Renderer::setModelMatrix(m);
+                std::cout << "[p33] live modelMatrix tx=" << args.modelMatrixTx
+                          << " at frame=" << rendered << std::endl;
+            }
             if (tiles_renderer::Renderer::renderFrame()) {
                 if (!args.frameDir.empty() && !dumpFramePng(rendered)) {
                     exitCode = 1;
@@ -870,6 +931,22 @@ int main(int argc, char** argv) {
         }
         if (args.printRss) {
             std::cout << "[rss] end=" << readRssKb() << "KB" << std::endl;
+        }
+        // P33: read-only tileset state (test hook).
+        if (args.printTilesetInfo) {
+            const auto bs = tiles_renderer::Renderer::boundingSphere();
+            std::cout << "[tileset-info] tilesLoaded="
+                      << (tiles_renderer::Renderer::tilesLoaded() ? 1 : 0)
+                      << " boundingSphere=(" << bs.center[0] << ","
+                      << bs.center[1] << "," << bs.center[2] << ")"
+                      << " radius=" << bs.radius
+                      << " timeSinceLoadMs="
+                      << tiles_renderer::Renderer::timeSinceLoadMs()
+                      << " rootTileId=\""
+                      << tiles_renderer::Renderer::rootTileId() << "\""
+                      << " show="
+                      << (tiles_renderer::Renderer::isShow() ? 1 : 0)
+                      << std::endl;
         }
         tiles_renderer::Renderer::shutdown();
     }

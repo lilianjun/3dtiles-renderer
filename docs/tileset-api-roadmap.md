@@ -76,7 +76,7 @@
 - 验收：ctest 全过；新增测试验证构造期透传 + live setter 生效（读 `getOptions()`）；
   sanitizer 跑一遍；SDK 零 SDL。
 
-### P32：事件系统 ✅ 完成（2026-09-30，commit 待填）
+### P32：事件系统 ✅ 完成（2026-09-30，commit `dda4d31`）
 - `struct TilesetEventCallbacks`：`onTileLoad` / `onTileUnload` /
   `onTileFailed({url, message})` / `onTileVisible` / `onAllTilesLoaded` /
   `onLoadProgress(pendingRequests, tilesProcessing)` / `onInitialTilesLoaded`。
@@ -94,14 +94,17 @@
   另修 P22 遗留 demo bug：`--switch-at-frame` 在 renderFrame 失败时重复触发，
   现为 one-shot。
 
-### P33：显示 / 变换 / 只读属性
+### P33：显示 / 变换 / 只读属性 ✅ 完成（2026-09-30，commit 待填）
 - `setShow(bool)` / `isShow()`；`show=false` 时跳过 Filament 场景提交；
   `preloadWhenHidden` 决定是否继续 `updateViewGroup` 遍历。
-- `setModelMatrix(const double[16])`（column-major；与 rebase 复合顺序文档写死）。
+- `setModelMatrix(const double[16])`（column-major；复合公式
+  `render = modelMatrix × tileTransform × RTC × upAxisFix − localOrigin`，
+  localOrigin 固定不动——早期"origin 跟 matrix 走"的草案会精确抵消平移，已否决）。
 - 只读：`tilesLoaded()`、`boundingSphere(center, radius)`（world 系，应用 modelMatrix）、
-  `timeSinceLoadMs()`、`rootTileId()`。
+  `timeSinceLoadMs()`、`rootTileId()`（unwrap cesium-native 空 ID wrapper）。
 - 验收：`show=false` 输出清屏色（像素测试）；modelMatrix 平移后像素变化；
   boundingSphere 与 fixture 已知值对照。
+- 诚实边界：selection/LOD 仍用 authored transform（cesium-native 无 runtime root transform API）。
 
 ### P34：缓存 / 统计 / 方法对齐
 - `totalMemoryUsageInBytes()`（语义：content bytes，非 GPU 估计；与 `bytesLoaded` 关系文档注明）。

@@ -9,6 +9,25 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- P33: cesium.js-aligned display/transform + read-only tileset state (third
+  tileset-API alignment phase). New public API: `Renderer::setShow()` /
+  `isShow()`, `Renderer::setPreloadWhenHidden()` / `isPreloadWhenHidden()`,
+  `Renderer::setModelMatrix(const double[16])` / `modelMatrix(double[16])`
+  (column-major), `Renderer::tilesLoaded()`, `Renderer::boundingSphere()`
+  (center + radius, modelMatrix applied), `Renderer::timeSinceLoadMs()`,
+  `Renderer::rootTileId()`. All three setters persist across `loadTileset()`
+  (stash-then-forward). `show=false` removes all tile entities from the
+  scene; with `preloadWhenHidden=true` the traversal keeps loading in the
+  background (stats/events still fire) but nothing renders. `modelMatrix`
+  composes per-tile as `modelMatrix * tileTransform * RTC * upAxisFix -
+  localOrigin` (localOrigin stays fixed — it is a float32-precision device,
+  so the tileset visibly moves; an earlier draft that moved the origin with
+  the matrix canceled the translation and was rejected). Live matrix
+  changes re-apply to already-loaded tiles immediately. Honest difference:
+  tile selection/LOD still uses the authored (untransformed) transforms.
+  Demo gains `--hide`, `--preload-hidden`, `--model-matrix-tx X`, and
+  `--print-tileset-info` test hooks. New `tileset_properties` test (4
+  parts) + `sanitizer_properties` scene. ADR-0032.
 - P32: cesium.js-aligned tileset events (second tileset-API alignment
   phase). New public API: `Renderer::TilesetEventCallbacks` (7 events —
   tileLoad, tileUnload, tileFailed, tileVisible, loadProgress,
