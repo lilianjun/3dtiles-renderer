@@ -128,6 +128,12 @@ public:
     std::int64_t timeSinceLoadMs() const;
     std::string rootTileId() const;
 
+    // P34: cache / statistics (see renderer.h). Must be called on the
+    // render thread.
+    std::int64_t totalMemoryUsageInBytes() const;
+    void trimLoadedTiles();
+    bool hasExtension(const std::string& name) const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> _impl;

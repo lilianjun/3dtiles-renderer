@@ -64,6 +64,10 @@ struct DemoArgs {
     int modelMatrixTxAtFrame = -1; // apply --model-matrix-tx before frame N
     bool printTilesetInfo = false; // print tilesLoaded/boundingSphere/
                                    // timeSinceLoadMs/rootTileId at the end
+    int trimAtFrame = -1;          // P34: call trimLoadedTiles() before
+                                   // frame N (0-based)
+    std::string hasExtensionName;  // P34: query hasExtension(NAME) at the
+                                   // end, print [tileset-info] hasExtension
     bool noIbl = false;     // P26: disable the default image-based lighting
                             // (renders with the P3 directional sun only)
     // P18: weak-network test hooks (dev/test only, not for production use).
@@ -190,6 +194,19 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
         } else if (arg == "--print-tileset-info") {
             // P33: print read-only tileset state at the end (test hook).
             out.printTilesetInfo = true;
+        } else if (arg == "--trim-at-frame") {
+            // P34: call Renderer::trimLoadedTiles() before frame N (test
+            // hook for cache trimming).
+            std::string v;
+            if (!needValue("--trim-at-frame", v)) return false;
+            out.trimAtFrame = std::stoi(v);
+        } else if (arg == "--has-extension") {
+            // P34: query Renderer::hasExtension(NAME) at the end (test
+            // hook). Implies --print-tileset-info.
+            std::string v;
+            if (!needValue("--has-extension", v)) return false;
+            out.hasExtensionName = v;
+            out.printTilesetInfo = true;
         } else if (arg == "--no-ibl") {
             out.noIbl = true;
         } else if (arg == "--until-loaded") {
@@ -277,6 +294,7 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
                          "[--hide] [--preload-hidden] "
                          "[--model-matrix-tx X] [--model-matrix-tx-at-frame N] "
                          "[--print-tileset-info] "
+                         "[--trim-at-frame N] [--has-extension NAME] "
                          "[--until-loaded N] [--exit-on-loading] "
                          "[--zoom-out-on-loading] [--cache-budget BYTES] "
                          "[--print-rss] "
@@ -744,6 +762,15 @@ int main(int argc, char** argv) {
                 std::cout << "[p33] live modelMatrix tx=" << args.modelMatrixTx
                           << " at frame=" << rendered << std::endl;
             }
+            // P34: trim the tile cache before frame N (tests
+            // trimLoadedTiles()).
+            if (args.trimAtFrame == rendered) {
+                const auto before =
+                    tiles_renderer::Renderer::totalMemoryUsageInBytes();
+                tiles_renderer::Renderer::trimLoadedTiles();
+                std::cout << "[p34] trimLoadedTiles() at frame=" << rendered
+                          << " memoryBefore=" << before << std::endl;
+            }
             if (tiles_renderer::Renderer::renderFrame()) {
                 if (!args.frameDir.empty() && !dumpFramePng(rendered)) {
                     exitCode = 1;
@@ -946,7 +973,19 @@ int main(int argc, char** argv) {
                       << tiles_renderer::Renderer::rootTileId() << "\""
                       << " show="
                       << (tiles_renderer::Renderer::isShow() ? 1 : 0)
-                      << std::endl;
+                      // P34: content bytes currently held (NOT a GPU
+                      // memory estimate).
+                      << " memoryBytes="
+                      << tiles_renderer::Renderer::totalMemoryUsageInBytes();
+            if (!args.hasExtensionName.empty()) {
+                std::cout << " hasExtension(\"" << args.hasExtensionName
+                          << "\")="
+                          << (tiles_renderer::Renderer::hasExtension(
+                                  args.hasExtensionName)
+                                  ? 1
+                                  : 0);
+            }
+            std::cout << std::endl;
         }
         tiles_renderer::Renderer::shutdown();
     }

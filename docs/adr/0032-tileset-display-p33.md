@@ -90,9 +90,13 @@ selection from rendering.
   but still clear; C tx=20 -> 275,670 pixels move and bounding sphere
   center=(20,0,0); D read-only state matches the p3 fixture (center
   (0,0,0), radius sqrt(75)=8.66025, `rootTileId="root.glb"`,
-  `timeSinceLoadMs>0`).
+  `timeSinceLoadMs>0`); E live setModelMatrix recomposition is
+  bit-identical to load-time application.
 - `sanitizer_properties` (ASan+LSan+UBSan) clean.
-- Full `ctest` 30/30; MinGW SDK pre-screen passes; SDK has 0 SDL symbols.
+- Full `ctest` 29/30 (`weak_network` fails on a clean tree too —
+  pre-existing environment issue: the 3 GLB requests reach the slow
+  server but never complete client-side; HTTP stack untouched by P33);
+  MinGW SDK pre-screen passes; SDK has 0 SDL symbols.
 
 ## Consequences
 

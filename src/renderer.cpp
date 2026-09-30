@@ -1090,6 +1090,35 @@ std::string Renderer::rootTileId() {
     return "";
 }
 
+// P34: cache / statistics. Pure live queries (no stash needed — they
+// only make sense against a loaded tileset).
+std::int64_t Renderer::totalMemoryUsageInBytes() {
+#ifdef TILES_WITH_FILAMENT
+    if (g_initialized && g_state.tileset != nullptr) {
+        return g_state.tileset->totalMemoryUsageInBytes();
+    }
+#endif
+    return 0;
+}
+
+void Renderer::trimLoadedTiles() {
+#ifdef TILES_WITH_FILAMENT
+    if (g_initialized && g_state.tileset != nullptr) {
+        g_state.tileset->trimLoadedTiles();
+    }
+#endif
+}
+
+bool Renderer::hasExtension(const std::string& name) {
+#ifdef TILES_WITH_FILAMENT
+    if (g_initialized && g_state.tileset != nullptr) {
+        return g_state.tileset->hasExtension(name);
+    }
+#endif
+    (void)name;
+    return false;
+}
+
 // P26: toggle the default procedural IBL. Cheap: only attaches/detaches the
 // IndirectLight built once at initialize(); the cubemap and SH survive the
 // session. No-op when IBL failed to build (sun-only fallback).

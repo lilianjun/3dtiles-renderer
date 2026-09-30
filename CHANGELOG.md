@@ -9,6 +9,23 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- P34: cesium.js-aligned tileset cache/statistics (fourth tileset-API
+  alignment phase). New public API: `Renderer::totalMemoryUsageInBytes()`
+  (tile + raster content bytes currently held — same value as
+  `TileStats::bytesLoaded`, NOT a GPU memory estimate),
+  `Renderer::trimLoadedTiles()` (one-shot: next frame briefly zeroes the
+  cache budget so cesium-native evicts tiles not in use, then restores it;
+  in-use tiles never evicted, evictions fire `tileUnload`),
+  `Renderer::hasExtension(name)` (checks tileset.json `extensionsUsed`,
+  cached at load). `loadTilesetAsync` deliberately NOT provided (documented
+  in header: single-threaded render model, hosts marshal to a worker
+  thread). P32 hardening in the same phase: per-tile events are now
+  collected during the state walk and dispatched after it (no-throw
+  contract documented). Demo gains `--trim-at-frame N` and
+  `--has-extension NAME`; `--print-tileset-info` also prints `memoryBytes`.
+  New `tileset_cache` test (3 parts: bytes match, 1944→648 trim,
+  hasExtension true/false) + `p34_extensions_tileset` fixture +
+  `sanitizer_cache` scene. ADR-0033.
 - P33: cesium.js-aligned display/transform + read-only tileset state (third
   tileset-API alignment phase). New public API: `Renderer::setShow()` /
   `isShow()`, `Renderer::setPreloadWhenHidden()` / `isPreloadWhenHidden()`,
@@ -26,17 +43,21 @@ A = Android, i = iOS, wasm = WebAssembly.
   changes re-apply to already-loaded tiles immediately. Honest difference:
   tile selection/LOD still uses the authored (untransformed) transforms.
   Demo gains `--hide`, `--preload-hidden`, `--model-matrix-tx X`, and
-  `--print-tileset-info` test hooks. New `tileset_properties` test (4
-  parts) + `sanitizer_properties` scene. ADR-0032.
+  `--print-tileset-info` test hooks. New `tileset_properties` test (5
+  parts: hidden, hidden+preload, modelMatrix, read-only state, live
+  recomposition bit-identical) + `sanitizer_properties` scene. ADR-0032.
 - P32: cesium.js-aligned tileset events (second tileset-API alignment
   phase). New public API: `Renderer::TilesetEventCallbacks` (7 events —
   tileLoad, tileUnload, tileFailed, tileVisible, loadProgress,
   allTilesLoaded, initialTilesLoaded) +
   `Renderer::setEventCallbacks()`/`clearEventCallbacks()`. All fire on the
   render thread inside `renderFrame()` in a deterministic order
-  (transitions → visible → progress → all-loaded → initial-loaded);
-  `tileVisible` and the per-frame walks are skipped when no callback is
-  registered. State-transition detection via one tree walk per frame
+  (transitions → visible → progress → all-loaded → initial-loaded).
+  Per-tile transitions are collected during the frame's state walk and
+  dispatched after the walk; callbacks must not throw and must not call
+  mutating Renderer APIs. `tileVisible`'s selection walk is skipped when
+  no callback is registered; the transition/state walk itself always runs
+  (P33 needs it for `tilesLoaded()`). State-transition detection
   (Done in → tileLoad, Done out → tileUnload, Failed* in → tileFailed);
   tileset.json-level failures arrive via cesium-native's
   `loadErrorCallback` on a mutex-protected queue. Callbacks persist across

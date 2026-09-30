@@ -1440,6 +1440,14 @@ struct TilesetRenderer::Impl {
         tileset = std::move(newTileset);
         // P31: remember the effective options for currentTilesetOptions().
         appliedOptions = eff;
+        // P34: cache tileset.json "extensionsUsed" for hasExtension().
+        // getMetadata() is valid once the root tile is loaded (we waited
+        // for it above); empty when the tileset declares none.
+        extensionsUsed.clear();
+        trimRequested = false;
+        if (const auto* pMeta = tileset->getMetadata()) {
+            extensionsUsed = pMeta->extensionsUsed;
+        }
         // P5 rebase: pick the tileset's world-space center as the local
         // origin so huge coordinates (e.g. ECEF) survive the float32 render
         // transform. For small local tilesets this is ~(0,0,0) = no-op.
@@ -1544,6 +1552,17 @@ struct TilesetRenderer::Impl {
 
         // 2. Single tree walk: transitions + in-flight count. Always runs
         // (P33 tilesLoaded); transition events only fire when observed.
+        // Per-tile transition events are COLLECTED during the walk and
+        // dispatched after it (see below): a callback must never observe
+        // the tileStates map mid-walk, and the map is fully updated before
+        // the first callback runs (ADR-0031 reentrancy rule).
+        struct PendingEvent {
+            enum class Kind { Load, Unload, Failed };
+            Kind kind;
+            Renderer::TileEventInfo info;    // Load / Unload
+            Renderer::TileFailedInfo failed; // Failed
+        };
+        std::vector<PendingEvent> pendingEvents;
         std::int64_t inFlightContent = 0;
         if (tileset != nullptr) {
             const Cesium3DTilesSelection::Tile* pRoot =
@@ -1588,7 +1607,8 @@ struct TilesetRenderer::Impl {
                                 pUrl != nullptr) {
                                 info.url = *pUrl;
                             }
-                            cb.onTileLoad(info);
+                            pendingEvents.push_back(
+                                {PendingEvent::Kind::Load, std::move(info), {}});
                         } else if (!isDone && wasDone && cb.onTileUnload) {
                             Renderer::TileEventInfo info;
                             info.tileId = it->second.id;
@@ -1597,7 +1617,9 @@ struct TilesetRenderer::Impl {
                                 pUrl != nullptr) {
                                 info.url = *pUrl;
                             }
-                            cb.onTileUnload(info);
+                            pendingEvents.push_back(
+                                {PendingEvent::Kind::Unload, std::move(info),
+                                 {}});
                         } else if (isFailed && !wasFailed && cb.onTileFailed) {
                             Renderer::TileFailedInfo info;
                             info.tileId = it->second.id;
@@ -1609,7 +1631,8 @@ struct TilesetRenderer::Impl {
                             // Honest: cesium-native does not surface the
                             // underlying content error text on the Tile.
                             info.message = "tile content failed to load";
-                            cb.onTileFailed(info);
+                            pendingEvents.push_back(
+                                {PendingEvent::Kind::Failed, {}, std::move(info)});
                         }
                     }
                     it->second.state = state;
@@ -1630,13 +1653,32 @@ struct TilesetRenderer::Impl {
                                 Cesium3DTilesSelection::TileLoadState::Done) {
                             Renderer::TileEventInfo info;
                             info.tileId = it->second.id;
-                            cb.onTileUnload(info);
+                            pendingEvents.push_back(
+                                {PendingEvent::Kind::Unload, std::move(info),
+                                 {}});
                         }
                         it = tileStates.erase(it);
                     } else {
                         ++it;
                     }
                 }
+            }
+        }
+
+        // Dispatch the collected per-tile transitions AFTER the walk: the
+        // tileStates map is fully updated, so a callback observes
+        // consistent state (ADR-0031). Order matches collection order.
+        for (const auto& ev : pendingEvents) {
+            switch (ev.kind) {
+            case PendingEvent::Kind::Load:
+                cb.onTileLoad(ev.info);
+                break;
+            case PendingEvent::Kind::Unload:
+                cb.onTileUnload(ev.info);
+                break;
+            case PendingEvent::Kind::Failed:
+                cb.onTileFailed(ev.failed);
+                break;
             }
         }
 
@@ -1739,7 +1781,27 @@ struct TilesetRenderer::Impl {
             // updateViewGroup only fills the traversal's load queue;
             // loadTiles() actually starts/processes the queued tile content
             // loads.
-            tileset->loadTiles();
+            // P34: trimLoadedTiles() — briefly zero the cache budget so
+            // loadTiles()'s internal unloadCachedBytes(0, 0.0) evicts
+            // everything not in use (tileCacheUnloadTimeLimit defaults to
+            // 0.0 = no time limit, so one pass clears it), then restore.
+            // Tiles in use are never unloaded (cesium-native guarantee);
+            // evictions fire tileUnload via the P32 event path. The RAII
+            // guard restores the budget even if loadTiles() throws.
+            if (trimRequested) {
+                trimRequested = false;
+                auto& opts = tileset->getOptions();
+                const std::int64_t saved = opts.maximumCachedBytes;
+                struct BudgetRestore {
+                    Cesium3DTilesSelection::TilesetOptions& opts;
+                    std::int64_t saved;
+                    ~BudgetRestore() { opts.maximumCachedBytes = saved; }
+                } guard{opts, saved};
+                opts.maximumCachedBytes = 0;
+                tileset->loadTiles();
+            } else {
+                tileset->loadTiles();
+            }
 
             // P17: capture the traversal's diagnostics for tileStats().
             lastSelected =
@@ -1866,6 +1928,13 @@ struct TilesetRenderer::Impl {
     std::chrono::steady_clock::time_point loadTime{};
     std::chrono::steady_clock::time_point firstUpdateTime{};
     bool hasFirstUpdate = false;
+    // P34: trimLoadedTiles() sets this; the next updateTiles() briefly
+    // zeroes maximumCachedBytes around loadTiles() so cesium-native's
+    // unloadCachedBytes evicts everything not in use, then restores it.
+    bool trimRequested = false;
+    // P34: tileset.json "extensionsUsed", cached at loadTileset time for
+    // hasExtension(). Empty when no tileset is loaded.
+    std::vector<std::string> extensionsUsed;
     // P32: tileset.json-level failures arrive via
     // TilesetOptions::loadErrorCallback (contract allows worker threads).
     // The callback is owned by the Tileset, so during teardown it could
@@ -2342,6 +2411,46 @@ std::string TilesetRenderer::rootTileId() const {
         p->getTileID());
 #else
     return "";
+#endif
+}
+
+// P34: content bytes currently held (cesium-native getTotalDataBytes).
+// Same value as TileStats::bytesLoaded. 0 when no tileset is loaded.
+std::int64_t TilesetRenderer::totalMemoryUsageInBytes() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    if (!_impl->loaded || _impl->tileset == nullptr) {
+        return 0;
+    }
+    return _impl->tileset->getTotalDataBytes();
+#else
+    return 0;
+#endif
+}
+
+// P34: request a cache trim on the next updateTiles(). The flag is
+// consumed there (briefly zeroes maximumCachedBytes around loadTiles()).
+void TilesetRenderer::trimLoadedTiles() {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    if (_impl->loaded && _impl->tileset != nullptr) {
+        _impl->trimRequested = true;
+    }
+#endif
+}
+
+// P34: whether tileset.json declared `name` in top-level extensionsUsed
+// (cached at loadTileset time).
+bool TilesetRenderer::hasExtension(const std::string& name) const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    if (!_impl->loaded) {
+        return false;
+    }
+    return std::find(
+               _impl->extensionsUsed.begin(),
+               _impl->extensionsUsed.end(),
+               name) != _impl->extensionsUsed.end();
+#else
+    (void)name;
+    return false;
 #endif
 }
 

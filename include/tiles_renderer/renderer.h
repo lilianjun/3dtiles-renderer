@@ -167,6 +167,12 @@ public:
     // - Do NOT call mutating Renderer APIs (loadTileset, set*, shutdown)
     //   from inside a callback; query APIs (tileStats, selectedTileIds,
     //   maximumScreenSpaceError) are safe.
+    // - Callbacks must not throw: an exception escaping into the render
+    //   loop is undefined behavior (the SDK does not catch across the
+    //   callback boundary). Handle errors inside the callback.
+    // - Per-tile transition events (tileLoad/tileUnload/tileFailed) are
+    //   collected during the frame's state walk and dispatched after the
+    //   walk completes, so a callback never observes mid-walk state.
     struct TilesetEventCallbacks {
         std::function<void(const TileEventInfo&)> onTileLoad;
         std::function<void(const TileEventInfo&)> onTileUnload;
@@ -231,6 +237,33 @@ public:
     static BoundingSphere boundingSphere();
     static std::int64_t timeSinceLoadMs();
     static std::string rootTileId();
+
+    // P34: cesium.js-style cache / statistics / method alignment. All must
+    // be called on the render thread.
+    //
+    // - totalMemoryUsageInBytes(): tile + raster content bytes currently
+    //   held (cesium-native getTotalDataBytes). Content bytes, NOT a GPU
+    //   memory estimate — the same value as TileStats::bytesLoaded,
+    //   queryable any time. 0 when no tileset is loaded.
+    // - trimLoadedTiles(): unloads tiles not needed for the current view,
+    //   freeing their content bytes. Takes effect on the next renderFrame:
+    //   the cache budget is briefly set to 0 so cesium-native's
+    //   unloadCachedBytes evicts everything not in use, then restored.
+    //   Tiles in use (visible this frame) are never unloaded. Fires
+    //   tileUnload events through the P32 callback path.
+    // - hasExtension(name): whether the loaded tileset.json declared
+    //   `name` in its top-level "extensionsUsed". Cached at loadTileset
+    //   time; false when no tileset is loaded.
+    // - loadTilesetAsync: deliberately NOT provided. The SDK is a
+    //   single-threaded render model (every method except version() must
+    //   run on the render thread); a true async tileset constructor would
+    //   need a full thread-safety rework of Impl and the Filament
+    //   resources. Hosts that need non-blocking loads should call
+    //   loadTileset on a worker thread and marshal renderFrame to the
+    //   render thread.
+    static std::int64_t totalMemoryUsageInBytes();
+    static void trimLoadedTiles();
+    static bool hasExtension(const std::string& name);
 
     // P3: orbit camera used for tile selection and the Filament view.
     // Only takes effect while a tileset is loaded; otherwise the P2 fixed

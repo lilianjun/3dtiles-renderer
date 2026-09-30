@@ -75,9 +75,15 @@ Semantics defined relative to cesium.js:
 
 ## Consequences
 
-- One extra tree walk per frame while any callback is registered (free
-  when `TilesetEventCallbacks` is empty); `tileVisible`'s selection walk
-  is skipped unless registered.
+- One extra tree walk per frame while any callback is registered
+  (~~free when `TilesetEventCallbacks` is empty~~ — superseded by P33:
+  the walk now runs every frame regardless, to feed `tilesLoaded()`;
+  transition events only fire when a callback is registered);
+  `tileVisible`'s selection walk is skipped unless registered.
+- P34 hardening: per-tile transition events are collected during the
+  walk and dispatched after it (the ADR's "collect first, then dispatch"
+  is now literally true; previously callbacks fired inline mid-walk),
+  and the header documents the no-throw contract for callbacks.
 - Demo gains `--event-log` (streams `[event]` lines) and
   `--clear-events-at-frame N` (test hook for `clearEventCallbacks`).
   Also fixed a latent P22 demo bug found by the P32 test:

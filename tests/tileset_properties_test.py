@@ -18,6 +18,11 @@ tilesLoaded=1, boundingSphere center=(0,0,0) radius=sqrt(75) (the p3 root
 box is center (0,0,0) half-axes 5,5,5), timeSinceLoadMs > 0, and
 rootTileId="root.glb" (cesium-native's empty-ID wrapper tile is unwrapped).
 
+Part E (live modelMatrix): --model-matrix-tx-at-frame applies the same
+tx=20 translation mid-stream. Asserts the screenshot is bit-identical to
+the load-time application from Part C (live recomposition of already-
+loaded tiles matches the load-time path exactly).
+
 Usage:
   python3 tests/tileset_properties_test.py --demo <tiles_demo> \
       --tileset <p3 tileset.json>

@@ -106,12 +106,13 @@
   boundingSphere 与 fixture 已知值对照。
 - 诚实边界：selection/LOD 仍用 authored transform（cesium-native 无 runtime root transform API）。
 
-### P34：缓存 / 统计 / 方法对齐
-- `totalMemoryUsageInBytes()`（语义：content bytes，非 GPU 估计；与 `bytesLoaded` 关系文档注明）。
-- `trimLoadedTiles()`（先核实 cesium-native 对应 API；备选方案如不可行则诚实降级）。
-- `hasExtension(name)`（`loadTileset` 时缓存 `tileset.json` 的 `extensionsUsed`）。
-- 评估 `loadTilesetAsync(url, options, callback)`（线程复杂度评估后定做不做）。
-- 验收：`trimLoadedTiles` 后内存下降可观测；`hasExtension` 对 fixture 正确。
+### P34：缓存 / 统计 / 方法对齐 ✅ 完成（2026-10-01，commit 待填）
+- `totalMemoryUsageInBytes()`（语义：content bytes，非 GPU 估计；与 `bytesLoaded` 同值，头文件注明）。
+- `trimLoadedTiles()`（one-shot：下一帧临时 zero `maximumCachedBytes` 走 public `loadTiles()` 流程卸载，再 RAII 恢复；不碰 internal/private API）。
+- `hasExtension(name)`（`loadTileset` 时缓存 `tileset.json` 的 `extensionsUsed`，精确匹配）。
+- `loadTilesetAsync` 经评估决定不做（单线程 render 模型，做真 async 需全 Impl 线程安全重构；header 已文档说明 host 侧 worker 线程方案）。
+- 验收：`trimLoadedTiles` 后内存下降可观测（1944→648）；`hasExtension` 对 fixture 正确。
+- 附带 P32 加固：事件先收集再派发（与 ADR-0031 声明一致）+ no-throw 契约文档化。
 
 ### P35：调试开关（子集）
 - `setDebugShowBoundingVolume(bool)`（Filament debug 线画包围体）、
