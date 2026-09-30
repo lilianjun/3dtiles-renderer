@@ -326,3 +326,7 @@ clang/libc++ 构建，Linux 消费方链接时会带上 `c++`/`c++abi`（与消�
 
 本项目采用 AI 辅助开发：提示词集合见《AI Agent 提示词集合》（P0 配套文档），
 每条提示词自带验收标准。人类只做评审与拍板。
+
+## License
+
+MIT — see [LICENSE](LICENSE).
