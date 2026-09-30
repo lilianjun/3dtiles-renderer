@@ -75,8 +75,11 @@ endif()
 # std::min/std::max (e.g. filament's utils/bitset.h) fails with
 # C2589 "'(' : illegal token on right side of '::'", plus cascading bogus
 # errors. WIN32_LEAN_AND_MEAN keeps the header light as a bonus.
+# NOTE: scoped to OUR targets only via TILES_WINDOWS_DEFS — a global
+# add_compile_definitions would leak into cesium-native's own targets
+# (CesiumCurl #defines NOMINMAX itself -> C4005 redefinition, /WX error).
 if(TILES_PLATFORM STREQUAL "windows")
-  add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+  set(TILES_WINDOWS_DEFS NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -199,6 +202,9 @@ configure_file(
 add_library(tiles_renderer STATIC src/renderer.cpp src/tileset.cpp
             src/converter_guard.cpp)
 tiles_apply_sanitizers(tiles_renderer)
+if(DEFINED TILES_WINDOWS_DEFS)
+  target_compile_definitions(tiles_renderer PRIVATE ${TILES_WINDOWS_DEFS})
+endif()
 target_include_directories(tiles_renderer PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_BINARY_DIR}/generated"
@@ -592,6 +598,9 @@ if(TILES_WITH_SDL3)
 
   add_executable(tiles_demo samples/demo/main.cpp)
   tiles_apply_sanitizers(tiles_demo)
+  if(DEFINED TILES_WINDOWS_DEFS)
+    target_compile_definitions(tiles_demo PRIVATE ${TILES_WINDOWS_DEFS})
+  endif()
   target_link_libraries(tiles_demo PRIVATE tiles_renderer SDL3::SDL3-static)
   target_include_directories(tiles_demo PRIVATE "${stb_SOURCE_DIR}")
   target_compile_definitions(tiles_demo PRIVATE TILES_WITH_SDL3)
