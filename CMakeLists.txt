@@ -506,6 +506,16 @@ if(TILES_WITH_FILAMENT)
     if(TILES_PLATFORM STREQUAL "android" OR TILES_PLATFORM STREQUAL "ios")
       add_library(tiles_renderer_linkcheck SHARED cmake/linkcheck.cpp)
       target_link_libraries(tiles_renderer_linkcheck PRIVATE tiles_renderer)
+      # Android on-device smoke harness (ADR-0023 G1): libsmoke_jni.so links
+      # the real SDK exactly like a host app would; the APK in
+      # samples/android-smoke consumes it as a prebuilt jniLib (Gradle does
+      # no NDK compile). Guarded on the real NDK toolchain so the host-stub
+      # android preset (P0 policy) keeps configuring without <jni.h>.
+      if(TILES_PLATFORM STREQUAL "android"
+          AND TILES_CROSS_TOOLCHAIN STREQUAL "android-ndk")
+        add_library(smoke_jni SHARED samples/android-smoke/jni/smoke_jni.cpp)
+        target_link_libraries(smoke_jni PRIVATE tiles_renderer log android)
+      endif()
     endif()
   else()
     message(STATUS

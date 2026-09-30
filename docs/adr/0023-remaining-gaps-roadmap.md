@@ -36,14 +36,22 @@ explicitly out of scope.
   hardware access, not engineering.
 - **Why P0:** the SDK's entire value proposition is cross-platform; an
   unrendered platform is an untested promise.
-- **Plan (2026-09-30, user-approved):** Android goes first. Build a minimal
-  on-device smoke harness (`samples/android-smoke`: init Renderer on the
-  ANativeWindow, load the p3 fixture, screenshot, hash-compare) and run it
-  on li's paired Redmi K70 Ultra when it comes online. A goal-owned watcher
-  cron (`android-smoke-on-device-online`, every 15m) polls `device.list`;
-  the first online hit builds the harness, installs the APK, runs the test,
-  reports to the user, then disables itself. iOS/Windows real-device runs
-  remain open (need hardware).
+- **Plan (2026-09-30, user-approved, revised same day):** Android goes
+  first. `samples/android-smoke` is a minimal on-device harness: it inits
+  the Renderer on the `SurfaceView`'s ANativeWindow, loads the bundled p3
+  fixture, renders until the tile pipeline settles (same 20-frame streak
+  rule as the desktop demo's `--until-loaded`), then shows PASS/FAIL +
+  tile counts on screen and writes `smoke_result.txt`.
+  - **Route change (2026-09-30):** the paired-device channel exposes no
+    APK install / app launch / screenshot commands, so the original
+    "watcher cron installs the APK when the phone comes online" plan is
+    **abandoned** (cron `android-smoke-on-device-online` disabled). New
+    route: CI's android job builds a debug-signed `app-debug.apk`
+    (libsmoke_jni.so comes from the repo's CMake android preset as a
+    prebuilt jniLib; Gradle does no NDK compile) and uploads it as the
+    `android-smoke-apk` artifact → li downloads, installs, opens the app,
+    waits ~30s, screenshots the PASS/FAIL overlay and sends it back.
+  - iOS/Windows real-device runs remain open (need hardware).
 
 ### G2. Corrupt cmpt can SIGSEGV the host (upstream #1457, open, 0 comments)
 

@@ -1,0 +1,34 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.tiles.smoke'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.tiles.smoke'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        debug {
+            // CI builds assembleDebug: auto-signed with the debug key,
+            // installable on any arm64 device via `adb install` or tapping
+            // the APK.
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    // No externalNativeBuild: libsmoke_jni.so arrives prebuilt from the
+    // repo's CMake android build (see the root README).
+}

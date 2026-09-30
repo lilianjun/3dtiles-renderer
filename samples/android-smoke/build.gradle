@@ -1,0 +1,7 @@
+// Top-level build file for the Android smoke harness (ADR-0023 G1).
+// The JNI library (libsmoke_jni.so) is NOT built here: it comes from the
+// repo's CMake android preset as a prebuilt jniLib staged by CI into
+// app/src/main/jniLibs/arm64-v8a/ before this build runs.
+plugins {
+    id 'com.android.application' version '8.5.2' apply false
+}

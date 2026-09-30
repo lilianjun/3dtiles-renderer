@@ -130,12 +130,55 @@ jobs:
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27d
+      - name: Install Android SDK (platform + build-tools)
+        # The NDK step above covers native code; the smoke APK also needs
+        # the Android SDK (aapt/d8/apksigner). Pinned cmdline-tools URL +
+        # explicit packages keep this deterministic.
+        env:
+          ANDROID_HOME: ${{ runner.temp }}/android-sdk
+        run: |
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -sSL -o /tmp/cmdtools.zip \
+            https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q /tmp/cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" \
+             "$ANDROID_HOME/cmdline-tools/latest"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
       - name: Configure
         # nttld/setup-ndk exports ANDROID_NDK_HOME for the following steps;
         # the android preset auto-wires the NDK toolchain from it.
         run: cmake --preset android -DTILES_WITH_FILAMENT=ON
       - name: Build
+        # Builds the SDK, the linkcheck .so, and libsmoke_jni.so for the
+        # smoke APK (added by the top-level CMake, same invocation).
         run: cmake --build --preset android -j"$(nproc)"
+      - name: Stage JNI libs for the smoke APK
+        # Gradle consumes the JNI lib as a prebuilt jniLib (no NDK compile
+        # inside Gradle). The android preset uses c++_shared, so the NDK's
+        # libc++_shared.so must be packaged too.
+        run: |
+          mkdir -p samples/android-smoke/app/src/main/jniLibs/arm64-v8a
+          cp build/android/libsmoke_jni.so \
+             samples/android-smoke/app/src/main/jniLibs/arm64-v8a/
+          cp "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" \
+             samples/android-smoke/app/src/main/jniLibs/arm64-v8a/
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.7"
+      - name: Build smoke APK
+        working-directory: samples/android-smoke
+        run: gradle assembleDebug --no-daemon
+      - name: Upload smoke APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-smoke-apk
+          path: samples/android-smoke/app/build/outputs/apk/debug/app-debug.apk
 
   # ----------------------------------------------------------------- ios
   ios:
