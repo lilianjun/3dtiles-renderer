@@ -14,7 +14,8 @@ concurrency:
 # P4: every platform builds the real dependency set (no zero-dep stubs).
 # - linux:   full deps (SDL3 demo + Cesium Native + Filament), xvfb-run ctest
 # - windows: MSVC + Filament prebuilt (SDK static lib + linkcheck dylib link)
-# - android: NDK r27d + Filament android prebuilt (SDK + linkcheck .so link)
+# - android: NDK r27d + Filament android prebuilt + Cesium Native
+#           (SDK + linkcheck .so link + smoke APK with the real renderer)
 # - ios:     macOS host, real iOS arm64 cross compile + Filament xcframework
 # - wasm:    Emscripten cross compile of the SDK (stub: official Filament
 #            v1.77.0 web release ships no C++ libs, see ADR-0006)
@@ -152,7 +153,10 @@ jobs:
       - name: Configure
         # nttld/setup-ndk exports ANDROID_NDK_HOME for the following steps;
         # the android preset auto-wires the NDK toolchain from it.
-        run: cmake --preset android -DTILES_WITH_FILAMENT=ON
+        # TILES_WITH_CESIUM_NATIVE=ON: without it the SDK builds as a stub
+        # ("built without cesium-native + Filament") and the smoke APK can
+        # never load a tileset (found by the first on-device run, 2026-09-30).
+        run: cmake --preset android -DTILES_WITH_FILAMENT=ON -DTILES_WITH_CESIUM_NATIVE=ON
       - name: Build
         # Builds the SDK, the linkcheck .so, and libsmoke_jni.so for the
         # smoke APK (added by the top-level CMake, same invocation).

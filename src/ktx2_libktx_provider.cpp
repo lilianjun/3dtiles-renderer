@@ -22,7 +22,7 @@
 // rather than a GPU block-compressed format. Correctness first; the GPU
 // memory saving of BasisU is future work.
 //
-// On platforms WITHOUT cesium-native (Windows/Android/iOS: no libktx, hence
+// On platforms WITHOUT cesium-native (Windows/iOS: no libktx, hence
 // no symbol conflict), tileset.cpp uses filament's createKtx2Provider
 // directly (TILES_WITH_KTX2_PROVIDER).
 
