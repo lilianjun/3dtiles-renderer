@@ -9,6 +9,20 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- P35: cesium.js-aligned tileset debug switches (fifth tileset-API
+  alignment phase, subset). New public API:
+  `Renderer::setDebugShowBoundingVolume(bool)` /
+  `isDebugShowBoundingVolume()` (draws each loaded tile's bounding-box
+  hierarchy as lines via `FilamentAsset::getWireframe`; follows the tile's
+  render transform; stash-then-forward across `loadTileset()`),
+  `Renderer::setDebugShowUrl(bool)` / `isDebugShowUrl()` (logs visible
+  tile IDs to stderr — the SDK has no on-screen text renderer, so this is
+  the honest equivalent of cesium.js's on-screen URL labels).
+  Deliberately NOT provided: `debugWireframe` (Filament v1.77 has no
+  runtime wireframe toggle for gltfio materials — rasterization mode is
+  baked at material build time) and `debugColorizeTiles` (deferred:
+  would require forking the gltfio material pipeline). Demo gains
+  `--debug-bounding-volume` and `--debug-show-url`.
 - P34: cesium.js-aligned tileset cache/statistics (fourth tileset-API
   alignment phase). New public API: `Renderer::totalMemoryUsageInBytes()`
   (tile + raster content bytes currently held — same value as

@@ -68,6 +68,10 @@ struct DemoArgs {
                                    // frame N (0-based)
     std::string hasExtensionName;  // P34: query hasExtension(NAME) at the
                                    // end, print [tileset-info] hasExtension
+    bool debugBoundingVolume = false;  // P35: setDebugShowBoundingVolume
+                                       // before the first frame
+    bool debugShowUrl = false;         // P35: setDebugShowUrl before the
+                                       // first frame
     bool noIbl = false;     // P26: disable the default image-based lighting
                             // (renders with the P3 directional sun only)
     // P18: weak-network test hooks (dev/test only, not for production use).
@@ -207,6 +211,14 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             if (!needValue("--has-extension", v)) return false;
             out.hasExtensionName = v;
             out.printTilesetInfo = true;
+        } else if (arg == "--debug-bounding-volume") {
+            // P35: Renderer::setDebugShowBoundingVolume(true) before the
+            // first frame (test hook).
+            out.debugBoundingVolume = true;
+        } else if (arg == "--debug-show-url") {
+            // P35: Renderer::setDebugShowUrl(true) before the first frame
+            // (test hook).
+            out.debugShowUrl = true;
         } else if (arg == "--no-ibl") {
             out.noIbl = true;
         } else if (arg == "--until-loaded") {
@@ -550,6 +562,16 @@ int main(int argc, char** argv) {
                     exitCode = 1;
                 } else {
                     tilesetLoaded = true;
+                    // P35: apply debug switches right after load (also
+                    // exercises the live-setter path; the stash path is
+                    // covered by setting before loadTileset in tests).
+                    if (args.debugBoundingVolume) {
+                        tiles_renderer::Renderer::
+                            setDebugShowBoundingVolume(true);
+                    }
+                    if (args.debugShowUrl) {
+                        tiles_renderer::Renderer::setDebugShowUrl(true);
+                    }
                     std::cout << "[demo] tileset: " << tilesetPath
                               << std::endl;
                     if (args.printTilesetOptions) {

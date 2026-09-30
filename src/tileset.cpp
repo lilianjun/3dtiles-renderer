@@ -572,6 +572,9 @@ struct TileRenderData {
     std::vector<std::uint8_t> glbBytes;
     filament::gltfio::FilamentAsset* asset = nullptr;
     bool inScene = false;
+    // P35: whether this tile's debug wireframe (getWireframe()) is in the
+    // scene. Managed by updateTileVisibility / updateWireframeVisibility.
+    bool wireframeInScene = false;
     glm::dvec3 rtcCenter{0.0, 0.0, 0.0};
     glm::dmat4 upAxisFix{1.0};
 };
@@ -1861,12 +1864,26 @@ struct TilesetRenderer::Impl {
                         pData->asset->getEntities(),
                         pData->asset->getEntityCount());
                     pData->inScene = true;
+                    // P35: debugShowUrl logs the tile ID as it becomes
+                    // visible (no on-screen text renderer in this SDK).
+                    if (debugShowUrl) {
+                        std::cerr << "[tiles_renderer] debugShowUrl: "
+                                     "visible tile "
+                                  << Cesium3DTilesSelection::
+                                         TileIdUtilities::
+                                             createTileIdString(
+                                                 tile.getTileID())
+                                  << std::endl;
+                    }
                 } else if (!want && pData->inScene) {
                     scene->removeEntities(
                         pData->asset->getEntities(),
                         pData->asset->getEntityCount());
                     pData->inScene = false;
                 }
+                // P35: keep the debug wireframe in sync with the tile's
+                // scene membership and the debugShowBoundingVolume flag.
+                updateTileWireframe(tile, *pData);
                 if (pData->inScene) {
                     ++renderedCount;
                 }
@@ -1874,6 +1891,61 @@ struct TilesetRenderer::Impl {
         }
         for (Cesium3DTilesSelection::Tile& child : tile.getChildren()) {
             updateTileVisibility(child, wantVisible);
+        }
+    }
+
+    // P35: add/remove one tile's debug wireframe (FilamentAsset::getWireframe,
+    // a LINES renderable of the transformed bounding-box hierarchy) to match
+    // the tile's scene membership and the debugShowBoundingVolume flag.
+    // Render thread only.
+    void updateTileWireframe(
+        Cesium3DTilesSelection::Tile& tile,
+        TileRenderData& data) {
+        (void)tile;
+        bool want = debugShowBoundingVolume && data.inScene &&
+                    data.asset != nullptr;
+        if (want && !data.wireframeInScene) {
+            auto wire = data.asset->getWireframe();
+            if (!wire.isNull()) {
+                scene->addEntity(wire);
+                data.wireframeInScene = true;
+            }
+        } else if (!want && data.wireframeInScene) {
+            auto wire = data.asset->getWireframe();
+            if (!wire.isNull()) {
+                scene->removeEntities(&wire, 1);
+            }
+            data.wireframeInScene = false;
+        }
+    }
+
+    // P35: re-apply the debugShowBoundingVolume flag to all currently-loaded
+    // tiles (called when the flag toggles). Render thread only.
+    void updateWireframeVisibility() {
+        if (tileset == nullptr) {
+            return;
+        }
+        const Cesium3DTilesSelection::Tile* pRoot =
+            tileset->getRootTile();
+        if (pRoot == nullptr) {
+            return;
+        }
+        std::vector<Cesium3DTilesSelection::Tile*> stack{
+            const_cast<Cesium3DTilesSelection::Tile*>(pRoot)};
+        while (!stack.empty()) {
+            auto* pTile = stack.back();
+            stack.pop_back();
+            auto* pContent = pTile->getContent().getRenderContent();
+            if (pContent != nullptr) {
+                auto* pData = static_cast<TileRenderData*>(
+                    pContent->getRenderResources());
+                if (pData != nullptr && pData->asset != nullptr) {
+                    updateTileWireframe(*pTile, *pData);
+                }
+            }
+            for (auto& child : pTile->getChildren()) {
+                stack.push_back(&child);
+            }
         }
     }
 
@@ -1924,6 +1996,9 @@ struct TilesetRenderer::Impl {
     bool show = true;
     bool preloadWhenHidden = false;
     glm::dmat4 modelMatrix{1.0};
+    // P35: debug switches (see renderer.h).
+    bool debugShowBoundingVolume = false;
+    bool debugShowUrl = false;
     // P33: load/update timestamps for timeSinceLoadMs().
     std::chrono::steady_clock::time_point loadTime{};
     std::chrono::steady_clock::time_point firstUpdateTime{};
@@ -2463,6 +2538,42 @@ bool TilesetRenderer::hasExtension(const std::string& name) const {
                name) != _impl->extensionsUsed.end();
 #else
     (void)name;
+    return false;
+#endif
+}
+
+// P35: debug switches. setDebugShowBoundingVolume re-applies the wireframe
+// visibility to all currently-loaded tiles immediately (same pattern as
+// P33 setModelMatrix re-applying transforms).
+void TilesetRenderer::setDebugShowBoundingVolume(bool show) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->debugShowBoundingVolume = show;
+    _impl->updateWireframeVisibility();
+#else
+    (void)show;
+#endif
+}
+
+bool TilesetRenderer::isDebugShowBoundingVolume() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->debugShowBoundingVolume;
+#else
+    return false;
+#endif
+}
+
+void TilesetRenderer::setDebugShowUrl(bool show) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->debugShowUrl = show;
+#else
+    (void)show;
+#endif
+}
+
+bool TilesetRenderer::isDebugShowUrl() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->debugShowUrl;
+#else
     return false;
 #endif
 }

@@ -114,10 +114,15 @@
 - 验收：`trimLoadedTiles` 后内存下降可观测（1944→648）；`hasExtension` 对 fixture 正确。
 - 附带 P32 加固：事件先收集再派发（与 ADR-0031 声明一致）+ no-throw 契约文档化。
 
-### P35：调试开关（子集）
-- `setDebugShowBoundingVolume(bool)`（Filament debug 线画包围体）、
-  `setDebugWireframe(bool)`、`setDebugShowUrl(bool)`；评估 `debugColorizeTiles` 可行性。
-- 验收：开关不崩；像素测试验证包围体线框出现；全量 debug 全家桶不对齐（文档注明）。
+### P35：调试开关（子集）✅ 已完成（2026-10-01）
+- 已提供：`setDebugShowBoundingVolume(bool)`（`FilamentAsset::getWireframe()`
+  画包围体层级线框）、`setDebugShowUrl(bool)`（无屏内文字系统，改为
+  stderr 打可见 tile ID）。两者均为 stash-then-forward。
+- 明确不提供：`debugWireframe`（Filament v1.77 无 gltfio 材质运行时线框
+  开关，光栅化模式 baked 在材质构建时）、`debugColorizeTiles`（deferred，
+  需 fork gltfio 材质管线）。见 ADR-0034。
+- 验收：`tileset_debug` 测试（A 包围体像素差 2424/480000、B URL 日志、
+  C 双开关不崩）；sanitizer 干净。
 
 ## 5. 风险与约定
 

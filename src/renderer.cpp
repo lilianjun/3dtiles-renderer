@@ -99,6 +99,10 @@ bool g_show = true;
 bool g_preloadWhenHidden = false;
 double g_modelMatrix[16] = {1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
                             0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0};
+// P35: debug switches stashed across loadTileset() calls; forwarded to
+// each new TilesetRenderer at load.
+bool g_debugShowBoundingVolume = false;
+bool g_debugShowUrl = false;
 
 #ifdef TILES_WITH_FILAMENT
 
@@ -745,6 +749,8 @@ bool Renderer::loadTileset(const std::string& tilesetUrl,
     tileset->setShow(g_show);
     tileset->setPreloadWhenHidden(g_preloadWhenHidden);
     tileset->setModelMatrix(g_modelMatrix);
+    tileset->setDebugShowBoundingVolume(g_debugShowBoundingVolume);
+    tileset->setDebugShowUrl(g_debugShowUrl);
     // P22: build-then-commit. The new TilesetRenderer is fully loaded
     // before it replaces the old one, so a failed loadTileset() (bad
     // path, corrupt tileset.json, timeout) leaves the currently-loaded
@@ -1103,6 +1109,40 @@ bool Renderer::hasExtension(const std::string& name) {
 #endif
     (void)name;
     return false;
+}
+
+// P35: debug switches (see renderer.h). Stash-then-forward across
+// loadTileset(), same pattern as the P33 display flags.
+void Renderer::setDebugShowBoundingVolume(bool show) {
+    if (!g_initialized) {
+        return;
+    }
+    g_debugShowBoundingVolume = show;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setDebugShowBoundingVolume(show);
+    }
+#endif
+}
+
+bool Renderer::isDebugShowBoundingVolume() {
+    return g_debugShowBoundingVolume;
+}
+
+void Renderer::setDebugShowUrl(bool show) {
+    if (!g_initialized) {
+        return;
+    }
+    g_debugShowUrl = show;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setDebugShowUrl(show);
+    }
+#endif
+}
+
+bool Renderer::isDebugShowUrl() {
+    return g_debugShowUrl;
 }
 
 // P26: toggle the default procedural IBL. Cheap: only attaches/detaches the

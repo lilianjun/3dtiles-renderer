@@ -107,6 +107,12 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
               --demo "$<TARGET_FILE:tiles_demo>"
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
     set_tests_properties(tileset_cache PROPERTIES TIMEOUT 900)
+    add_test(NAME tileset_debug
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_debug_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
+    set_tests_properties(tileset_debug PROPERTIES TIMEOUT 900)
   else()
     message(WARNING "[P32] Python3 not found — tileset_events test skipped")
   endif()
@@ -768,6 +774,15 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
               --demo "$<TARGET_FILE:tiles_demo>"
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
     set_tests_properties(sanitizer_cache PROPERTIES TIMEOUT 900)
+    # P35: debug switches under ASan/LSan/UBSan — wireframe entity
+    # add/remove and the debugShowUrl logging path.
+    add_test(NAME sanitizer_debug
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_debug_test.py"
+              --sanitized
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
+    set_tests_properties(sanitizer_debug PROPERTIES TIMEOUT 900)
   else()
     message(WARNING "[P6] Python3 not found — sanitizer scenario tests skipped")
   endif()

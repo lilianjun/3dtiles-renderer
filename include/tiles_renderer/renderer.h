@@ -238,6 +238,23 @@ public:
     static std::int64_t timeSinceLoadMs();
     static std::string rootTileId();
 
+    // P35: debug switches (subset of cesium.js debug*). All must be called
+    // on the render thread. Values are stashed and forwarded across
+    // loadTileset() like the P33 display flags.
+    //
+    // - setDebugShowBoundingVolume(true): draws each loaded tile's
+    //   bounding-box hierarchy as lines (via FilamentAsset::getWireframe).
+    // - setDebugShowUrl(true): logs the IDs of tiles as they become
+    //   visible to stderr (no on-screen text renderer in this SDK).
+    //
+    // NOT provided: debugWireframe — Filament v1.77 has no runtime
+    // wireframe toggle for gltfio materials (rasterization mode is baked
+    // at material build time). See ADR-0034.
+    static void setDebugShowBoundingVolume(bool show);
+    static bool isDebugShowBoundingVolume();
+    static void setDebugShowUrl(bool show);
+    static bool isDebugShowUrl();
+
     // P34: cesium.js-style cache / statistics / method alignment. All must
     // be called on the render thread.
     //

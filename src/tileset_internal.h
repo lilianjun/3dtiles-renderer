@@ -139,6 +139,14 @@ public:
     void trimLoadedTiles();
     bool hasExtension(const std::string& name) const;
 
+    // P35: debug switches (see renderer.h). Stashed per TilesetRenderer;
+    // Renderer::set* forwards to the live one (or stashes pre-load).
+    // Must be called on the render thread.
+    void setDebugShowBoundingVolume(bool show);
+    bool isDebugShowBoundingVolume() const;
+    void setDebugShowUrl(bool show);
+    bool isDebugShowUrl() const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> _impl;
