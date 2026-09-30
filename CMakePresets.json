@@ -23,6 +23,10 @@
     {
       "configurePreset": "wasm",
       "name": "wasm"
+    },
+    {
+      "configurePreset": "windows-mingw",
+      "name": "windows-mingw"
     }
   ],
   "cmakeMinimumRequired": {
@@ -103,6 +107,23 @@
       "displayName": "WebAssembly (Emscripten)",
       "generator": "Unix Makefiles",
       "name": "wasm"
+    },
+    {
+      "binaryDir": "${sourceDir}/build/windows-mingw",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "TILES_PLATFORM": "windows",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static"
+      },
+      "description": "Windows cross-compile gate (MinGW-w64 on Linux host). Compile-only: builds the tiles_renderer static library against the Filament windows headers + cesium-native (vcpkg overlay triplet x64-mingw-static in cmake/vcpkg-triplets) to catch windows.h macro / portability issues in minutes. The final link needs MSVC .lib files, so only build the tiles_renderer target here — the MSVC CI job remains the authority.",
+      "displayName": "Windows (MinGW cross, compile gate)",
+      "environment": {
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchain-windows-mingw64.cmake",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/vcpkg-triplets"
+      },
+      "generator": "Unix Makefiles",
+      "name": "windows-mingw",
+      "toolchainFile": "${sourceDir}/cmake/toolchain-windows-mingw64.cmake"
     }
   ],
   "testPresets": [

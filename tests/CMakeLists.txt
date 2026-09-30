@@ -293,7 +293,7 @@ endif()
 # proves wide coverage (253 distinct tiles, 629 hits = eviction churn).
 # Not run under TILES_SANITIZE: the ASan-instrumented binary's RSS is not
 # representative (see sanitizer_memory_roam below for the sanitizer gate).
-if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   find_package(Python3 COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
     add_test(NAME memory_roam
@@ -310,7 +310,7 @@ endif()
 # P20: frustum culling + LOD refinement. Two-part test (ground-plane fixture
 # for per-tile frustum set flips; tiny REPLACE fixture for parent->child
 # selection switching). Fast (<5s); run 3x for stability during development.
-if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   find_package(Python3 COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
     add_test(NAME frustum_lod
@@ -328,7 +328,7 @@ endif()
 # region fixture: WGS84 region BVs + tile transform at ECEF magnitude,
 # rebase brings them back near the origin). Fast (<10s incl. the
 # empty-reference screenshot render); run 3x for stability during dev.
-if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   find_package(Python3 COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
     add_test(NAME add_region
@@ -345,7 +345,7 @@ endif()
 # (clean A->B switch with pixel proof, failed-switch-then-retry, reload
 # same path, switch away mid slow-HTTP load). Fast (<60s for 3 reps);
 # run 3x for stability during development.
-if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   find_package(Python3 COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
     add_test(NAME tileset_switch
@@ -365,7 +365,7 @@ endif()
 # Scenarios: garbage bytes, valid-JSON-not-a-tileset, truncated JSON,
 # corrupt over slow HTTP (0.3s/response — also proves the P18 slow path
 # is not mis-killed by the pre-flight).
-if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   find_package(Python3 COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
     add_test(NAME tileset_failfast
@@ -383,7 +383,7 @@ endif()
 # render and match its PNG twin within a tight tolerance (the embedded
 # UASTC decodes losslessly for this flat-color checkerboard), and a
 # corrupt KTX2 must fail gracefully (exit 0, no crash/hang).
-if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   find_package(Python3 COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
     add_test(NAME ktx2
@@ -403,7 +403,7 @@ endif()
 # mesh. Deterministic fixture (tests/data/gen_p29_draco_tileset.py): the
 # Draco box must render bit-identical to its uncompressed twin, and a
 # corrupt Draco bitstream must fail gracefully (exit 0, no crash).
-if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   find_package(Python3 COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
     add_test(NAME draco
@@ -423,7 +423,7 @@ endif()
 # character, and the dielectric stays sane (brighter, not blown out).
 # No hard-coded pixel values: all assertions are on/off comparisons or
 # sane-range checks.
-if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+if(NOT TILES_SANITIZE AND TARGET tiles_demo AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   find_package(Python3 COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
     add_test(NAME ibl

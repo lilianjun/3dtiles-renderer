@@ -51,11 +51,11 @@
 #include <gltfio/FilamentAsset.h>
 #include <gltfio/MaterialProvider.h>
 #include <gltfio/ResourceLoader.h>
-#ifdef TILES_WITH_STB_PROVIDER
-#include <gltfio/TextureProvider.h> // createStbProvider (P15: glTF textures)
+#if defined(TILES_WITH_STB_PROVIDER) || defined(TILES_WITH_KTX2_PROVIDER)
+#include <gltfio/TextureProvider.h> // createStbProvider (P15) / createKtx2Provider (P25)
+#endif
 #ifdef TILES_WITH_KTX2_LIBKTX
 #include "ktx2_provider_internal.h" // P25: libktx-backed KTX2 provider
-#endif
 #endif
 #include <gltfio/materials/uberarchive.h>
 #include <utils/Entity.h>

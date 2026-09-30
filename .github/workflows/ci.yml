@@ -104,10 +104,21 @@ jobs:
   windows:
     name: Windows (MSVC)
     runs-on: windows-latest
+    env:
+      # vcpkg binary cache in the GitHub Actions cache: cesium-native's
+      # ~30 dependency ports build from source once, then restore from
+      # cache. (The x-gha backend uses the runner-provided
+      # ACTIONS_CACHE_URL / ACTIONS_RUNTIME_TOKEN.)
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
     steps:
       - uses: actions/checkout@v4
       - name: Tool versions
         run: cmake --version
+      - name: Install sccache
+        # Caches MSVC compilations (cesium-native + our code) in the
+        # GitHub Actions cache. First run after this change is still
+        # cold; afterwards only changed translation units recompile.
+        uses: mozilla-actions/sccache-action@v0.0.9
       - name: Configure
         # No -G: the preset leaves the generator unset so CMake picks the
         # newest installed Visual Studio (MinGW cannot link Filament's
@@ -116,7 +127,7 @@ jobs:
         # (the same packaging bug the first android-smoke APK shipped).
         # TILES_WITH_SDL3=ON builds tiles_demo, which doubles as the
         # on-device smoke harness (tiles_demo --smoke).
-        run: cmake --preset windows -DTILES_WITH_FILAMENT=ON -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_SDL3=ON
+        run: cmake --preset windows -DTILES_WITH_FILAMENT=ON -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_SDL3=ON -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
       - name: Build
         run: cmake --build --preset windows --config Release
       - name: Upload smoke package
