@@ -196,7 +196,9 @@ void shBasis(const float3& d, float* b /*[9]*/) {
 void computeRadianceSH(float3* sh /*[9]*/) {
     constexpr int kSamples = 2048;
     constexpr float kPi = 3.14159265358979323846f;
-    constexpr float kGolden = kPi * (3.0f - std::sqrt(5.0f));
+    // Golden angle pi*(3-sqrt(5)): spelled out because std::sqrt is not
+    // constexpr in libc++ (NDK r27d / iOS), which broke those CI jobs.
+    constexpr float kGolden = 2.3999632f;
     for (int k = 0; k < 9; ++k) {
         sh[k] = float3{0.0f, 0.0f, 0.0f};
     }
