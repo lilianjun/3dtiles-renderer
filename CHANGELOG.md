@@ -8,6 +8,20 @@ A = Android, i = iOS, wasm = WebAssembly.
 
 ## [Unreleased]
 
+### Added
+- P29: Draco (KHR_draco_mesh_compression) verified working — no code
+  change. The G7 premise ("no Draco decoder in the dependency tree")
+  was wrong: draco ships in cesium-native v0.64.0's own vcpkg manifest
+  (unconditional `find_package(draco CONFIG REQUIRED)`), so ezvcpkg
+  provisions it on Linux/Windows/Android/iOS with zero per-platform
+  work; `CesiumGltfReader` decodes Draco into plain accessors before
+  gltfio ever sees the mesh (`decodeDraco` defaults on). New
+  deterministic fixture + `draco` CTest: Draco box renders
+  bit-identical (0/480,000 px) to its uncompressed twin; corrupt Draco
+  bitstream degrades gracefully (decode warning, exit 0, no crash —
+  upstream warnings-only behavior, not forked). `sanitizer_draco` green.
+  ADR-0028; ADR-0023 G7 closed.
+
 ### Fixed
 - P28: SDK-side guard for the corrupt-cmpt SIGSEGV (upstream
   CesiumGS/cesium-native#1457, still open; ADR-0027). The five

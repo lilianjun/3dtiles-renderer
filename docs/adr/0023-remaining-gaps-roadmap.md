@@ -119,15 +119,22 @@ explicitly out of scope.
 
 ## P2 — nice-to-have / explicitly out of scope
 
-### G7. Draco mesh compression — not supported
+### G7. Draco mesh compression — ✅ verified working (P29, ADR-0028)
 
-- **State:** no Draco decoder in the dependency tree; Draco-compressed
-  glTF content will fail to decode.
-- **Takes:** draco library on Linux/Windows/Android/iOS/WASM
-  toolchains + gltfio decoder hookup.
-- **Why P2:** valuable compression win in theory, heavy dependency in
-  practice; uncompressed tilesets are fully functional. Revisit if a
-  target tileset requires it.
+- **State:** the G7 premise was wrong: draco was in the dependency tree
+  all along. cesium-native v0.64.0 lists `"draco"` in its `vcpkg.json`
+  and `find_package(draco CONFIG REQUIRED)` unconditionally, so ezvcpkg
+  provisions it on Linux/Windows/Android/iOS with zero per-platform
+  work; `CesiumGltfReader` decodes `KHR_draco_mesh_compression` into
+  plain accessors before gltfio ever sees the mesh
+  (`GltfReaderOptions::decodeDraco` defaults to true). No gltfio hook
+  exists or is needed. Pixel-verified 2026-09-30: Draco box renders
+  **bit-identical** (0/480,000 px) to its uncompressed twin; corrupt
+  Draco bitstream degrades gracefully (decode warning, exit 0, no
+  crash). CTest `draco` + `sanitizer_draco` green.
+- **Takes:** nothing — closed.
+- **Why P2:** was "valuable compression win in theory, heavy dependency
+  in practice"; in practice the dependency was already there.
 
 ### G8. pnts point size fixed at 1px
 

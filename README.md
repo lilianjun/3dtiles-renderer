@@ -179,7 +179,9 @@ child_a 橙 4m 盒 + child_b 青 4m 盒，ADD refine），不依赖外网。
 #    ktx2（P25：KTX2/UASTC 纹理真实渲染、与 PNG 对照像素断言 +
 #    损坏 KTX2 优雅失败）、
 #    ibl（P26：默认 IBL 开/关 A/B：金属明显变亮并出现环境反射、
-#    dielectric 不爆 + 几何无变化）
+#    dielectric 不爆 + 几何无变化）、
+#    draco（P29：Draco 压缩网格真实渲染、与未压缩双胞胎 bit-identical +
+#    损坏 Draco 优雅失败；解码器来自 cesium-native 自带 vcpkg draco，零新依赖）
 cmake --preset linux -DTILES_WITH_CESIUM_NATIVE=ON -DTILES_WITH_FILAMENT=ON -DTILES_WITH_SDL3=ON -DTILES_SDL3_NATIVE_VIDEO=ON
 cmake --build --preset linux -j2
 xvfb-run -a ctest --preset linux -I 1,9 --output-on-failure
@@ -192,7 +194,8 @@ xvfb-run -a ctest --preset linux -I 1,9 --output-on-failure
 #     P22 新增 sanitizer_tileset_switch：切换 teardown 路径门禁无报告；
 #     P23 新增 sanitizer_tileset_failfast：损坏 tileset 预检路径门禁无报告；
 #     P25 新增 sanitizer_ktx2：KTX2 转码/上传/shutdown 门禁无报告；
-#     P26 新增 sanitizer_ibl：IBL cubemap/SH/IndirectLight/mipmap 路径门禁无报告）
+#     P26 新增 sanitizer_ibl：IBL cubemap/SH/IndirectLight/mipmap 路径门禁无报告；
+#     P29 新增 sanitizer_draco：Draco 解码/渲染/损坏路径门禁无报告）
 cmake --preset linux-asan          # Debug + TILES_SANITIZE=ON，构建目录 build/linux-asan
 cmake --build --preset linux-asan -j2
 xvfb-run -a ctest --preset linux-asan -R sanitizer_ --output-on-failure

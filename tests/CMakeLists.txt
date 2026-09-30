@@ -397,6 +397,26 @@ if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
   endif()
 endif()
 
+# P29: Draco (KHR_draco_mesh_compression) mesh compression gate. No new
+# dependency was needed: draco ships inside cesium-native's own vcpkg
+# manifest and decodes in CesiumGltfReader before gltfio ever sees the
+# mesh. Deterministic fixture (tests/data/gen_p29_draco_tileset.py): the
+# Draco box must render bit-identical to its uncompressed twin, and a
+# corrupt Draco bitstream must fail gracefully (exit 0, no crash).
+if(NOT TILES_SANITIZE AND TILES_WITH_CESIUM_NATIVE AND TILES_WITH_FILAMENT)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME draco
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/draco_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --out "${CMAKE_BINARY_DIR}/screenshots/p29_draco")
+    set_tests_properties(draco PROPERTIES TIMEOUT 900)
+  else()
+    message(WARNING "[P29] Python3 not found — draco test skipped")
+  endif()
+endif()
+
 # P26: image-based lighting gate. Renders the deterministic p15_metal
 # fixture with the default procedural IBL and with --no-ibl, and asserts
 # the metal brightens dramatically with IBL on, shows sky-reflection
@@ -625,6 +645,13 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
               --demo "$<TARGET_FILE:tiles_demo>"
               --out "${CMAKE_BINARY_DIR}/screenshots/p25_ktx2_asan")
     set_tests_properties(sanitizer_ktx2 PROPERTIES TIMEOUT 900)
+    add_test(NAME sanitizer_draco
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/draco_test.py"
+              --sanitized
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --out "${CMAKE_BINARY_DIR}/screenshots/p29_draco_asan")
+    set_tests_properties(sanitizer_draco PROPERTIES TIMEOUT 900)
     add_test(NAME sanitizer_ibl
       COMMAND "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/ibl_test.py"
