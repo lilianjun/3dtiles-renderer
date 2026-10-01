@@ -59,3 +59,8 @@ Thumbs.db
 *.tmp
 compile_commands.json
 __pycache__/
+
+# P37: cesium.js test data (fetched via fetch_cesiumjs_data.sh, 138MB)
+tests/data/cesiumjs/Specs/
+tests/data/cesiumjs/Apps/
+tests/data/cesiumjs/3d-tiles-samples/
