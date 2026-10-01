@@ -676,7 +676,7 @@ glm::dmat4 upAxisToZUp(const CesiumGltf::Model& model) {
 // A future Filament whose gltfio implements the extension can delete this
 // function and pass the extension through untouched.
 // ---------------------------------------------------------------------------
-void expandGpuInstancing(CesiumGltf::Model& model) {
+void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp = false) {
     using namespace CesiumGltf;
     constexpr const char* kExt =
         ExtensionExtMeshGpuInstancing::ExtensionName;
@@ -790,10 +790,22 @@ void expandGpuInstancing(CesiumGltf::Model& model) {
             if (hasS && i < static_cast<std::uint64_t>(scales.size())) {
                 s = scales[i];
             }
+            // P37: For cmpt merges, the node matrix is already Z-up (with
+            // ECEF baked by the converter), but instance TRS is still Y-up.
+            // Convert instance TRS to Z-up: (x,y,z)->(x,z,-y).
+            glm::dvec3 tz(t);
+            glm::dquat rq(r.w, r.x, r.y, r.z);
+            glm::dvec3 sz(s);
+            if (convertInstanceYUpToZUp) {
+                tz = glm::dvec3(t.x, t.z, -t.y);
+                const glm::dquat fixQ(-0.7071067811865476, 0.0, 0.0, 0.7071067811865476);
+                rq = fixQ * rq * glm::inverse(fixQ);
+                sz = glm::dvec3(s.x, s.z, s.y);
+            }
             const glm::dmat4 inst =
-                glm::translate(glm::dmat4(1.0), glm::dvec3(t)) *
-                glm::mat4_cast(glm::dquat(r.w, r.x, r.y, r.z)) *
-                glm::scale(glm::dmat4(1.0), glm::dvec3(s));
+                glm::translate(glm::dmat4(1.0), tz) *
+                glm::mat4_cast(rq) *
+                glm::scale(glm::dmat4(1.0), sz);
             const glm::dmat4 m = base * inst;
             Node clone = node; // copies mesh, name, children, ...
             clone.extensions.erase(kExt);
@@ -968,13 +980,22 @@ public:
                 // P37: mark model so convertModel skips its own upAxisFix
                 // (already applied via pData->upAxisFix at asset root,
                 // or not needed for cmpt merges).
-                // TODO(P37): cmpt merge i3dm instances have coordinate space
-                // issues (SSIM 0.4855). The instance translations may be in
-                // a different space than the node transform. Needs deeper
-                // investigation of CmptToGltfConverter output.
+                // TODO(P37): cmpt merge i3dm instances not rendering (SSIM 0.4855).
+                // Investigation 2026-10-02: The merged model has 3 scenes, 25 instances.
+                // Node matrix is Z-up with ECEF baked (1215013, 4081608, 4736316),
+                // but instance translations are Y-up local offsets (-64,-61,69).
+                // expandGpuInstancing creates 25 clones with Y-up->Z-up converted
+                // instance TRS, spliced into default scene 2. However, forcing
+                // all instances to origin produces IDENTICAL output, proving the
+                // clones are not being rendered at all. The 6 visible boxes are
+                // not the instances. Root cause unknown: possibly clone nodes
+                // not traversed, or primitives culled due to bbox issues.
+                // Needs deeper investigation.
                 pData->model->extras["tilesetio_i3dmFixApplied"] =
                     CesiumUtility::JsonValue(true);
-                expandGpuInstancing(pData->model.value());
+                // P37: For cmpt merge, node matrix is already Z-up but
+                // instance TRS is Y-up; convert during expansion.
+                expandGpuInstancing(pData->model.value(), isCmptMerge);
             }
         }
 
