@@ -956,6 +956,10 @@ public:
             }
             if (hasInstancing) {
                 pData->upAxisFix = upAxisToZUp(pData->model.value());
+                // P37: mark model so convertModel skips its own upAxisFix
+                // (already applied via pData->upAxisFix at asset root).
+                pData->model->extras["tilesetio_i3dmFixApplied"] =
+                    CesiumUtility::JsonValue(true);
                 expandGpuInstancing(pData->model.value());
             }
         }

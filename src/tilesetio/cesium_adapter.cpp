@@ -88,13 +88,77 @@ TileRenderData convertModel(
     out.tileId = tileId;
     std::memcpy(out.tileTransform, tileTransform, 16 * sizeof(double));
 
+    // P37: For non-instanced models, convert glTF Y-up to Z-up (ECEF) after
+    // node transforms. glTF node hierarchies may contain RTC_CENTER nodes
+    // with ECEF translations that get wrongly rotated to Y-up by parent
+    // Z_UP_TO_Y_UP nodes. i3dm is excluded (marked by tileset.cpp) because
+    // its upAxisFix is already applied at the asset root.
+    glm::dmat4 upAxisFix(1.0);
+    bool skipUpAxisFix = false;
+    {
+        const auto it = model.extras.find("tilesetio_i3dmFixApplied");
+        if (it != model.extras.end() && it->second.isBool() &&
+            it->second.getBoolOrDefault(false)) {
+            skipUpAxisFix = true;
+        }
+    }
+    if (!skipUpAxisFix) {
+        int axis = 1; // Y — glTF default
+        
+        const auto it = model.extras.find("gltfUpAxis");
+        if (it != model.extras.end()) {
+            axis = static_cast<int>(it->second.getSafeNumberOrDefault(1.0));
+        }
+        if (axis == 0) { // X up -> Z up
+            upAxisFix = glm::dmat4(
+                glm::dvec4(0.0, 0.0, 1.0, 0.0),
+                glm::dvec4(0.0, 1.0, 0.0, 0.0),
+                glm::dvec4(-1.0, 0.0, 0.0, 0.0),
+                glm::dvec4(0.0, 0.0, 0.0, 1.0));
+        } else if (axis != 2) { // Y up -> Z up (axis==2 is already Z-up)
+            upAxisFix = glm::dmat4(
+                glm::dvec4(1.0, 0.0, 0.0, 0.0),
+                glm::dvec4(0.0, 0.0, 1.0, 0.0),
+                glm::dvec4(0.0, -1.0, 0.0, 0.0),
+                glm::dvec4(0.0, 0.0, 0.0, 1.0));
+        }
+    }
+
     // Helper: get node local matrix (from matrix or TRS).
     auto nodeLocalMatrix = [](const CesiumGltf::Node& node) {
         glm::dmat4 m(1.0);
-        if (node.matrix.size() == 16) {
-            for (int c = 0; c < 4; ++c)
-                for (int r = 0; r < 4; ++r)
-                    m[c][r] = node.matrix[c * 4 + r];
+        // P37: CesiumGltf::Node::matrix defaults to identity (always 16
+        // elements), so size==16 does NOT mean the glTF specified a matrix.
+        // If matrix is identity but TRS is non-default, the node used TRS.
+        bool matrixIsIdentity = node.matrix.size() == 16;
+        if (matrixIsIdentity) {
+            for (int i = 0; i < 16; ++i) {
+                double expected = (i % 5 == 0) ? 1.0 : 0.0;
+                if (node.matrix[static_cast<size_t>(i)] != expected) {
+                    matrixIsIdentity = false;
+                    break;
+                }
+            }
+        }
+        bool trsNonDefault = false;
+        if (node.translation.size() == 3 &&
+            (node.translation[0] != 0.0 || node.translation[1] != 0.0 ||
+             node.translation[2] != 0.0))
+            trsNonDefault = true;
+        if (node.rotation.size() == 4 &&
+            (node.rotation[0] != 0.0 || node.rotation[1] != 0.0 ||
+             node.rotation[2] != 0.0 || node.rotation[3] != 1.0))
+            trsNonDefault = true;
+        if (node.scale.size() == 3 &&
+            (node.scale[0] != 1.0 || node.scale[1] != 1.0 ||
+             node.scale[2] != 1.0))
+            trsNonDefault = true;
+        if (!matrixIsIdentity || !trsNonDefault) {
+            if (node.matrix.size() == 16) {
+                for (int c = 0; c < 4; ++c)
+                    for (int r = 0; r < 4; ++r)
+                        m[c][r] = node.matrix[static_cast<size_t>(c * 4 + r)];
+            }
             return m;
         }
         glm::dvec3 t(0.0);
@@ -120,6 +184,8 @@ TileRenderData convertModel(
         if (meshIdx < 0 ||
             static_cast<size_t>(meshIdx) >= model.meshes.size())
             return;
+        // P37: apply Y-up -> Z-up (for non-instanced; identity for i3dm).
+        const glm::dmat4 worldMat = upAxisFix * nodeMatrix;
         const auto& mesh = model.meshes[static_cast<size_t>(meshIdx)];
         for (const auto& prim : mesh.primitives) {
             if (prim.mode != CesiumGltf::MeshPrimitive::Mode::TRIANGLES)
@@ -135,7 +201,7 @@ TileRenderData convertModel(
                 glm::dvec4 p(
                     pd.positions[i], pd.positions[i + 1],
                     pd.positions[i + 2], 1.0);
-                glm::dvec4 tp = nodeMatrix * p;
+                glm::dvec4 tp = worldMat * p;
                 pd.positions[i] = static_cast<float>(tp.x);
                 pd.positions[i + 1] = static_cast<float>(tp.y);
                 pd.positions[i + 2] = static_cast<float>(tp.z);
@@ -147,7 +213,7 @@ TileRenderData convertModel(
             if (readNormals(
                     model, findAccessor(prim, "NORMAL"), pd.normals)) {
                 glm::dmat3 normalMat =
-                    glm::transpose(glm::inverse(glm::dmat3(nodeMatrix)));
+                    glm::transpose(glm::inverse(glm::dmat3(worldMat)));
                 for (size_t i = 0; i < pd.normals.size(); i += 3) {
                     glm::dvec3 n(
                         pd.normals[i], pd.normals[i + 1],

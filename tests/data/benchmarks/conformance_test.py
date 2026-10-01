@@ -79,6 +79,16 @@ def main():
     eye = eye_ecef  # ECEF, renderer will rebase
     up = cam['up']
 
+    # P37: Cesium frustum.fov is HORIZONTAL FOV, Filament expects VERTICAL.
+    # Convert: tan(fovx/2) = tan(fovy/2) * aspect  =>  fovy = 2*atan(tan(fovx/2)/aspect)
+    import math
+    fovx_deg = cam['fov']
+    aspect = cam['aspectRatio']
+    fovx_rad = math.radians(fovx_deg)
+    fovy_rad = 2 * math.atan(math.tan(fovx_rad / 2) / aspect)
+    fovy_deg = math.degrees(fovy_rad)
+    print(f"FOV: Cesium horizontal {fovx_deg:.2f}° -> Filament vertical {fovy_deg:.2f}°", flush=True)
+
     ours_png = os.path.join(args.out, 'ours.png')
     cmd = [
         'xvfb-run', '-a',
@@ -89,7 +99,7 @@ def main():
         '--camera-eye', f"{eye[0]},{eye[1]},{eye[2]}",
         '--camera-target', f"{target[0]},{target[1]},{target[2]}",
         '--camera-up', f"{up[0]},{up[1]},{up[2]}",
-        '--fov', str(cam['fov']),
+        '--fov', str(fovy_deg),
         '--near', str(cam['near']),
         '--far', str(cam['far']),
         '--background', f"{bg[0]},{bg[1]},{bg[2]},{bg[3]}",
