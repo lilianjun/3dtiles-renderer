@@ -543,7 +543,25 @@ if(TILES_WITH_FILAMENT)
       DEPENDS "${TILES_PBR_FILAMAT}"
               "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
       COMMENT "Embedding pbr_color.filamat as C++ header")
-    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}" "${TILES_TEX_FILAMAT_H}" "${TILES_PBR_FILAMAT_H}")
+    # P37: vertex color unlit material for pnts point clouds (COLOR_0).
+    set(TILES_VC_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/unlit_vertex_color.mat")
+    set(TILES_VC_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_vertex_color.filamat")
+    set(TILES_VC_FILAMAT_H
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_vertex_color_filamat.h")
+    add_custom_command(
+      OUTPUT "${TILES_VC_FILAMAT}"
+      COMMAND "${TILES_MATC}" -a all -o "${TILES_VC_FILAMAT}" "${TILES_VC_MAT_SRC}"
+      DEPENDS "${TILES_VC_MAT_SRC}"
+      COMMENT "matc: compiling unlit_vertex_color.mat (all backends)")
+    add_custom_command(
+      OUTPUT "${TILES_VC_FILAMAT_H}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+              "${TILES_VC_FILAMAT}" "${TILES_VC_FILAMAT_H}" unlit_vertex_color_filamat
+      DEPENDS "${TILES_VC_FILAMAT}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+      COMMENT "Embedding unlit_vertex_color.filamat as C++ header")
+    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}" "${TILES_TEX_FILAMAT_H}" "${TILES_PBR_FILAMAT_H}" "${TILES_VC_FILAMAT_H}")
     add_dependencies(tiles_renderer tiles_materials)
 
     # P36-B pivot: the Filament ImGui backend was abandoned (see ADR-0035);

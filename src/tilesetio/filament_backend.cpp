@@ -7,6 +7,7 @@
 #include "pbr_color_filamat.h"
 #include "unlit_color_filamat.h"
 #include "unlit_textured_filamat.h"
+#include "unlit_vertex_color_filamat.h"
 
 #include <filament/IndexBuffer.h>
 #include <filament/RenderableManager.h>
@@ -66,6 +67,13 @@ FilamentTileResources FilamentBackend::createTile(
                            .package(pbr_color_filamat, pbr_color_filamat_len)
                            .build(*engine);
     }
+    // P37: Create the shared vertex color material on first use (for pnts).
+    if (!_vertexColorMaterial) {
+        _vertexColorMaterial = filament::Material::Builder()
+                                   .package(unlit_vertex_color_filamat,
+                                            unlit_vertex_color_filamat_len)
+                                   .build(*engine);
+    }
 
     for (const auto& prim : data.primitives) {
         if (prim.positions.empty())
@@ -77,6 +85,9 @@ FilamentTileResources FilamentBackend::createTile(
             prim.normals.size() == static_cast<size_t>(vertexCount) * 3;
         const bool hasUVs =
             prim.uvs.size() == static_cast<size_t>(vertexCount) * 2;
+        // P37: vertex colors for pnts point clouds.
+        const bool hasColors =
+            prim.colors.size() == static_cast<size_t>(vertexCount) * 3;
         // P37: Always use UNLIT (direct colors, no lighting). Per user
         // 2026-10-01, this stage uses no lighting on both sides (Cesium
         // benchmark uses pow(diffuse, 2.2) direct color). PBR would require
@@ -84,13 +95,14 @@ FilamentTileResources FilamentBackend::createTile(
         const bool usePbr = false;
 
         // VertexBuffer: POSITION (float3), TANGENTS (float4 quaternion) if
-        // we have normals, UV0 (float2) if present.
+        // we have normals, UV0 (float2) if present, COLOR (float3) if present.
         int bufferIndex = 0;
         int tangentBuffer = -1;
         int uvBuffer = -1;
+        int colorBuffer = -1;
         auto vbBuilder = filament::VertexBuffer::Builder()
                              .vertexCount(vertexCount)
-                             .bufferCount(1 + (hasNormals ? 1 : 0) + (hasUVs ? 1 : 0))
+                             .bufferCount(1 + (hasNormals ? 1 : 0) + (hasUVs ? 1 : 0) + (hasColors ? 1 : 0))
                              .attribute(
                                  filament::VertexAttribute::POSITION,
                                  0,
@@ -108,6 +120,14 @@ FilamentTileResources FilamentBackend::createTile(
                 filament::VertexAttribute::UV0,
                 static_cast<uint8_t>(uvBuffer),
                 filament::VertexBuffer::AttributeType::FLOAT2);
+        }
+        // P37: vertex colors (COLOR_0) for pnts.
+        if (hasColors) {
+            colorBuffer = ++bufferIndex;
+            vbBuilder.attribute(
+                filament::VertexAttribute::COLOR,
+                static_cast<uint8_t>(colorBuffer),
+                filament::VertexBuffer::AttributeType::FLOAT3);
         }
         filament::VertexBuffer* vb = vbBuilder.build(*engine);
 
@@ -167,6 +187,22 @@ FilamentTileResources FilamentBackend::createTile(
                         delete[] static_cast<float*>(p);
                     },
                     uvCopy));
+        }
+
+        // P37: Copy vertex colors if present.
+        if (hasColors) {
+            auto* colCopy = new float[prim.colors.size()];
+            std::memcpy(colCopy, prim.colors.data(), prim.colors.size() * sizeof(float));
+            vb->setBufferAt(
+                *engine,
+                static_cast<uint8_t>(colorBuffer),
+                filament::VertexBuffer::BufferDescriptor(
+                    colCopy,
+                    prim.colors.size() * sizeof(float),
+                    [](void*, size_t, void* p) {
+                        delete[] static_cast<float*>(p);
+                    },
+                    colCopy));
         }
         res.vertexBuffers.push_back(vb);
 
@@ -231,6 +267,10 @@ FilamentTileResources FilamentBackend::createTile(
                 filament::TextureSampler::MinFilter::LINEAR,
                 filament::TextureSampler::MagFilter::LINEAR);
             mi->setParameter("baseColorMap", tex, sampler);
+        } else if (hasColors) {
+            // P37: Vertex colors (pnts point clouds) - use vertex color material.
+            // The material reads COLOR attribute, no uniform color needed.
+            mi = _vertexColorMaterial->createInstance();
         } else {
             // Solid color: use UNLIT (no lighting, direct color).
             // Per user 2026-10-01: lighting is not the goal for this stage.

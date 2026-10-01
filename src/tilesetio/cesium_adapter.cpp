@@ -60,6 +60,38 @@ bool readUVs(
     return true;
 }
 
+// P37: Read vec3/vec4 float vertex colors (COLOR_0). Outputs RGB (3 per vertex).
+bool readColors(
+    const CesiumGltf::Model& model,
+    int accessorIndex,
+    std::vector<float>& out) {
+    if (accessorIndex < 0)
+        return false;
+    // Try vec3 first.
+    CesiumGltf::AccessorView<glm::vec3> view3(model, accessorIndex);
+    if (view3.status() == CesiumGltf::AccessorViewStatus::Valid) {
+        out.resize(static_cast<size_t>(view3.size()) * 3);
+        for (int64_t i = 0; i < view3.size(); ++i) {
+            out[static_cast<size_t>(i) * 3 + 0] = view3[i].x;
+            out[static_cast<size_t>(i) * 3 + 1] = view3[i].y;
+            out[static_cast<size_t>(i) * 3 + 2] = view3[i].z;
+        }
+        return true;
+    }
+    // Try vec4 (ignore alpha).
+    CesiumGltf::AccessorView<glm::vec4> view4(model, accessorIndex);
+    if (view4.status() == CesiumGltf::AccessorViewStatus::Valid) {
+        out.resize(static_cast<size_t>(view4.size()) * 3);
+        for (int64_t i = 0; i < view4.size(); ++i) {
+            out[static_cast<size_t>(i) * 3 + 0] = view4[i].x;
+            out[static_cast<size_t>(i) * 3 + 1] = view4[i].y;
+            out[static_cast<size_t>(i) * 3 + 2] = view4[i].z;
+        }
+        return true;
+    }
+    return false;
+}
+
 // Read vec3 float normals.
 bool readNormals(
     const CesiumGltf::Model& model,
@@ -268,6 +300,9 @@ TileRenderData convertModel(
 
             // UVs (TEXCOORD_0), optional.
             readUVs(model, findAccessor(prim, "TEXCOORD_0"), pd.uvs);
+
+            // P37: Vertex colors (COLOR_0), optional (for pnts point clouds).
+            readColors(model, findAccessor(prim, "COLOR_0"), pd.colors);
 
             // Indices.
             if (prim.indices >= 0) {

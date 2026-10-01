@@ -56,6 +56,7 @@ private:
     filament::Material* _material = nullptr;         // unlit solid color
     filament::Material* _texturedMaterial = nullptr; // unlit with texture
     filament::Material* _pbrMaterial = nullptr;      // PBR lit (with normals)
+    filament::Material* _vertexColorMaterial = nullptr; // P37: unlit with vertex colors (pnts)
 };
 
 } // namespace tilesetio
