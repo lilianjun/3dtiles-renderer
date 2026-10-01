@@ -1,0 +1,2713 @@
+[
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedAnimated/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7746,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedColors/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedColorsMix/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedColorsTranslucent/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedDeprecated1/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7440,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedDeprecated2/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7440,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedExpiration/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedNoBatchIds/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 6480,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedTextured/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 75152,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedTranslucent/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedTranslucentOpaqueMix/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWGS84/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWithBatchTable/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 8243,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWithBatchTableBinary/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7946,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWithBoundingSphere/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWithContentDataUri/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 1,
+   "failed": 1,
+   "bytes": 0,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": false,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWithCopyright/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWithRtcCenter/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWithTransformBox/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWithTransformRegion/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWithTransformSphere/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWithVertexColors/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 8650,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Batched/BatchedWithoutBatchTable/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7440,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Composite/Composite/tileset.json",
+  "formats": [
+   "cmpt"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 10899,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Composite/CompositeOfComposite/tileset.json",
+  "formats": [
+   "cmpt"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 10899,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Composite/CompositeOfInstanced/tileset.json",
+  "formats": [
+   "cmpt"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 6418,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/GaussianSplats/sh_unit_cube/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 6572,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/GaussianSplats/tower/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 1,
+   "loaded": 1,
+   "failed": 0,
+   "bytes": 0,
+   "visited": 2,
+   "pending": 0,
+   "processing": 1
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/GltfContent/glTF/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 6,
+   "loading": 0,
+   "loaded": 6,
+   "failed": 0,
+   "bytes": 32400,
+   "visited": 6,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/GltfContent/glb/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 6,
+   "loading": 0,
+   "loaded": 6,
+   "failed": 0,
+   "bytes": 32400,
+   "visited": 6,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/GltfContentWithCopyright/glTF/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 6,
+   "loading": 0,
+   "loaded": 6,
+   "failed": 0,
+   "bytes": 32400,
+   "visited": 6,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/GltfContentWithRepeatedCopyrights/glTF/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 6,
+   "loading": 0,
+   "loaded": 6,
+   "failed": 0,
+   "bytes": 32400,
+   "visited": 6,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Hierarchy/BatchTableHierarchy/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 77911,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Hierarchy/BatchTableHierarchyBinary/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 139,
+  "stats": {
+   "frame": 1,
+   "selected": 2,
+   "loading": 1,
+   "loaded": 1,
+   "failed": 0,
+   "bytes": 0,
+   "visited": 2,
+   "pending": 0,
+   "processing": 1
+  },
+  "ok": false,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Hierarchy/BatchTableHierarchyLegacy/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 75784,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Hierarchy/BatchTableHierarchyMultipleParents/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 75784,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Hierarchy/BatchTableHierarchyNoParents/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 77124,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedAnimated/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 2937,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedGltfExternal/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedOct32POrientation/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedOrientation/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedQuantized/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedQuantizedOct32POrientation/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedRTC/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedRedMaterial/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedScale/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedScaleNonUniform/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedTextured/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 67403,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedWithBatchIds/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3234,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedWithBatchTable/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedWithBatchTableBinary/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3288,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedWithCopyright/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 1969,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedWithTransform/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedWithoutBatchTable/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3184,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedWithoutNormals/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 1193,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Instanced/InstancedZeroRTC/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Metadata/PropertyAttributesPointCloud/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 4,
+   "loading": 0,
+   "loaded": 4,
+   "failed": 0,
+   "bytes": 938816,
+   "visited": 4,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Metadata/StructuralMetadata/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 1,
+   "failed": 1,
+   "bytes": 0,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": false,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudBatched/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 25201,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudBatchedJsonOnly/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 25073,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudConstantColor/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 12000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudDraco/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 54000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudDracoBatched/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 37201,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudDracoInvalid/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 648,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudDracoPartial/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 54000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudNoColor/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 12000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudNormals/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 36000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudNormalsOctEncoded/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 36000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudQuantized/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 24000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudQuantizedOctEncoded/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 36000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudRGB/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 24000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudRGB565/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 24000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudRGBA/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 28000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudWGS84/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 24000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudWithPerPointProperties/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 42000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudWithTransform/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 24000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/PointCloud/PointCloudWithUnicodePropertyIds/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 42000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Terrain/Test/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 0,
+   "loading": 2,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 0,
+   "visited": 6,
+   "pending": 0,
+   "processing": 2
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/Tileset/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 6,
+   "loading": 0,
+   "loaded": 6,
+   "failed": 0,
+   "bytes": 38450,
+   "visited": 6,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetEmptyExternal/tileset.json",
+  "formats": [
+   "b3dm",
+   "json"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 6,
+   "failed": 0,
+   "bytes": 23070,
+   "visited": 6,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetEmptyRoot/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 6,
+   "loading": 0,
+   "loaded": 6,
+   "failed": 0,
+   "bytes": 30760,
+   "visited": 6,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetOfTilesets/tileset.json",
+  "formats": [
+   "json"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 8,
+   "loading": 0,
+   "loaded": 8,
+   "failed": 0,
+   "bytes": 38450,
+   "visited": 8,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetPoints/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 10,
+   "loading": 0,
+   "loaded": 10,
+   "failed": 0,
+   "bytes": 216000,
+   "visited": 10,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetRefinementMix/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 7,
+   "loading": 0,
+   "loaded": 8,
+   "failed": 0,
+   "bytes": 53830,
+   "visited": 8,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetReplacement1/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 6,
+   "loading": 0,
+   "loaded": 8,
+   "failed": 0,
+   "bytes": 38450,
+   "visited": 8,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetReplacement2/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 3,
+   "loading": 0,
+   "loaded": 6,
+   "failed": 0,
+   "bytes": 23070,
+   "visited": 6,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetReplacement3/tileset.json",
+  "formats": [
+   "b3dm",
+   "json"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 5,
+   "loading": 0,
+   "loaded": 8,
+   "failed": 0,
+   "bytes": 38450,
+   "visited": 8,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetReplacementWithViewerRequestVolume/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 4,
+   "loading": 0,
+   "loaded": 7,
+   "failed": 0,
+   "bytes": 38450,
+   "visited": 7,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetSubtreeExpiration/tileset.json",
+  "formats": [
+   "b3dm",
+   "json"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 8,
+   "loading": 0,
+   "loaded": 8,
+   "failed": 0,
+   "bytes": 38450,
+   "visited": 8,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetUniform/tileset.json",
+  "formats": [
+   "b3dm",
+   "json"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 9,
+   "loading": 0,
+   "loaded": 22,
+   "failed": 0,
+   "bytes": 131499,
+   "visited": 22,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetWithExternalResources/tileset.json",
+  "formats": [
+   "b3dm",
+   "i3dm",
+   "json"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 10,
+   "loading": 0,
+   "loaded": 8,
+   "failed": 2,
+   "bytes": 265608,
+   "visited": 10,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": false,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetWithSharedTextures/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 139,
+  "stats": {
+   "frame": 0,
+   "selected": 6,
+   "loading": 10,
+   "loaded": 1,
+   "failed": 0,
+   "bytes": 0,
+   "visited": 6,
+   "pending": 5,
+   "processing": 5
+  },
+  "ok": false,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetWithTransforms/tileset.json",
+  "formats": [
+   "b3dm",
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 3,
+   "loading": 0,
+   "loaded": 3,
+   "failed": 0,
+   "bytes": 10899,
+   "visited": 3,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Specs/Data/Cesium3DTiles/Tilesets/TilesetWithViewerRequestVolume/tileset.json",
+  "formats": [
+   "b3dm",
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 7,
+   "loading": 0,
+   "loaded": 7,
+   "failed": 0,
+   "bytes": 54760,
+   "visited": 7,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/Batched/BatchedColors/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/Batched/BatchedTranslucent/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/Batched/BatchedTranslucentOpaqueMix/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 7690,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/Batched/BatchedWithBatchTable/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 8243,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/Classification/Photogrammetry/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 2232,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/Composite/Composite/tileset.json",
+  "formats": [
+   "cmpt"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 10899,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/Hierarchy/BatchTableHierarchy/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 77907,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/Instanced/InstancedOrientation/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/Instanced/InstancedWithBatchTable/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 3209,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/PointCloud/PointCloudBatched/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 25201,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/PointCloud/PointCloudConstantColor/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 12000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/PointCloud/PointCloudDraco/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 54000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/PointCloud/PointCloudNormals/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 36000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/PointCloud/PointCloudRGB/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 24000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/PointCloud/PointCloudWithPerPointProperties/tileset.json",
+  "formats": [
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 2,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 42000,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/Tilesets/Tileset/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 6,
+   "loading": 0,
+   "loaded": 6,
+   "failed": 0,
+   "bytes": 38450,
+   "visited": 6,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "Apps/SampleData/Cesium3DTiles/Tilesets/TilesetWithViewerRequestVolume/tileset.json",
+  "formats": [
+   "b3dm",
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 7,
+   "loading": 0,
+   "loaded": 7,
+   "failed": 0,
+   "bytes": 54760,
+   "visited": 7,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.0/TilesetWithDiscreteLOD/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 4,
+   "failed": 0,
+   "bytes": 4784496,
+   "visited": 4,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.0/TilesetWithRequestVolume/city/tileset.json",
+  "formats": [
+   "b3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 6,
+   "loading": 0,
+   "loaded": 6,
+   "failed": 0,
+   "bytes": 30760,
+   "visited": 6,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.0/TilesetWithRequestVolume/tileset.json",
+  "formats": [
+   "b3dm",
+   "json",
+   "pnts"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 9,
+   "loading": 0,
+   "loaded": 10,
+   "failed": 0,
+   "bytes": 6694556,
+   "visited": 10,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.0/TilesetWithTreeBillboards/tileset.json",
+  "formats": [
+   "i3dm"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 3,
+   "failed": 0,
+   "bytes": 4251734,
+   "visited": 3,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.1/BoundingBoxTests/0_0_0-1_1_2/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 720,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.1/BoundingBoxTests/0_0_0-1_2_1/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 720,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.1/BoundingBoxTests/0_0_0-2_1_1/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 720,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.1/BoundingBoxTests/0_0_2-1_1_4/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 720,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.1/BoundingBoxTests/0_2_0-1_4_1/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 720,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.1/BoundingBoxTests/2_0_0-4_1_1/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 720,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.1/SparseImplicitOctree/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 60,
+   "loading": 0,
+   "loaded": 60,
+   "failed": 0,
+   "bytes": 22320,
+   "visited": 60,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/1.1/SparseImplicitQuadtree/tileset.json",
+  "formats": [
+   "glb"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 65,
+   "loading": 0,
+   "loaded": 65,
+   "failed": 0,
+   "bytes": 3840,
+   "visited": 65,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/CESIUM_primitive_outline/BoxPrimitiveOutline/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 768,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/EXT_mesh_features/FeatureIdAttribute/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 496,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/EXT_mesh_features/FeatureIdTexture/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 139,
+  "stats": {
+   "frame": 0,
+   "selected": 1,
+   "loading": 2,
+   "loaded": 1,
+   "failed": 0,
+   "bytes": 0,
+   "visited": 2,
+   "pending": 1,
+   "processing": 1
+  },
+  "ok": false,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/EXT_structural_metadata/ComplexTypes/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 652,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/EXT_structural_metadata/FeatureIdAttributeAndPropertyTable/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 544,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/EXT_structural_metadata/FeatureIdTextureAndPropertyTable/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 139,
+  "stats": {
+   "frame": 0,
+   "selected": 1,
+   "loading": 2,
+   "loaded": 1,
+   "failed": 0,
+   "bytes": 0,
+   "visited": 2,
+   "pending": 1,
+   "processing": 1
+  },
+  "ok": false,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/EXT_structural_metadata/MultipleClasses/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 648,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/EXT_structural_metadata/MultipleFeatureIdsAndProperties/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 664,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/EXT_structural_metadata/PropertyAttributesPointCloud/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 4,
+   "loading": 0,
+   "loaded": 4,
+   "failed": 0,
+   "bytes": 938816,
+   "visited": 4,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/EXT_structural_metadata/SharedPropertyTable/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 1040,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/EXT_structural_metadata/SimplePropertyTexture/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 139,
+  "stats": {
+   "frame": 1,
+   "selected": 1,
+   "loading": 1,
+   "loaded": 1,
+   "failed": 0,
+   "bytes": 0,
+   "visited": 2,
+   "pending": 0,
+   "processing": 1
+  },
+  "ok": false,
+  "error": ""
+ },
+ {
+  "path": "3d-tiles-samples/glTF/GpuInstancesMetadata/tileset.json",
+  "formats": [
+   "gltf"
+  ],
+  "returncode": 0,
+  "stats": {
+   "frame": 29,
+   "selected": 1,
+   "loading": 0,
+   "loaded": 2,
+   "failed": 0,
+   "bytes": 1224,
+   "visited": 2,
+   "pending": 0,
+   "processing": 0
+  },
+  "ok": true,
+  "error": ""
+ }
+]
