@@ -18,6 +18,7 @@ namespace tilesetio {
 // A single drawable geometry primitive: raw memory data.
 struct PrimitiveData {
     std::vector<float> positions;    // 3 floats per vertex, required
+    std::vector<float> uvs;          // 2 floats per vertex, optional (TEXCOORD_0)
     std::vector<uint32_t> indices;   // may be empty for non-indexed draw
     float color[4] = {1, 1, 1, 1};   // solid color (from material baseColorFactor)
     float bboxMin[3] = {0, 0, 0};    // axis-aligned bbox in local space

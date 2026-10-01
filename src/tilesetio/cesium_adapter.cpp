@@ -38,6 +38,24 @@ bool readPositions(
     return true;
 }
 
+// Read vec2 float UVs.
+bool readUVs(
+    const CesiumGltf::Model& model,
+    int accessorIndex,
+    std::vector<float>& out) {
+    if (accessorIndex < 0)
+        return false;
+    CesiumGltf::AccessorView<glm::vec2> view(model, accessorIndex);
+    if (view.status() != CesiumGltf::AccessorViewStatus::Valid)
+        return false;
+    out.resize(static_cast<size_t>(view.size()) * 2);
+    for (int64_t i = 0; i < view.size(); ++i) {
+        out[static_cast<size_t>(i) * 2 + 0] = view[i].x;
+        out[static_cast<size_t>(i) * 2 + 1] = view[i].y;
+    }
+    return true;
+}
+
 } // namespace
 
 TileRenderData convertModel(
@@ -57,6 +75,9 @@ TileRenderData convertModel(
             if (!readPositions(
                     model, findAccessor(prim, "POSITION"), pd.positions))
                 continue;
+
+            // UVs (TEXCOORD_0), optional.
+            readUVs(model, findAccessor(prim, "TEXCOORD_0"), pd.uvs);
 
             // Indices.
             if (prim.indices >= 0) {

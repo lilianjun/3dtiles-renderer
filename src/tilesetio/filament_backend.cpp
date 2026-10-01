@@ -34,17 +34,24 @@ FilamentTileResources FilamentBackend::createTile(
 
         const uint32_t vertexCount =
             static_cast<uint32_t>(prim.positions.size() / 3);
+        const bool hasUVs =
+            prim.uvs.size() == static_cast<size_t>(vertexCount) * 2;
 
-        // VertexBuffer: POSITION only (float3).
-        filament::VertexBuffer* vb =
-            filament::VertexBuffer::Builder()
-                .vertexCount(vertexCount)
-                .bufferCount(1)
-                .attribute(
-                    filament::VertexAttribute::POSITION,
-                    0,
-                    filament::VertexBuffer::AttributeType::FLOAT3)
-                .build(*engine);
+        // VertexBuffer: POSITION (float3), plus UV0 (float2) if present.
+        auto vbBuilder = filament::VertexBuffer::Builder()
+                             .vertexCount(vertexCount)
+                             .bufferCount(hasUVs ? 2 : 1)
+                             .attribute(
+                                 filament::VertexAttribute::POSITION,
+                                 0,
+                                 filament::VertexBuffer::AttributeType::FLOAT3);
+        if (hasUVs) {
+            vbBuilder.attribute(
+                filament::VertexAttribute::UV0,
+                1,
+                filament::VertexBuffer::AttributeType::FLOAT2);
+        }
+        filament::VertexBuffer* vb = vbBuilder.build(*engine);
 
         // Copy positions (one necessary copy; Filament takes ownership via callback).
         auto* posCopy = new float[prim.positions.size()];
@@ -62,6 +69,22 @@ FilamentTileResources FilamentBackend::createTile(
                     delete[] static_cast<float*>(p);
                 },
                 posCopy));
+
+        // Copy UVs if present.
+        if (hasUVs) {
+            auto* uvCopy = new float[prim.uvs.size()];
+            std::memcpy(uvCopy, prim.uvs.data(), prim.uvs.size() * sizeof(float));
+            vb->setBufferAt(
+                *engine,
+                1,
+                filament::VertexBuffer::BufferDescriptor(
+                    uvCopy,
+                    prim.uvs.size() * sizeof(float),
+                    [](void*, size_t, void* p) {
+                        delete[] static_cast<float*>(p);
+                    },
+                    uvCopy));
+        }
         res.vertexBuffers.push_back(vb);
 
         // IndexBuffer (if indexed).
