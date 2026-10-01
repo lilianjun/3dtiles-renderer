@@ -14,11 +14,33 @@
 #include <filament/TextureSampler.h>
 #include <filament/VertexBuffer.h>
 
+#include <math/mat3.h>
+#include <math/quat.h>
+#include <math/vec3.h>
+
 #include <utils/EntityManager.h>
 
 #include <cstring>
+#include <cmath>
 
 namespace tilesetio {
+namespace {
+
+// Convert a vec3 normal to Filament TANGENTS quaternion.
+// Picks an arbitrary tangent perpendicular to the normal.
+filament::math::quatf normalToTangentQuat(float nx, float ny, float nz) {
+    using namespace filament::math;
+    float3 n(nx, ny, nz);
+    // Pick a helper vector not parallel to n
+    float3 helper = std::abs(ny) < 0.99f ? float3(0, 1, 0) : float3(1, 0, 0);
+    float3 t = normalize(cross(helper, n));
+    float3 b = cross(n, t);
+    // Build tangent frame matrix: columns are T, B, N
+    mat3f m(t, b, n);
+    return mat3f::packTangentFrame(m);
+}
+
+} // namespace
 
 FilamentTileResources FilamentBackend::createTile(
     filament::Engine* engine,
@@ -51,27 +73,38 @@ FilamentTileResources FilamentBackend::createTile(
 
         const uint32_t vertexCount =
             static_cast<uint32_t>(prim.positions.size() / 3);
+        const bool hasNormals =
+            prim.normals.size() == static_cast<size_t>(vertexCount) * 3;
         const bool hasUVs =
             prim.uvs.size() == static_cast<size_t>(vertexCount) * 2;
-        // Use PBR material for solid colors (has normals in source, but we
-        // use geometric normals for now). This gives diffuse lighting.
-        const bool usePbr = true; // TODO: use textured PBR when available
+        // Use PBR material for solid colors when we have normals.
+        // TANGENTS are computed from normals for proper diffuse lighting.
+        const bool usePbr = hasNormals;
 
-        // VertexBuffer: POSITION (float3), plus UV0 (float2) if present.
-        // Note: For PBR lighting, Filament uses TANGENTS (quaternion) not
-        // separate NORMAL. We skip tangents for now; the PBR material will
-        // use geometric normals (flat shading), which is correct for boxes.
+        // VertexBuffer: POSITION (float3), TANGENTS (float4 quaternion) if
+        // we have normals, UV0 (float2) if present.
+        int bufferIndex = 0;
+        int tangentBuffer = -1;
+        int uvBuffer = -1;
         auto vbBuilder = filament::VertexBuffer::Builder()
                              .vertexCount(vertexCount)
-                             .bufferCount(hasUVs ? 2 : 1)
+                             .bufferCount(1 + (hasNormals ? 1 : 0) + (hasUVs ? 1 : 0))
                              .attribute(
                                  filament::VertexAttribute::POSITION,
                                  0,
                                  filament::VertexBuffer::AttributeType::FLOAT3);
+        if (hasNormals) {
+            tangentBuffer = ++bufferIndex;
+            vbBuilder.attribute(
+                filament::VertexAttribute::TANGENTS,
+                static_cast<uint8_t>(tangentBuffer),
+                filament::VertexBuffer::AttributeType::FLOAT4);
+        }
         if (hasUVs) {
+            uvBuffer = ++bufferIndex;
             vbBuilder.attribute(
                 filament::VertexAttribute::UV0,
-                1,
+                static_cast<uint8_t>(uvBuffer),
                 filament::VertexBuffer::AttributeType::FLOAT2);
         }
         filament::VertexBuffer* vb = vbBuilder.build(*engine);
@@ -93,13 +126,38 @@ FilamentTileResources FilamentBackend::createTile(
                 },
                 posCopy));
 
+        // Convert normals to TANGENTS quaternions if present.
+        if (hasNormals) {
+            auto* tanCopy = new float[vertexCount * 4];
+            for (uint32_t i = 0; i < vertexCount; ++i) {
+                float nx = prim.normals[i * 3 + 0];
+                float ny = prim.normals[i * 3 + 1];
+                float nz = prim.normals[i * 3 + 2];
+                auto q = normalToTangentQuat(nx, ny, nz);
+                tanCopy[i * 4 + 0] = q.x;
+                tanCopy[i * 4 + 1] = q.y;
+                tanCopy[i * 4 + 2] = q.z;
+                tanCopy[i * 4 + 3] = q.w;
+            }
+            vb->setBufferAt(
+                *engine,
+                static_cast<uint8_t>(tangentBuffer),
+                filament::VertexBuffer::BufferDescriptor(
+                    tanCopy,
+                    vertexCount * 4 * sizeof(float),
+                    [](void*, size_t, void* p) {
+                        delete[] static_cast<float*>(p);
+                    },
+                    tanCopy));
+        }
+
         // Copy UVs if present.
         if (hasUVs) {
             auto* uvCopy = new float[prim.uvs.size()];
             std::memcpy(uvCopy, prim.uvs.data(), prim.uvs.size() * sizeof(float));
             vb->setBufferAt(
                 *engine,
-                1,
+                static_cast<uint8_t>(uvBuffer),
                 filament::VertexBuffer::BufferDescriptor(
                     uvCopy,
                     prim.uvs.size() * sizeof(float),
@@ -172,8 +230,7 @@ FilamentTileResources FilamentBackend::createTile(
                 filament::TextureSampler::MagFilter::LINEAR);
             mi->setParameter("baseColorMap", tex, sampler);
         } else {
-            // Solid color: use PBR (gives diffuse lighting via sun).
-            // The PBR material uses geometric normals (flat shading).
+            // Solid color: use PBR if we have normals (gives diffuse lighting).
             if (usePbr) {
                 mi = _pbrMaterial->createInstance();
                 mi->setParameter(
