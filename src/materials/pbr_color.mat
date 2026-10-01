@@ -14,5 +14,8 @@ fragment {
         material.baseColor = materialParams.baseColor;
         material.metallic = materialParams.metallic;
         material.roughness = materialParams.roughness;
+        // Note: Without TANGENTS attribute, Filament uses default normal.
+        // For proper per-face lighting, we need to provide tangents.
+        // TODO: Convert vertex normals to tangent quaternions.
     }
 }

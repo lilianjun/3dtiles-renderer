@@ -53,8 +53,14 @@ FilamentTileResources FilamentBackend::createTile(
             static_cast<uint32_t>(prim.positions.size() / 3);
         const bool hasUVs =
             prim.uvs.size() == static_cast<size_t>(vertexCount) * 2;
+        // Use PBR material for solid colors (has normals in source, but we
+        // use geometric normals for now). This gives diffuse lighting.
+        const bool usePbr = true; // TODO: use textured PBR when available
 
         // VertexBuffer: POSITION (float3), plus UV0 (float2) if present.
+        // Note: For PBR lighting, Filament uses TANGENTS (quaternion) not
+        // separate NORMAL. We skip tangents for now; the PBR material will
+        // use geometric normals (flat shading), which is correct for boxes.
         auto vbBuilder = filament::VertexBuffer::Builder()
                              .vertexCount(vertexCount)
                              .bufferCount(hasUVs ? 2 : 1)
@@ -166,12 +172,23 @@ FilamentTileResources FilamentBackend::createTile(
                 filament::TextureSampler::MagFilter::LINEAR);
             mi->setParameter("baseColorMap", tex, sampler);
         } else {
-            // Solid color.
-            mi = _material->createInstance();
-            mi->setParameter(
-                "color",
-                filament::math::float3(
-                    prim.color[0], prim.color[1], prim.color[2]));
+            // Solid color: use PBR (gives diffuse lighting via sun).
+            // The PBR material uses geometric normals (flat shading).
+            if (usePbr) {
+                mi = _pbrMaterial->createInstance();
+                mi->setParameter(
+                    "baseColor",
+                    filament::math::float4(
+                        prim.color[0], prim.color[1], prim.color[2], prim.color[3]));
+                mi->setParameter("metallic", 0.0f);
+                mi->setParameter("roughness", 0.9f);
+            } else {
+                mi = _material->createInstance();
+                mi->setParameter(
+                    "color",
+                    filament::math::float3(
+                        prim.color[0], prim.color[1], prim.color[2]));
+            }
         }
         res.materialInstances.push_back(mi);
 
@@ -249,6 +266,10 @@ void FilamentBackend::destroyMaterial(filament::Engine* engine) {
     if (_texturedMaterial) {
         engine->destroy(_texturedMaterial);
         _texturedMaterial = nullptr;
+    }
+    if (_pbrMaterial) {
+        engine->destroy(_pbrMaterial);
+        _pbrMaterial = nullptr;
     }
 }
 
