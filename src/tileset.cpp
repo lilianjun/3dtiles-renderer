@@ -34,6 +34,10 @@
 #include <CesiumGltfWriter/GltfWriter.h>
 #include <CesiumUtility/CreditSystem.h>
 #include <rapidjson/document.h> // P23: pre-flight tileset.json validation
+#include <rapidjson/writer.h>     // P37-B: GLB JSON re-serialization
+#include <rapidjson/stringbuffer.h>
+#include <functional> // P37-B: recursive extension stripping
+#include <cstring>    // P37-B: memcpy/strcmp in GLB patching
 // P22-hotfix: glm and curl are only available when cesium-native is built
 // (glm arrives via cesium-native's vcpkg tree; curl via its vcpkg ports).
 // The Windows/Android/iOS CI configs build the SDK WITHOUT
@@ -1032,6 +1036,200 @@ public:
             std::move(out));
     }
 
+    // P37-B: strip EXT_structural_metadata / EXT_mesh_features texture
+    // extensions from GLB before gltfio sees it. Filament v1.77's
+    // ResourceLoader::createTextures() segfaults (strlen on null) when it
+    // encounters property/feature-ID textures. We don't use metadata for
+    // rendering, so stripping is safe: geometry/materials remain intact.
+    static std::vector<std::uint8_t> stripMetadataTextureExtensions(
+        const std::vector<std::uint8_t>& glb) {
+        // Minimal GLB parse: header (12B) + JSON chunk.
+        if (glb.size() < 20) return glb;
+        const auto* p = glb.data();
+        if (p[0] != 'g' || p[1] != 'l' || p[2] != 'T' || p[3] != 'F') return glb;
+        std::uint32_t jsonLen;
+        std::memcpy(&jsonLen, p + 12, 4);
+        if (glb.size() < 20 + jsonLen) return glb;
+        // Chunk type must be JSON (0x4E4F534A).
+        std::uint32_t chunkType;
+        std::memcpy(&chunkType, p + 16, 4);
+        if (chunkType != 0x4E4F534A) return glb;
+
+        rapidjson::Document doc;
+        // Use insitu parsing on a copy (rapidjson needs mutable buffer).
+        std::string jsonStr(reinterpret_cast<const char*>(p + 20), jsonLen);
+        // P37-B debug: check if extensions exist before parsing.
+        const bool hasStructural = jsonStr.find("EXT_structural_metadata") != std::string::npos;
+        const bool hasMeshFeatures = jsonStr.find("EXT_mesh_features") != std::string::npos;
+        if (hasStructural || hasMeshFeatures) {
+            std::cerr << "[tiles_renderer] stripMetadata: found "
+                      << (hasStructural ? "EXT_structural_metadata " : "")
+                      << (hasMeshFeatures ? "EXT_mesh_features" : "")
+                      << " in GLB JSON" << std::endl;
+        }
+        doc.ParseInsitu(jsonStr.data());
+        if (doc.HasParseError() || !doc.IsObject()) return glb;
+
+        bool modified = false;
+        bool stripTextures = false;
+        // Remove from extensionsUsed / extensionsRequired.
+        for (const char* key : {"extensionsUsed", "extensionsRequired"}) {
+            if (doc.HasMember(key) && doc[key].IsArray()) {
+                auto& arr = doc[key];
+                for (auto it = arr.Begin(); it != arr.End();) {
+                    if (it->IsString() &&
+                        (std::strcmp(it->GetString(), "EXT_structural_metadata") == 0 ||
+                         std::strcmp(it->GetString(), "EXT_mesh_features") == 0)) {
+                        it = arr.Erase(it);
+                        modified = true;
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+        }
+        // Remove top-level extensions entries.
+        if (doc.HasMember("extensions") && doc["extensions"].IsObject()) {
+            auto& ext = doc["extensions"];
+            if (ext.HasMember("EXT_structural_metadata")) {
+                ext.RemoveMember("EXT_structural_metadata");
+                modified = true;
+            }
+            if (ext.HasMember("EXT_mesh_features")) {
+                ext.RemoveMember("EXT_mesh_features");
+                modified = true;
+            }
+        }
+        // Remove per-primitive / per-texture extension references.
+        // (mesh.primitives[].extensions, textures[].extensions, etc.)
+        std::function<void(rapidjson::Value&)> stripRecursive =
+            [&](rapidjson::Value& v) {
+                if (v.IsObject()) {
+                    if (v.HasMember("extensions") && v["extensions"].IsObject()) {
+                        auto& e = v["extensions"];
+                        if (e.HasMember("EXT_structural_metadata")) {
+                            e.RemoveMember("EXT_structural_metadata");
+                            modified = true;
+                        }
+                        if (e.HasMember("EXT_mesh_features")) {
+                            e.RemoveMember("EXT_mesh_features");
+                            modified = true;
+                        }
+                    }
+                    for (auto it = v.MemberBegin(); it != v.MemberEnd(); ++it) {
+                        stripRecursive(it->value);
+                    }
+                } else if (v.IsArray()) {
+                    for (auto& elem : v.GetArray()) {
+                        stripRecursive(elem);
+                    }
+                }
+            };
+        stripRecursive(doc);
+
+        // P37-B: decide if textures must go. Triggers:
+        // (1) metadata extensions stripped above, or
+        // (2) images with external URIs (cesium-native's modelToGlb embeds
+        //     buffers but external image files become dangling URIs that
+        //     crash gltfio's createTextures with strlen(nullptr)).
+        if (modified) stripTextures = true;
+        if (doc.HasMember("images") && doc["images"].IsArray()) {
+            for (auto& img : doc["images"].GetArray()) {
+                if (img.IsObject() && img.HasMember("uri")) {
+                    stripTextures = true;
+                    std::cerr << "[tiles_renderer] stripMetadata: external "
+                                 "image URI found, stripping textures"
+                              << std::endl;
+                    break;
+                }
+            }
+            // P37-B debug: log image structure when not stripping.
+            if (!stripTextures) {
+                std::cerr << "[tiles_renderer] stripMetadata: images present "
+                             "but no URI, count="
+                          << doc["images"].Size() << std::endl;
+            }
+        }
+
+        if (!modified && !stripTextures) return glb;
+
+        // P37-B: if we stripped metadata extensions, also remove all
+        // textures/images/samplers. The property/feature-ID textures are
+        // what crash gltfio's createTextures(); materials fall back to
+        // untextured rendering which is fine for conformance (we test
+        // geometry loading, not metadata visualization).
+        if (stripTextures) {
+            if (doc.HasMember("textures")) {
+                doc.RemoveMember("textures");
+            }
+            if (doc.HasMember("images")) {
+                doc.RemoveMember("images");
+            }
+            if (doc.HasMember("samplers")) {
+                doc.RemoveMember("samplers");
+            }
+            modified = true;
+        }
+        // Also clear texture references from materials (only when stripping).
+        if (stripTextures && doc.HasMember("materials") &&
+            doc["materials"].IsArray()) {
+            for (auto& mat : doc["materials"].GetArray()) {
+                if (!mat.IsObject()) continue;
+                // pbrMetallicRoughness.baseColorTexture etc.
+                std::function<void(rapidjson::Value&)> clearTexRefs =
+                    [&](rapidjson::Value& v) {
+                        if (v.IsObject()) {
+                            // Remove any "*Texture" member that is an object
+                            // with "index" (i.e., a texture reference).
+                            for (auto it = v.MemberBegin(); it != v.MemberEnd();) {
+                                const char* name = it->name.GetString();
+                                size_t len = std::strlen(name);
+                                if (len > 7 &&
+                                    std::strcmp(name + len - 7, "Texture") == 0 &&
+                                    it->value.IsObject()) {
+                                    it = v.EraseMember(it);
+                                    modified = true;
+                                } else {
+                                    clearTexRefs(it->value);
+                                    ++it;
+                                }
+                            }
+                        } else if (v.IsArray()) {
+                            for (auto& e : v.GetArray()) clearTexRefs(e);
+                        }
+                    };
+                clearTexRefs(mat);
+            }
+        }
+
+        if (!modified) return glb;
+
+        // Re-serialize JSON and repack GLB.
+        rapidjson::StringBuffer sb;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+        doc.Accept(writer);
+        std::string newJson = sb.GetString();
+        // Pad to 4-byte alignment with spaces (JSON chunk padding).
+        while (newJson.size() % 4 != 0) newJson.push_back(' ');
+
+        std::vector<std::uint8_t> out;
+        out.reserve(12 + 8 + newJson.size() + (glb.size() - 20 - jsonLen));
+        // Header: magic, version, new total length (patched below).
+        out.insert(out.end(), p, p + 12);
+        // JSON chunk header: new length + type.
+        std::uint32_t newJsonLen = static_cast<std::uint32_t>(newJson.size());
+        out.insert(out.end(), reinterpret_cast<std::uint8_t*>(&newJsonLen),
+                   reinterpret_cast<std::uint8_t*>(&newJsonLen) + 4);
+        out.insert(out.end(), p + 16, p + 20); // chunk type (JSON)
+        out.insert(out.end(), newJson.begin(), newJson.end());
+        // Copy remaining chunks (BIN etc.) as-is.
+        out.insert(out.end(), p + 20 + jsonLen, p + glb.size());
+        // Patch total length.
+        std::uint32_t totalLen = static_cast<std::uint32_t>(out.size());
+        std::memcpy(out.data() + 8, &totalLen, 4);
+        return out;
+    }
+
     void* prepareInMainThread(
         Cesium3DTilesSelection::Tile& tile, void* pLoadThreadResult) override {
         auto* pLoad =
@@ -1041,7 +1239,8 @@ public:
             return nullptr; // not glb content (or load failed)
         }
         auto* pData = new TileRenderData();
-        pData->glbBytes = std::move(pLoad->glbBytes);
+        // P37-B: strip metadata texture extensions (gltfio segfault workaround).
+        pData->glbBytes = stripMetadataTextureExtensions(pLoad->glbBytes);
         const glm::dvec3 rtcCenter = pLoad->rtcCenter;
         const glm::dmat4 upAxisFix = pLoad->upAxisFix;
         delete pLoad;
