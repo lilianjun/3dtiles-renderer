@@ -14,7 +14,9 @@ fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         vec4 tex = texture(materialParams_baseColorMap, getUV0());
-        material.baseColor.rgb = tex.rgb * materialParams.color;
+        // P37: Match Cesium benchmark's pow(diffuse, vec3(2.2)).
+        vec3 linearTex = pow(tex.rgb, vec3(2.2));
+        material.baseColor.rgb = linearTex * materialParams.color;
         material.baseColor.a = tex.a * materialParams.color.b;
     }
 }
