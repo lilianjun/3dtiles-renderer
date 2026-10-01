@@ -938,6 +938,26 @@ public:
                 pData->rtcCenter = glm::dvec3(
                     pRtc->center[0], pRtc->center[1], pRtc->center[2]);
             }
+            // P37: i3dm (EXT_mesh_gpu_instancing) needs two fixes:
+            // 1. Expand instances to plain nodes (Filament's gltfio doesn't
+            //    implement the extension, and our tilesetio backend reads
+            //    plain nodes).
+            // 2. Apply upAxisToZUp at the asset root to cancel the
+            //    conjugation the i3dm converter applies to instance
+            //    transforms.
+            bool hasInstancing = false;
+            for (const auto& node : pData->model->nodes) {
+                if (node.getExtension<CesiumGltf::
+                                        ExtensionExtMeshGpuInstancing>() !=
+                    nullptr) {
+                    hasInstancing = true;
+                    break;
+                }
+            }
+            if (hasInstancing) {
+                pData->upAxisFix = upAxisToZUp(pData->model.value());
+                expandGpuInstancing(pData->model.value());
+            }
         }
 
         // Case B: raw glb bytes — parse into Model via GltfReader.
