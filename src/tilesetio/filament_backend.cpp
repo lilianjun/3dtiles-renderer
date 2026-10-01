@@ -260,14 +260,18 @@ FilamentTileResources FilamentBackend::createTile(
             .culling(true)
             .castShadows(false)
             .receiveShadows(false);
-        // P37: CESIUM_primitive_outline renders as LINES.
-        const auto primType = prim.isLines
-            ? filament::RenderableManager::PrimitiveType::LINES
-            : filament::RenderableManager::PrimitiveType::TRIANGLES;
+        // P37: primitive type: 0=TRIANGLES, 1=LINES (outline), 2=POINTS (pnts).
+        filament::RenderableManager::PrimitiveType filType =
+            filament::RenderableManager::PrimitiveType::TRIANGLES;
+        if (prim.primType == 1) {
+            filType = filament::RenderableManager::PrimitiveType::LINES;
+        } else if (prim.primType == 2) {
+            filType = filament::RenderableManager::PrimitiveType::POINTS;
+        }
         if (ib) {
             builder.geometry(
                 0,
-                primType,
+                filType,
                 vb,
                 ib,
                 0,
@@ -275,7 +279,7 @@ FilamentTileResources FilamentBackend::createTile(
         } else {
             builder.geometry(
                 0,
-                primType,
+                filType,
                 vb,
                 0,
                 vertexCount);

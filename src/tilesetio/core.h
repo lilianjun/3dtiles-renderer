@@ -29,8 +29,9 @@ struct PrimitiveData {
     int texWidth = 0;
     int texHeight = 0;
     std::vector<std::byte> texPixels; // RGBA, texWidth*texHeight*4 bytes
-    // P37: for CESIUM_primitive_outline extension - render as LINES instead of TRIANGLES
-    bool isLines = false;
+    // P37: primitive type for rendering (0=TRIANGLES, 1=LINES, 2=POINTS).
+    // TRIANGLES is default; LINES for CESIUM_primitive_outline; POINTS for pnts.
+    int primType = 0;
 };
 
 // Complete render data for one tile.

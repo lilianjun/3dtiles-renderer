@@ -217,10 +217,20 @@ TileRenderData convertModel(
         }
         const auto& mesh = model.meshes[static_cast<size_t>(meshIdx)];
         for (const auto& prim : mesh.primitives) {
-            if (prim.mode != CesiumGltf::MeshPrimitive::Mode::TRIANGLES)
+            // P37: accept TRIANGLES and POINTS (pnts point clouds).
+            // LINES is only for CESIUM_primitive_outline extension (handled separately).
+            const auto mode = prim.mode;
+            const bool isTriangles =
+                mode == CesiumGltf::MeshPrimitive::Mode::TRIANGLES;
+            const bool isPoints =
+                mode == CesiumGltf::MeshPrimitive::Mode::POINTS;
+            if (!isTriangles && !isPoints)
                 continue;
 
             PrimitiveData pd;
+            if (isPoints) {
+                pd.primType = 2; // POINTS
+            }
             if (!readPositions(
                     model, findAccessor(prim, "POSITION"), pd.positions))
                 continue;
@@ -330,7 +340,7 @@ TileRenderData convertModel(
                 pOutline != nullptr && pOutline->indices >= 0) {
                 PrimitiveData outlinePd;
                 outlinePd.positions = pd.positions; // copy transformed positions
-                outlinePd.isLines = true;
+                outlinePd.primType = 1; // LINES
                 // Read outline indices (SCALAR, uint16 or uint32).
                 const int outlineIdx = pOutline->indices;
                 if (outlineIdx >= 0 &&
