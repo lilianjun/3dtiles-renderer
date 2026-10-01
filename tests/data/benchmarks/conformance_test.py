@@ -90,6 +90,8 @@ def main():
         '--camera-target', f"{target[0]},{target[1]},{target[2]}",
         '--camera-up', f"{up[0]},{up[1]},{up[2]}",
         '--fov', str(cam['fov']),
+        '--near', str(cam['near']),
+        '--far', str(cam['far']),
         '--background', f"{bg[0]},{bg[1]},{bg[2]},{bg[3]}",
         '--no-ibl',  # benchmark disables IBL
         '--frames', str(args.frames),
