@@ -525,7 +525,25 @@ if(TILES_WITH_FILAMENT)
       DEPENDS "${TILES_TEX_FILAMAT}"
               "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
       COMMENT "Embedding unlit_textured.filamat as C++ header")
-    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}" "${TILES_TEX_FILAMAT_H}")
+    # P37: PBR lit material for tilesetio (Cesium.js conformance).
+    set(TILES_PBR_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/pbr_color.mat")
+    set(TILES_PBR_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/pbr_color.filamat")
+    set(TILES_PBR_FILAMAT_H
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/pbr_color_filamat.h")
+    add_custom_command(
+      OUTPUT "${TILES_PBR_FILAMAT}"
+      COMMAND "${TILES_MATC}" -a all -o "${TILES_PBR_FILAMAT}" "${TILES_PBR_MAT_SRC}"
+      DEPENDS "${TILES_PBR_MAT_SRC}"
+      COMMENT "matc: compiling pbr_color.mat (all backends)")
+    add_custom_command(
+      OUTPUT "${TILES_PBR_FILAMAT_H}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+              "${TILES_PBR_FILAMAT}" "${TILES_PBR_FILAMAT_H}" pbr_color_filamat
+      DEPENDS "${TILES_PBR_FILAMAT}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+      COMMENT "Embedding pbr_color.filamat as C++ header")
+    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}" "${TILES_TEX_FILAMAT_H}" "${TILES_PBR_FILAMAT_H}")
     add_dependencies(tiles_renderer tiles_materials)
 
     # P36-B pivot: the Filament ImGui backend was abandoned (see ADR-0035);
