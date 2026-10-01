@@ -329,9 +329,12 @@ struct FilamentState {
     OrbitCamera orbit;
     // P37-C1: explicit lookAt camera (cesium.js conformance).
     ExplicitCamera explicitCam;
-    // P37-C1: clear color (default dark blue) and FOV (default 60).
+    // P37-C1: clear color (default dark blue), FOV (default 45°),
+    // near/far planes (default 0.1/100.0).
     float clearColor[4] = {0.1f, 0.2f, 0.45f, 1.0f};
-    float fovDegrees = 60.0f;
+    float fovDegrees = 45.0f; // P37-C1: default 45° (historical); use setFovDegrees() for 60°
+    double nearPlane = 0.1;
+    double farPlane = 100.0;
     utils::Entity sunLight{};
     // P26: default procedural IBL (IndirectLight + reflections cubemap).
     // Built once at initialize(); setIblEnabled() only toggles scene
@@ -487,7 +490,7 @@ bool Renderer::initialize(const RendererConfig& config) {
     const double aspect =
         static_cast<double>(config.width) / static_cast<double>(config.height);
     // P37-C1: FOV configurable via setFovDegrees() (default 60, was 45).
-    s.camera->setProjection(s.fovDegrees, aspect, 0.1, 100.0);
+    s.camera->setProjection(s.fovDegrees, aspect, s.nearPlane, s.farPlane);
     s.camera->lookAt({0.0, 0.0, 4.0}, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0});
     s.view->setCamera(s.camera);
     s.view->setViewport(
@@ -880,7 +883,8 @@ bool Renderer::resize(std::uint32_t width, std::uint32_t height) {
     s.height = height;
     s.view->setViewport(filament::Viewport{0, 0, width, height});
     const double aspect = static_cast<double>(width) / static_cast<double>(height);
-    s.camera->setProjection(45.0, aspect, 0.1, 100.0);
+    // P37-C1: use saved FOV (not hardcoded 45°) so setFovDegrees() survives resize.
+    s.camera->setProjection(s.fovDegrees, aspect, s.nearPlane, s.farPlane);
     std::cout << "[tiles_renderer] resized to " << width << "x" << height
               << std::endl;
     return true;
@@ -965,7 +969,24 @@ void Renderer::setFovDegrees(float fovDegrees) {
     if (g_state.camera) {
         const double aspect = static_cast<double>(g_state.width) /
                               static_cast<double>(g_state.height);
-        g_state.camera->setProjection(fovDegrees, aspect, 0.1, 100.0);
+        g_state.camera->setProjection(fovDegrees, aspect,
+                                      g_state.nearPlane, g_state.farPlane);
+    }
+#endif
+}
+
+void Renderer::setClipPlanes(double nearPlane, double farPlane) {
+    if (!g_initialized) {
+        return;
+    }
+    g_state.nearPlane = nearPlane;
+    g_state.farPlane = farPlane;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.camera) {
+        const double aspect = static_cast<double>(g_state.width) /
+                              static_cast<double>(g_state.height);
+        g_state.camera->setProjection(g_state.fovDegrees, aspect,
+                                      nearPlane, farPlane);
     }
 #endif
 }

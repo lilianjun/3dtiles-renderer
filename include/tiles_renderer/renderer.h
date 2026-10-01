@@ -335,9 +335,12 @@ public:
     static bool hasExplicitCamera();
 
     // P37-C1: background clear color (rgba 0-1, default dark blue) and
-    // vertical FOV in degrees (default 60). For cesium.js conformance.
+    // vertical FOV in degrees (default 45). For cesium.js conformance.
     static void setClearColor(float r, float g, float b, float a);
     static void setFovDegrees(float fovDegrees);
+    // P37-C1: near/far clip planes (default 0.1 / 100.0). Must match
+    // cesium.js for rendering conformance.
+    static void setClipPlanes(double nearPlane, double farPlane);
 
     // P12: resize the render surface (host window resize, orientation
     // change, split-screen, ...). The host keeps owning the native window;

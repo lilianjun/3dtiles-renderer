@@ -150,6 +150,9 @@ struct DemoArgs {
     double fovDegrees = 60.0;
     // P37-C1: background clear color (rgba 0-1).
     double bgColor[4] = {0, 0, 0, 1};
+    // P37-C1: near/far clip planes.
+    double nearPlane = 0.1;
+    double farPlane = 10000.0;
     bool bgSet = false;
 };
 
@@ -297,6 +300,12 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
         } else if (arg == "--fov") {
             if (!needValue("--fov", value)) return false;
             out.fovDegrees = std::stod(value);
+        } else if (arg == "--near") {
+            if (!needValue("--near", value)) return false;
+            out.nearPlane = std::stod(value);
+        } else if (arg == "--far") {
+            if (!needValue("--far", value)) return false;
+            out.farPlane = std::stod(value);
         } else if (arg == "--background") {
             // P37-C1: "r,g,b,a" 0-1 for clear color (cesium.js conformance).
             if (!needValue("--background", value)) return false;
@@ -940,6 +949,8 @@ int main(int argc, char** argv) {
         }
         tiles_renderer::Renderer::setFovDegrees(
             static_cast<float>(args.fovDegrees));
+        // P37-C1: near/far clip planes (cesium.js conformance).
+        tiles_renderer::Renderer::setClipPlanes(args.nearPlane, args.farPlane);
         if (args.cameraSet) {
             tiles_renderer::Renderer::setCamera(args.cameraEye,
                                                 args.cameraTarget,
