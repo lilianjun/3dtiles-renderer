@@ -167,9 +167,11 @@ renderFrame():
 - 注：不使用 UbershaderProvider（那是 gltfio 内部接口）；不用 GLB round-trip
 
 ### Phase T3: 纹理
-- [ ] 纹理数据从 Model 提取（images → 解码 → RGBA）
-- [ ] Filament Texture 创建与绑定
-- [ ] KTX2/PNG/JPEG 支持
+- [x] 纹理数据从 Model 提取（`baseColorTexture` → `ImageAsset.pixelData`，Cesium Native 已解码，无需自己解码）
+- [x] `PrimitiveData.uvs` / `texWidth` / `texHeight` / `texPixels`
+- [x] Filament Texture 创建（RGBA8）与绑定
+- [x] `unlit_textured.mat`（`baseColorMap` sampler）
+- [ ] 带纹理模型的端到端验证（待找合适的测试 tileset）
 
 ### Phase T4: 全量验证
 - [ ] 200 个 tileset 回归
