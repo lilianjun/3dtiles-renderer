@@ -584,6 +584,9 @@ bool preflightTilesetRoot(
 struct TileRenderData {
     tilesetio::FilamentTileResources filamentResources;
     bool inScene = false;
+    // T1 (tilesetio): tile-level transform (double[16], column-major).
+    // Applied to the asset root when adding to scene.
+    double tileTransform[16];
     // P35: whether this tile's debug wireframe (getWireframe()) is in the
     // scene. Managed by updateTileVisibility / updateWireframeVisibility.
     // P36: re-gated on debugShowContentBoundingVolume (was
@@ -1194,10 +1197,15 @@ public:
             return nullptr;
         }
 
-        // Create Filament resources via backend.
+        // Create Filament resources via backend (pure Filament, no gltfio).
+        // The backend owns the shared unlit material.
         auto* pData = new TileRenderData();
+        // Store tile transform for applying to entities when adding to scene.
+        std::memcpy(
+            pData->tileTransform, renderData.tileTransform,
+            16 * sizeof(double));
         pData->filamentResources = _filamentBackend.createTile(
-            _engine, renderData, _materialProvider);
+            _engine, renderData);
         if (pData->filamentResources.entities.empty()) {
             std::cerr << "[tiles_renderer] prepareInMainThread: tilesetio "
                          "FilamentBackend produced no entities"
@@ -1277,7 +1285,8 @@ public:
             return;
         }
         // T1 (tilesetio): destroy via backend (removes entities from scene).
-        _filamentBackend.destroyTile(_engine, _scene, pData->filamentResources);
+        _filamentBackend.destroyTile(
+            _engine, _scene, pData->filamentResources);
         pData->inScene = false;
         // P36: destroy debug volume entities (tile BV / request volume).
         if (pData->bvInScene) {
@@ -2056,6 +2065,18 @@ struct TilesetRenderer::Impl {
                 }
                 const auto& entities = pData->filamentResources.entities;
                 if (want && !pData->inScene) {
+                    // T1 (tilesetio): apply tile transform to each entity.
+                    {
+                        auto& tm = engine->getTransformManager();
+                        filament::math::mat4f m;
+                        for (int c = 0; c < 4; ++c)
+                            for (int r = 0; r < 4; ++r)
+                                m[c][r] = static_cast<float>(
+                                    pData->tileTransform[c * 4 + r]);
+                        for (auto e : entities) {
+                            tm.setTransform(tm.getInstance(e), m);
+                        }
+                    }
                     scene->addEntities(
                         entities.data(),
                         entities.size());

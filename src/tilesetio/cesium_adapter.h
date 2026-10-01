@@ -13,10 +13,9 @@
 namespace tilesetio {
 
 // Convert a cesium-native Model to neutral render data.
-// - Reads vertex attributes directly via AccessorView (no GLB round-trip).
-// - Extracts PBR material params (no shader compilation here).
-// - Flattens node hierarchy to NodeData list.
-// - tileTransformOut receives the tile-level transform caller computed
+// Extracts raw memory data (positions, indices, colors) via AccessorView.
+// No GLB serialization.
+// - tileTransform receives the tile-level transform caller computed
 //   (tile.getTransform() * RTC_CENTER), column-major, double.
 TileRenderData convertModel(
     const CesiumGltf::Model& model,
