@@ -604,14 +604,21 @@ bool Renderer::renderFrame() {
     if (useTileset) {
         // P37-C1: explicit lookAt camera overrides the orbit camera.
         if (s.explicitCam.enabled) {
+            // P37-C1 fix: tiles are rendered rebased around the tileset's
+            // local origin (world - localOrigin), so the explicit camera
+            // (given in world space) must be rebased the same way.
+            double origin[3] = {0.0, 0.0, 0.0};
+            if (s.tileset) {
+                s.tileset->localOrigin(origin);
+            }
             const filament::math::float3 eye{
-                static_cast<float>(s.explicitCam.eye[0]),
-                static_cast<float>(s.explicitCam.eye[1]),
-                static_cast<float>(s.explicitCam.eye[2])};
+                static_cast<float>(s.explicitCam.eye[0] - origin[0]),
+                static_cast<float>(s.explicitCam.eye[1] - origin[1]),
+                static_cast<float>(s.explicitCam.eye[2] - origin[2])};
             const filament::math::float3 target{
-                static_cast<float>(s.explicitCam.target[0]),
-                static_cast<float>(s.explicitCam.target[1]),
-                static_cast<float>(s.explicitCam.target[2])};
+                static_cast<float>(s.explicitCam.target[0] - origin[0]),
+                static_cast<float>(s.explicitCam.target[1] - origin[1]),
+                static_cast<float>(s.explicitCam.target[2] - origin[2])};
             const filament::math::float3 up{
                 static_cast<float>(s.explicitCam.up[0]),
                 static_cast<float>(s.explicitCam.up[1]),

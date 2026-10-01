@@ -163,6 +163,12 @@ public:
     void setDebugShowUrl(bool show);
     bool isDebugShowUrl() const;
 
+    // P37-C1: P5 rebase origin (world coordinates, double). The explicit
+    // camera set via Renderer::setCamera() is in world space; subtract this
+    // before passing to Filament (tiles are rendered rebased). Defaults to
+    // (0,0,0) = no rebase. Must be called on the render thread.
+    void localOrigin(double out[3]) const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> _impl;

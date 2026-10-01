@@ -3105,4 +3105,17 @@ bool TilesetRenderer::isDebugShowUrl() const {
 #endif
 }
 
+// P37-C1: expose the tileset's local origin (world coords, double) so the
+// explicit camera (world space) can be rebased the same way as tiles.
+void TilesetRenderer::localOrigin(double out[3]) const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    const glm::dvec3& o = _impl->localOrigin;
+    out[0] = o.x;
+    out[1] = o.y;
+    out[2] = o.z;
+#else
+    out[0] = out[1] = out[2] = 0.0;
+#endif
+}
+
 } // namespace tiles_renderer
