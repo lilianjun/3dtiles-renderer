@@ -87,6 +87,11 @@ TileRenderData convertModel(
     TileRenderData out;
     out.tileId = tileId;
     std::memcpy(out.tileTransform, tileTransform, 16 * sizeof(double));
+    // P37: Check if model has large ECEF translation in node hierarchy
+    // (e.g., RTC_CENTER in bare glTF). If so, we'll keep vertices local
+    // and fold the translation into out.tileTransform.
+    bool hasLargeTrans = false;
+    glm::dvec3 largeTrans(0.0);
 
     // P37: For non-instanced models, convert glTF Y-up to Z-up (ECEF) after
     // node transforms. glTF node hierarchies may contain RTC_CENTER nodes
@@ -185,7 +190,30 @@ TileRenderData convertModel(
             static_cast<size_t>(meshIdx) >= model.meshes.size())
             return;
         // P37: apply Y-up -> Z-up (for non-instanced; identity for i3dm).
-        const glm::dmat4 worldMat = upAxisFix * nodeMatrix;
+        glm::dmat4 worldMat = upAxisFix * nodeMatrix;
+        // P37: Detect large ECEF translation (bare glTF RTC_CENTER).
+        if (!hasLargeTrans && !skipUpAxisFix) {
+            glm::dvec3 t(worldMat[3][0], worldMat[3][1], worldMat[3][2]);
+            if (glm::length(t) > 1000.0) {
+                hasLargeTrans = true;
+                largeTrans = t;
+                // Fold into out.tileTransform: out = T(t) * in
+                glm::dmat4 inT(1.0);
+                for (int cc = 0; cc < 4; ++cc)
+                    for (int rr = 0; rr < 4; ++rr)
+                        inT[cc][rr] = out.tileTransform[cc * 4 + rr];
+                glm::dmat4 transMat(1.0);
+                transMat[3] = glm::dvec4(t, 1.0);
+                glm::dmat4 combined = transMat * inT;
+                for (int cc = 0; cc < 4; ++cc)
+                    for (int rr = 0; rr < 4; ++rr)
+                        out.tileTransform[cc * 4 + rr] = combined[cc][rr];
+            }
+        }
+        if (hasLargeTrans) {
+            // Remove translation from worldMat, keep vertices local
+            worldMat[3] = glm::dvec4(0.0, 0.0, 0.0, 1.0);
+        }
         const auto& mesh = model.meshes[static_cast<size_t>(meshIdx)];
         for (const auto& prim : mesh.primitives) {
             if (prim.mode != CesiumGltf::MeshPrimitive::Mode::TRIANGLES)
