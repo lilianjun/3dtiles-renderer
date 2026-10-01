@@ -946,18 +946,28 @@ public:
             //    conjugation the i3dm converter applies to instance
             //    transforms.
             bool hasInstancing = false;
+            bool hasNonInstancedMesh = false;
             for (const auto& node : pData->model->nodes) {
                 if (node.getExtension<CesiumGltf::
                                         ExtensionExtMeshGpuInstancing>() !=
                     nullptr) {
                     hasInstancing = true;
-                    break;
+                } else if (node.mesh >= 0) {
+                    hasNonInstancedMesh = true;
                 }
             }
             if (hasInstancing) {
-                pData->upAxisFix = upAxisToZUp(pData->model.value());
+                // P37: cmpt merges b3dm+i3dm into one Model. The b3dm part
+                // must NOT get the i3dm upAxisFix. Detect merge by presence
+                // of non-instanced meshes alongside instanced nodes.
+                const bool isCmptMerge =
+                    hasInstancing && hasNonInstancedMesh;
+                if (!isCmptMerge) {
+                    pData->upAxisFix = upAxisToZUp(pData->model.value());
+                }
                 // P37: mark model so convertModel skips its own upAxisFix
-                // (already applied via pData->upAxisFix at asset root).
+                // (already applied via pData->upAxisFix at asset root,
+                // or not needed for cmpt merges).
                 pData->model->extras["tilesetio_i3dmFixApplied"] =
                     CesiumUtility::JsonValue(true);
                 expandGpuInstancing(pData->model.value());

@@ -5,6 +5,7 @@
 #include "cesium_adapter.h"
 
 #include <CesiumGltf/AccessorView.h>
+#include <CesiumGltf/ExtensionCesiumPrimitiveOutline.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -319,6 +320,51 @@ TileRenderData convertModel(
                             }
                         }
                     }
+                }
+            }
+
+            // P37: CESIUM_primitive_outline extension - also render outlines as LINES.
+            // The extension provides indices for the outline edges.
+            if (const auto* pOutline =
+                    prim.getExtension<CesiumGltf::ExtensionCesiumPrimitiveOutline>();
+                pOutline != nullptr && pOutline->indices >= 0) {
+                PrimitiveData outlinePd;
+                outlinePd.positions = pd.positions; // copy transformed positions
+                outlinePd.isLines = true;
+                // Read outline indices (SCALAR, uint16 or uint32).
+                const int outlineIdx = pOutline->indices;
+                if (outlineIdx >= 0 &&
+                    static_cast<size_t>(outlineIdx) < model.accessors.size()) {
+                    // Try uint16 first, then uint32.
+                    CesiumGltf::AccessorView<uint16_t> v16(model, outlineIdx);
+                    if (v16.status() == CesiumGltf::AccessorViewStatus::Valid) {
+                        outlinePd.indices.reserve(static_cast<size_t>(v16.size()));
+                        for (int64_t i = 0; i < v16.size(); ++i) {
+                            outlinePd.indices.push_back(v16[i]);
+                        }
+                    } else {
+                        CesiumGltf::AccessorView<uint32_t> v32(model, outlineIdx);
+                        if (v32.status() == CesiumGltf::AccessorViewStatus::Valid) {
+                            outlinePd.indices.reserve(static_cast<size_t>(v32.size()));
+                            for (int64_t i = 0; i < v32.size(); ++i) {
+                                outlinePd.indices.push_back(v32[i]);
+                            }
+                        }
+                    }
+                }
+                // Outline uses same bbox as the base primitive.
+                for (int i = 0; i < 3; ++i) {
+                    outlinePd.bboxMin[i] = pd.bboxMin[i];
+                    outlinePd.bboxMax[i] = pd.bboxMax[i];
+                }
+                // Outlines are typically rendered in a contrasting color (black).
+                // Use dark color for visibility.
+                outlinePd.color[0] = 0.0f;
+                outlinePd.color[1] = 0.0f;
+                outlinePd.color[2] = 0.0f;
+                outlinePd.color[3] = 1.0f;
+                if (!outlinePd.indices.empty()) {
+                    out.primitives.push_back(std::move(outlinePd));
                 }
             }
 
