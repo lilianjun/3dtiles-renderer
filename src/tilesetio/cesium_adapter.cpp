@@ -102,6 +102,26 @@ TileRenderData convertModel(
         }
     }
 
+    // Compute per-primitive bbox from positions.
+    for (auto& prim : out.primitives) {
+        if (prim.positions.empty())
+            continue;
+        prim.bboxMin[0] = prim.bboxMax[0] = prim.positions[0];
+        prim.bboxMin[1] = prim.bboxMax[1] = prim.positions[1];
+        prim.bboxMin[2] = prim.bboxMax[2] = prim.positions[2];
+        for (size_t i = 1; i < prim.positions.size() / 3; ++i) {
+            float x = prim.positions[i * 3 + 0];
+            float y = prim.positions[i * 3 + 1];
+            float z = prim.positions[i * 3 + 2];
+            if (x < prim.bboxMin[0]) prim.bboxMin[0] = x;
+            if (y < prim.bboxMin[1]) prim.bboxMin[1] = y;
+            if (z < prim.bboxMin[2]) prim.bboxMin[2] = z;
+            if (x > prim.bboxMax[0]) prim.bboxMax[0] = x;
+            if (y > prim.bboxMax[1]) prim.bboxMax[1] = y;
+            if (z > prim.bboxMax[2]) prim.bboxMax[2] = z;
+        }
+    }
+
     return out;
 }
 

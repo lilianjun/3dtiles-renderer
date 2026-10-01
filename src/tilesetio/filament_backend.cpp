@@ -99,9 +99,18 @@ FilamentTileResources FilamentBackend::createTile(
         // Renderable entity.
         utils::Entity entity = utils::EntityManager::get().create();
         filament::RenderableManager::Builder builder(1);
-        builder.boundingBox({{-1000, -1000, -1000}, {1000, 1000, 1000}})
+        builder.boundingBox({{
+                                 prim.bboxMin[0],
+                                 prim.bboxMin[1],
+                                 prim.bboxMin[2],
+                             },
+                             {
+                                 prim.bboxMax[0],
+                                 prim.bboxMax[1],
+                                 prim.bboxMax[2],
+                             }})
             .material(0, mi)
-            .culling(false) // T1: disable to isolate
+            .culling(true)
             .castShadows(false)
             .receiveShadows(false);
         if (ib) {

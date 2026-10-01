@@ -20,6 +20,8 @@ struct PrimitiveData {
     std::vector<float> positions;    // 3 floats per vertex, required
     std::vector<uint32_t> indices;   // may be empty for non-indexed draw
     float color[4] = {1, 1, 1, 1};   // solid color (from material baseColorFactor)
+    float bboxMin[3] = {0, 0, 0};    // axis-aligned bbox in local space
+    float bboxMax[3] = {0, 0, 0};
 };
 
 // Complete render data for one tile.
