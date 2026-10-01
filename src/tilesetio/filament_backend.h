@@ -23,6 +23,7 @@ struct FilamentTileResources {
     std::vector<filament::VertexBuffer*> vertexBuffers;
     std::vector<filament::IndexBuffer*> indexBuffers;
     std::vector<filament::MaterialInstance*> materialInstances;
+    std::vector<filament::Texture*> textures;
 };
 
 class FilamentBackend {
@@ -48,11 +49,12 @@ public:
         filament::Scene* scene,
         FilamentTileResources& resources);
 
-    // Free the shared Material. Call when the Engine is being destroyed.
+    // Free the shared Materials. Call when the Engine is being destroyed.
     void destroyMaterial(filament::Engine* engine);
 
 private:
-    filament::Material* _material = nullptr;
+    filament::Material* _material = nullptr;         // unlit solid color
+    filament::Material* _texturedMaterial = nullptr; // unlit with texture
 };
 
 } // namespace tilesetio

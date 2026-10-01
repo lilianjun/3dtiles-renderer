@@ -157,13 +157,14 @@ renderFrame():
 - [ ] 单元测试：用 BatchedColors 的 Model 验证转换正确性
 
 ### Phase T2: Filament 后端
-- [ ] `src/tilesetio/filament_backend.cpp`: `FilamentBackend`
-  - VertexBuffer/IndexBuffer 创建
-  - UbershaderProvider 创建 MaterialInstance
-  - RenderableManager 组装
-  - TransformManager 挂变换
-- [ ] 替换 `FilamentPrepareResources::prepareInMainThread` 中的 gltfio 调用
-- [ ] BatchedColors 出图验证
+- [x] `src/tilesetio/filament_backend.cpp`: `FilamentBackend`
+  - VertexBuffer/IndexBuffer 创建（标准 Filament API）
+  - 共享 unlit Material（项目现有 `unlit_color.filamat`），per-primitive instance 设颜色
+  - RenderableManager 组装，真实 per-primitive bbox，culling 打开
+  - TransformManager 挂 tile transform
+- [x] 替换 `FilamentPrepareResources::prepareInMainThread` 中的 gltfio 调用
+- [x] BatchedColors 出图验证（10 primitives，纯色）
+- 注：不使用 UbershaderProvider（那是 gltfio 内部接口）；不用 GLB round-trip
 
 ### Phase T3: 纹理
 - [ ] 纹理数据从 Model 提取（images → 解码 → RGBA）

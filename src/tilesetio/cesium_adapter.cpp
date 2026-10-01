@@ -101,21 +101,45 @@ TileRenderData convertModel(
                 }
             }
 
-            // Material color (baseColorFactor).
+            // Material color (baseColorFactor) and texture.
             if (prim.material >= 0 &&
                 static_cast<size_t>(prim.material) < model.materials.size()) {
                 const auto& mat =
                     model.materials[static_cast<size_t>(prim.material)];
                 const auto& pbr = mat.pbrMetallicRoughness;
-                if (pbr && pbr->baseColorFactor.size() == 4) {
-                    pd.color[0] =
-                        static_cast<float>(pbr->baseColorFactor[0]);
-                    pd.color[1] =
-                        static_cast<float>(pbr->baseColorFactor[1]);
-                    pd.color[2] =
-                        static_cast<float>(pbr->baseColorFactor[2]);
-                    pd.color[3] =
-                        static_cast<float>(pbr->baseColorFactor[3]);
+                if (pbr) {
+                    if (pbr->baseColorFactor.size() == 4) {
+                        pd.color[0] =
+                            static_cast<float>(pbr->baseColorFactor[0]);
+                        pd.color[1] =
+                            static_cast<float>(pbr->baseColorFactor[1]);
+                        pd.color[2] =
+                            static_cast<float>(pbr->baseColorFactor[2]);
+                        pd.color[3] =
+                            static_cast<float>(pbr->baseColorFactor[3]);
+                    }
+                    // Base color texture: material -> texture -> image -> pixels.
+                    // Cesium Native already decoded the image; just copy pixels.
+                    if (pbr->baseColorTexture &&
+                        pbr->baseColorTexture->index >= 0 &&
+                        static_cast<size_t>(pbr->baseColorTexture->index) <
+                            model.textures.size()) {
+                        const auto& tex = model.textures[static_cast<size_t>(
+                            pbr->baseColorTexture->index)];
+                        if (tex.source >= 0 &&
+                            static_cast<size_t>(tex.source) <
+                                model.images.size()) {
+                            const auto& img = model.images[static_cast<size_t>(
+                                tex.source)];
+                            if (img.pAsset && img.pAsset->width > 0 &&
+                                img.pAsset->height > 0 &&
+                                !img.pAsset->pixelData.empty()) {
+                                pd.texWidth = img.pAsset->width;
+                                pd.texHeight = img.pAsset->height;
+                                pd.texPixels = img.pAsset->pixelData;
+                            }
+                        }
+                    }
                 }
             }
 

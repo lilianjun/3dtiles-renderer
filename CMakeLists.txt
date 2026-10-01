@@ -507,7 +507,25 @@ if(TILES_WITH_FILAMENT)
       DEPENDS "${TILES_FILAMAT}"
               "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
       COMMENT "Embedding unlit_color.filamat as C++ header")
-    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}")
+    # T3 (tilesetio): textured unlit material.
+    set(TILES_TEX_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/unlit_textured.mat")
+    set(TILES_TEX_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_textured.filamat")
+    set(TILES_TEX_FILAMAT_H
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_textured_filamat.h")
+    add_custom_command(
+      OUTPUT "${TILES_TEX_FILAMAT}"
+      COMMAND "${TILES_MATC}" -a all -o "${TILES_TEX_FILAMAT}" "${TILES_TEX_MAT_SRC}"
+      DEPENDS "${TILES_TEX_MAT_SRC}"
+      COMMENT "matc: compiling unlit_textured.mat (all backends)")
+    add_custom_command(
+      OUTPUT "${TILES_TEX_FILAMAT_H}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+              "${TILES_TEX_FILAMAT}" "${TILES_TEX_FILAMAT_H}" unlit_textured_filamat
+      DEPENDS "${TILES_TEX_FILAMAT}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+      COMMENT "Embedding unlit_textured.filamat as C++ header")
+    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}" "${TILES_TEX_FILAMAT_H}")
     add_dependencies(tiles_renderer tiles_materials)
 
     # P36-B pivot: the Filament ImGui backend was abandoned (see ADR-0035);

@@ -23,6 +23,11 @@ struct PrimitiveData {
     float color[4] = {1, 1, 1, 1};   // solid color (from material baseColorFactor)
     float bboxMin[3] = {0, 0, 0};    // axis-aligned bbox in local space
     float bboxMax[3] = {0, 0, 0};
+    // Texture (from material baseColorTexture), if present.
+    // Raw RGBA pixels decoded by Cesium Native; backend uploads to GPU.
+    int texWidth = 0;
+    int texHeight = 0;
+    std::vector<std::byte> texPixels; // RGBA, texWidth*texHeight*4 bytes
 };
 
 // Complete render data for one tile.

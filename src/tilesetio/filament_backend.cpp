@@ -5,9 +5,12 @@
 #include "filament_backend.h"
 
 #include "unlit_color_filamat.h"
+#include "unlit_textured_filamat.h"
 
 #include <filament/IndexBuffer.h>
 #include <filament/RenderableManager.h>
+#include <filament/Texture.h>
+#include <filament/TextureSampler.h>
 #include <filament/VertexBuffer.h>
 
 #include <utils/EntityManager.h>
@@ -26,6 +29,13 @@ FilamentTileResources FilamentBackend::createTile(
         _material = filament::Material::Builder()
                         .package(unlit_color_filamat, unlit_color_filamat_len)
                         .build(*engine);
+    }
+    // Create the shared textured material on first use.
+    if (!_texturedMaterial) {
+        _texturedMaterial = filament::Material::Builder()
+                                .package(unlit_textured_filamat,
+                                         unlit_textured_filamat_len)
+                                .build(*engine);
     }
 
     for (const auto& prim : data.primitives) {
@@ -111,12 +121,51 @@ FilamentTileResources FilamentBackend::createTile(
             res.indexBuffers.push_back(ib);
         }
 
-        // Material instance with solid color.
-        filament::MaterialInstance* mi = _material->createInstance();
-        mi->setParameter(
-            "color",
-            filament::math::float3(
-                prim.color[0], prim.color[1], prim.color[2]));
+        // Material instance: textured if we have texture data, else solid color.
+        filament::MaterialInstance* mi = nullptr;
+        if (!prim.texPixels.empty() && prim.texWidth > 0 && prim.texHeight > 0) {
+            // Create Filament Texture from RGBA pixels.
+            filament::Texture* tex =
+                filament::Texture::Builder()
+                    .width(static_cast<uint32_t>(prim.texWidth))
+                    .height(static_cast<uint32_t>(prim.texHeight))
+                    .levels(1)
+                    .format(filament::Texture::InternalFormat::RGBA8)
+                    .sampler(filament::Texture::Sampler::SAMPLER_2D)
+                    .build(*engine);
+            // Copy pixels (one necessary copy).
+            size_t pxSize = prim.texPixels.size();
+            auto* pxCopy = new std::byte[pxSize];
+            std::memcpy(pxCopy, prim.texPixels.data(), pxSize);
+            filament::Texture::PixelBufferDescriptor desc(
+                pxCopy,
+                pxSize,
+                filament::Texture::Format::RGBA,
+                filament::Texture::Type::UBYTE,
+                [](void*, size_t, void* p) {
+                    delete[] static_cast<std::byte*>(p);
+                },
+                pxCopy);
+            tex->setImage(*engine, 0, std::move(desc));
+            res.textures.push_back(tex);
+
+            mi = _texturedMaterial->createInstance();
+            mi->setParameter(
+                "color",
+                filament::math::float3(
+                    prim.color[0], prim.color[1], prim.color[2]));
+            filament::TextureSampler sampler(
+                filament::TextureSampler::MinFilter::LINEAR,
+                filament::TextureSampler::MagFilter::LINEAR);
+            mi->setParameter("baseColorMap", tex, sampler);
+        } else {
+            // Solid color.
+            mi = _material->createInstance();
+            mi->setParameter(
+                "color",
+                filament::math::float3(
+                    prim.color[0], prim.color[1], prim.color[2]));
+        }
         res.materialInstances.push_back(mi);
 
         // Renderable entity.
@@ -180,6 +229,8 @@ void FilamentBackend::destroyTile(
         engine->destroy(ib);
     for (auto mi : resources.materialInstances)
         engine->destroy(mi);
+    for (auto tex : resources.textures)
+        engine->destroy(tex);
     resources = FilamentTileResources{};
 }
 
@@ -187,6 +238,10 @@ void FilamentBackend::destroyMaterial(filament::Engine* engine) {
     if (_material) {
         engine->destroy(_material);
         _material = nullptr;
+    }
+    if (_texturedMaterial) {
+        engine->destroy(_texturedMaterial);
+        _texturedMaterial = nullptr;
     }
 }
 
