@@ -43,6 +43,15 @@ struct OrbitCamera {
     float targetZ = 0.0f;
 };
 
+// P37-C1: explicit lookAt camera (for cesium.js rendering conformance).
+// When enabled via Renderer::setCamera(), the orbit camera is bypassed.
+struct ExplicitCamera {
+    bool enabled = false;
+    double eye[3] = {0.0, 0.0, 4.0};
+    double target[3] = {0.0, 0.0, 0.0};
+    double up[3] = {0.0, 1.0, 0.0};
+};
+
 // All methods run on the main/render thread.
 class TilesetRenderer {
 public:

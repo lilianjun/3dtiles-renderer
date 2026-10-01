@@ -327,6 +327,11 @@ struct FilamentState {
     // P3: optional tileset integration (null when no tileset loaded).
     std::unique_ptr<TilesetRenderer> tileset;
     OrbitCamera orbit;
+    // P37-C1: explicit lookAt camera (cesium.js conformance).
+    ExplicitCamera explicitCam;
+    // P37-C1: clear color (default dark blue) and FOV (default 60).
+    float clearColor[4] = {0.1f, 0.2f, 0.45f, 1.0f};
+    float fovDegrees = 60.0f;
     utils::Entity sunLight{};
     // P26: default procedural IBL (IndirectLight + reflections cubemap).
     // Built once at initialize(); setIblEnabled() only toggles scene
@@ -481,14 +486,17 @@ bool Renderer::initialize(const RendererConfig& config) {
     s.camera = s.engine->createCamera(s.cameraEntity);
     const double aspect =
         static_cast<double>(config.width) / static_cast<double>(config.height);
-    s.camera->setProjection(45.0, aspect, 0.1, 100.0);
+    // P37-C1: FOV configurable via setFovDegrees() (default 60, was 45).
+    s.camera->setProjection(s.fovDegrees, aspect, 0.1, 100.0);
     s.camera->lookAt({0.0, 0.0, 4.0}, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0});
     s.view->setCamera(s.camera);
     s.view->setViewport(
         filament::Viewport{0, 0, config.width, config.height});
 
     filament::Renderer::ClearOptions clearOptions;
-    clearOptions.clearColor = {0.1, 0.2, 0.45, 1.0}; // dark blue
+    // P37-C1: configurable via setClearColor() (cesium.js conformance).
+    clearOptions.clearColor = {s.clearColor[0], s.clearColor[1],
+                               s.clearColor[2], s.clearColor[3]};
     clearOptions.clear = true;
     s.renderer->setClearOptions(clearOptions);
 
@@ -591,24 +599,62 @@ bool Renderer::renderFrame() {
     // selection/LOD every frame, and hide the P2 triangle.
     const bool useTileset = s.tileset != nullptr && s.tileset->isLoaded();
     if (useTileset) {
-        constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
-        const float yaw = s.orbit.yawDegrees * kDegToRad;
-        const float pitch = s.orbit.pitchDegrees * kDegToRad;
-        const float d = s.orbit.distance;
-        // P5: tiles are rendered rebased around the tileset's local origin
-        // (world - localOrigin, in double precision), so the Filament camera
-        // always orbits (0,0,0) here. Tile *selection* still uses the true
-        // world-space origin (see TilesetRenderer::update).
-        const filament::math::float3 target{0.0f, 0.0f, 0.0f};
-        const filament::math::float3 eye{
-            target.x + d * std::cos(pitch) * std::sin(yaw),
-            target.y + d * std::sin(pitch),
-            target.z + d * std::cos(pitch) * std::cos(yaw)};
-        s.camera->lookAt(eye, target, {0.0f, 1.0f, 0.0f});
+        // P37-C1: explicit lookAt camera overrides the orbit camera.
+        if (s.explicitCam.enabled) {
+            const filament::math::float3 eye{
+                static_cast<float>(s.explicitCam.eye[0]),
+                static_cast<float>(s.explicitCam.eye[1]),
+                static_cast<float>(s.explicitCam.eye[2])};
+            const filament::math::float3 target{
+                static_cast<float>(s.explicitCam.target[0]),
+                static_cast<float>(s.explicitCam.target[1]),
+                static_cast<float>(s.explicitCam.target[2])};
+            const filament::math::float3 up{
+                static_cast<float>(s.explicitCam.up[0]),
+                static_cast<float>(s.explicitCam.up[1]),
+                static_cast<float>(s.explicitCam.up[2])};
+            s.camera->lookAt(eye, target, up);
+        } else {
+            constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
+            const float yaw = s.orbit.yawDegrees * kDegToRad;
+            const float pitch = s.orbit.pitchDegrees * kDegToRad;
+            const float d = s.orbit.distance;
+            // P5: tiles are rendered rebased around the tileset's local origin
+            // (world - localOrigin, in double precision), so the Filament camera
+            // always orbits (0,0,0) here. Tile *selection* still uses the true
+            // world-space origin (see TilesetRenderer::update).
+            const filament::math::float3 target{0.0f, 0.0f, 0.0f};
+            const filament::math::float3 eye{
+                target.x + d * std::cos(pitch) * std::sin(yaw),
+                target.y + d * std::sin(pitch),
+                target.z + d * std::cos(pitch) * std::cos(yaw)};
+            s.camera->lookAt(eye, target, {0.0f, 1.0f, 0.0f});
+        }
         // P36: debugFreezeFrame skips the tile selection/LOD update; the
         // last frame's tiles keep rendering (cesium.js debugFreezeFrame).
         if (!g_debugFreezeFrame) {
-            s.tileset->update(s.width, s.height, s.orbit);
+            // P37-C1: tile selection needs an OrbitCamera; synthesize one
+            // from the explicit camera (eye-target vector -> yaw/pitch/dist).
+            if (s.explicitCam.enabled) {
+                OrbitCamera synth;
+                synth.targetX = static_cast<float>(s.explicitCam.target[0]);
+                synth.targetY = static_cast<float>(s.explicitCam.target[1]);
+                synth.targetZ = static_cast<float>(s.explicitCam.target[2]);
+                const double dx = s.explicitCam.eye[0] - s.explicitCam.target[0];
+                const double dy = s.explicitCam.eye[1] - s.explicitCam.target[1];
+                const double dz = s.explicitCam.eye[2] - s.explicitCam.target[2];
+                const double d = std::sqrt(dx*dx + dy*dy + dz*dz);
+                synth.distance = static_cast<float>(d);
+                if (d > 1e-9) {
+                    synth.pitchDegrees = static_cast<float>(
+                        std::asin(dy / d) * 180.0 / 3.14159265358979323846);
+                    synth.yawDegrees = static_cast<float>(
+                        std::atan2(dx, dz) * 180.0 / 3.14159265358979323846);
+                }
+                s.tileset->update(s.width, s.height, synth);
+            } else {
+                s.tileset->update(s.width, s.height, s.orbit);
+            }
         }
         if (s.triangleInScene) {
             s.scene->remove(s.renderable);
@@ -860,6 +906,67 @@ void Renderer::setOrbitCamera(
     (void)yawDegrees;
     (void)pitchDegrees;
     (void)distance;
+#endif
+}
+
+// P37-C1: explicit lookAt camera.
+void Renderer::setCamera(const double eye[3], const double target[3],
+                         const double up[3]) {
+    if (!g_initialized) {
+        return;
+    }
+    for (int i = 0; i < 3; ++i) {
+        g_state.explicitCam.eye[i] = eye[i];
+        g_state.explicitCam.target[i] = target[i];
+        g_state.explicitCam.up[i] = up[i];
+    }
+    g_state.explicitCam.enabled = true;
+}
+
+void Renderer::clearExplicitCamera() {
+    if (!g_initialized) {
+        return;
+    }
+    g_state.explicitCam.enabled = false;
+}
+
+bool Renderer::hasExplicitCamera() {
+    if (!g_initialized) {
+        return false;
+    }
+    return g_state.explicitCam.enabled;
+}
+
+// P37-C1: clear color and FOV.
+void Renderer::setClearColor(float r, float g, float b, float a) {
+    if (!g_initialized) {
+        return;
+    }
+    g_state.clearColor[0] = r;
+    g_state.clearColor[1] = g;
+    g_state.clearColor[2] = b;
+    g_state.clearColor[3] = a;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.renderer) {
+        filament::Renderer::ClearOptions clearOptions;
+        clearOptions.clearColor = {r, g, b, a};
+        clearOptions.clear = true;
+        g_state.renderer->setClearOptions(clearOptions);
+    }
+#endif
+}
+
+void Renderer::setFovDegrees(float fovDegrees) {
+    if (!g_initialized) {
+        return;
+    }
+    g_state.fovDegrees = fovDegrees;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.camera) {
+        const double aspect = static_cast<double>(g_state.width) /
+                              static_cast<double>(g_state.height);
+        g_state.camera->setProjection(fovDegrees, aspect, 0.1, 100.0);
+    }
 #endif
 }
 

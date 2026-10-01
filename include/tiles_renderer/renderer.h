@@ -325,6 +325,20 @@ public:
     static void setOrbitCamera(float yawDegrees, float pitchDegrees,
                                float distance);
 
+    // P37-C1: explicit lookAt camera (for cesium.js rendering conformance).
+    // Overrides the orbit camera; tile selection uses this camera's
+    // position. eye/target/up in the tileset's local coordinates
+    // (after P5 rebase). Call clearExplicitCamera() to revert to orbit.
+    static void setCamera(const double eye[3], const double target[3],
+                          const double up[3]);
+    static void clearExplicitCamera();
+    static bool hasExplicitCamera();
+
+    // P37-C1: background clear color (rgba 0-1, default dark blue) and
+    // vertical FOV in degrees (default 60). For cesium.js conformance.
+    static void setClearColor(float r, float g, float b, float a);
+    static void setFovDegrees(float fovDegrees);
+
     // P12: resize the render surface (host window resize, orientation
     // change, split-screen, ...). The host keeps owning the native window;
     // the SDK recreates its swap chain for the same window handle and

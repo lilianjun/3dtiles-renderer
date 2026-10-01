@@ -142,6 +142,15 @@ struct DemoArgs {
     // does NOT abort the run, so tests can assert the old tileset survives.
     std::vector<std::string> switchTilesets;
     std::vector<int> switchAtFrames;
+    // P37-C1: explicit lookAt camera (cesium.js conformance). "x,y,z" triples.
+    double cameraEye[3] = {0, 0, 0};
+    double cameraTarget[3] = {0, 0, 0};
+    double cameraUp[3] = {0, 1, 0};
+    bool cameraSet = false;
+    double fovDegrees = 60.0;
+    // P37-C1: background clear color (rgba 0-1).
+    double bgColor[4] = {0, 0, 0, 1};
+    bool bgSet = false;
 };
 
 bool parseArgs(int argc, char** argv, DemoArgs& out) {
@@ -261,6 +270,42 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
         } else if (arg == "--settle-before-screenshot") {
             if (!needValue("--settle-before-screenshot", value)) return false;
             out.settleBeforeScreenshot = std::stoi(value);
+        } else if (arg == "--camera-eye") {
+            // P37-C1: "x,y,z" triple for explicit lookAt camera.
+            if (!needValue("--camera-eye", value)) return false;
+            if (sscanf(value.c_str(), "%lf,%lf,%lf", &out.cameraEye[0],
+                       &out.cameraEye[1], &out.cameraEye[2]) != 3) {
+                std::cerr << "[demo] --camera-eye needs \"x,y,z\"" << std::endl;
+                return false;
+            }
+            out.cameraSet = true;
+        } else if (arg == "--camera-target") {
+            if (!needValue("--camera-target", value)) return false;
+            if (sscanf(value.c_str(), "%lf,%lf,%lf", &out.cameraTarget[0],
+                       &out.cameraTarget[1], &out.cameraTarget[2]) != 3) {
+                std::cerr << "[demo] --camera-target needs \"x,y,z\"" << std::endl;
+                return false;
+            }
+            out.cameraSet = true;
+        } else if (arg == "--camera-up") {
+            if (!needValue("--camera-up", value)) return false;
+            if (sscanf(value.c_str(), "%lf,%lf,%lf", &out.cameraUp[0],
+                       &out.cameraUp[1], &out.cameraUp[2]) != 3) {
+                std::cerr << "[demo] --camera-up needs \"x,y,z\"" << std::endl;
+                return false;
+            }
+        } else if (arg == "--fov") {
+            if (!needValue("--fov", value)) return false;
+            out.fovDegrees = std::stod(value);
+        } else if (arg == "--background") {
+            // P37-C1: "r,g,b,a" 0-1 for clear color (cesium.js conformance).
+            if (!needValue("--background", value)) return false;
+            if (sscanf(value.c_str(), "%lf,%lf,%lf,%lf", &out.bgColor[0],
+                       &out.bgColor[1], &out.bgColor[2], &out.bgColor[3]) != 4) {
+                std::cerr << "[demo] --background needs \"r,g,b,a\"" << std::endl;
+                return false;
+            }
+            out.bgSet = true;
         } else if (arg == "--smoke") {
             out.smoke = true;
         } else if (arg == "--exit-on-loading") {
@@ -884,6 +929,22 @@ int main(int argc, char** argv) {
             }
         }
         tiles_renderer::Renderer::setOrbitCamera(yawDeg, pitchDeg, distance);
+
+        // P37-C1: explicit camera / background / FOV (cesium.js conformance).
+        if (args.bgSet) {
+            tiles_renderer::Renderer::setClearColor(
+                static_cast<float>(args.bgColor[0]),
+                static_cast<float>(args.bgColor[1]),
+                static_cast<float>(args.bgColor[2]),
+                static_cast<float>(args.bgColor[3]));
+        }
+        tiles_renderer::Renderer::setFovDegrees(
+            static_cast<float>(args.fovDegrees));
+        if (args.cameraSet) {
+            tiles_renderer::Renderer::setCamera(args.cameraEye,
+                                                args.cameraTarget,
+                                                args.cameraUp);
+        }
 
         auto dumpFramePng = [&](int frameIndex) -> bool {
             char suffix[32];
