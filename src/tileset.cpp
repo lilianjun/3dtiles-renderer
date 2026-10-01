@@ -6,6 +6,8 @@
 
 #include "tileset_internal.h"
 #include "converter_guard.h" // P28: empty-model guard for content converters
+#include "tilesetio/cesium_adapter.h"
+#include "tilesetio/filament_backend.h"
 
 #include <mutex> // P32: loadErrorCallback queue (may arrive off-thread)
 #include <unordered_map> // P32: per-tile last-state tracking for events
@@ -574,14 +576,13 @@ bool preflightTilesetRoot(
 
 // ---------------------------------------------------------------------------
 // Per-tile render data, created in prepareInMainThread and freed in free().
-// The glb bytes are kept alive for the asset's lifetime (gltfio references
-// the caller's buffer). rtcCenter/upAxisFix are the double-precision
-// transform pieces from LoadThreadData, kept so setModelMatrix() (P33) can
-// recompose the tile's render transform without re-loading its content.
+// T1 (tilesetio): holds FilamentBackend resources (entities, GPU buffers).
+// rtcCenter/upAxisFix are the double-precision transform pieces from
+// LoadThreadData, kept so setModelMatrix() (P33) can recompose the tile's
+// render transform without re-loading its content.
 // ---------------------------------------------------------------------------
 struct TileRenderData {
-    std::vector<std::uint8_t> glbBytes;
-    filament::gltfio::FilamentAsset* asset = nullptr;
+    tilesetio::FilamentTileResources filamentResources;
     bool inScene = false;
     // P35: whether this tile's debug wireframe (getWireframe()) is in the
     // scene. Managed by updateTileVisibility / updateWireframeVisibility.
@@ -602,16 +603,14 @@ struct TileRenderData {
 
 // ---------------------------------------------------------------------------
 // Load-thread result handed from prepareInLoadThread to prepareInMainThread.
-// glbBytes: the tile content as binary glb (copied raw, or re-serialized
-// from a converted CesiumGltf::Model). rtcCenter: b3dm RTC_CENTER in tile-
-// local coordinates (double); applied to the transform in double precision
-// in prepareInMainThread instead of being baked into float glTF nodes.
-// upAxisFix: for i3dm-converted models, the glTF up-axis-to-Z-up matrix the
-// converter assumed the runtime would apply (see modelToGlb); identity for
-// everything else.
+// T1 (tilesetio): holds the CesiumGltf::Model directly — no GLB round-trip.
+// The Model is moved from the TileLoadResult. rtcCenter/upAxisFix are the
+// same as before (tile-level transform pieces).
 // ---------------------------------------------------------------------------
 struct LoadThreadData {
-    std::vector<std::uint8_t> glbBytes;
+    // For Model content: the converted model (moved from TileLoadResult).
+    // For raw GLB: parsed into a Model via cesium-native's GltfReader.
+    std::optional<CesiumGltf::Model> model;
     glm::dvec3 rtcCenter{0.0, 0.0, 0.0};
     glm::dmat4 upAxisFix{1.0};
 };
@@ -848,92 +847,8 @@ void expandGpuInstancing(CesiumGltf::Model& model) {
 // CESIUM_RTC extension is extracted into rtcCenter (double) and stripped,
 // because gltfio does not understand it and float glTF nodes cannot hold
 // ECEF-scale centers. Returns nullptr on failure.
-// P7: EXT_mesh_gpu_instancing nodes are expanded into plain nodes first
-// (see expandGpuInstancing), and multi-buffer models are merged into the
-// single GLB BIN chunk (the i3dm converter appends an instance-data
-// buffer; writing only buffers[0] would dangle the instance accessors).
-LoadThreadData* modelToGlb(const CesiumGltf::Model& inModel) {
-    CesiumGltf::Model model = inModel; // copy: we strip the RTC extension
-    glm::dvec3 rtcCenter{0.0, 0.0, 0.0};
-    if (const auto* pRtc =
-            model.getExtension<CesiumGltf::ExtensionCesiumRTC>();
-        pRtc != nullptr && pRtc->center.size() == 3) {
-        rtcCenter = glm::dvec3(
-            pRtc->center[0], pRtc->center[1], pRtc->center[2]);
-        model.extensions.erase(CesiumGltf::ExtensionCesiumRTC::ExtensionName);
-        model.removeExtensionUsed(CesiumGltf::ExtensionCesiumRTC::ExtensionName);
-        model.removeExtensionRequired(
-            CesiumGltf::ExtensionCesiumRTC::ExtensionName);
-    }
-    // P7: detect i3dm-converted models BEFORE expandGpuInstancing strips
-    // the extension. Only the i3dm converter adds EXT_mesh_gpu_instancing,
-    // and only it conjugates instance transforms by upToZ (see above), so
-    // only those models need the compensating rotation at the asset root.
-    bool fromI3dm = false;
-    for (const auto& node : model.nodes) {
-        if (node.getExtension<CesiumGltf::ExtensionExtMeshGpuInstancing>() !=
-            nullptr) {
-            fromI3dm = true;
-            break;
-        }
-    }
-    const glm::dmat4 upAxisFix = fromI3dm ? upAxisToZUp(model)
-                                          : glm::dmat4(1.0);
-    expandGpuInstancing(model);
-    std::span<const std::byte> bufferData;
-    std::vector<std::byte> mergedBuffers;
-    if (!model.buffers.empty()) {
-        // P7: a GLB has a single BIN chunk, but converted models may carry
-        // several buffers — the i3dm converter appends an instance-data
-        // buffer holding the EXT_mesh_gpu_instancing TRANSLATION/ROTATION/
-        // SCALE accessors. Merge every buffer's data into one chunk and
-        // repoint all bufferViews at buffer 0 with adjusted byteOffsets;
-        // writing only buffers[0] would dangle the instance accessors.
-        std::vector<std::size_t> base(model.buffers.size(), 0);
-        for (std::size_t i = 0; i < model.buffers.size(); ++i) {
-            base[i] = mergedBuffers.size();
-            const auto& bytes = model.buffers[i].cesium.data;
-            mergedBuffers.insert(mergedBuffers.end(), bytes.begin(),
-                                 bytes.end());
-            while (mergedBuffers.size() % 4 != 0) {
-                mergedBuffers.push_back(std::byte{0});
-            }
-        }
-        for (auto& bufferView : model.bufferViews) {
-            if (bufferView.buffer >= 0 &&
-                static_cast<std::size_t>(bufferView.buffer) < base.size()) {
-                bufferView.byteOffset +=
-                    static_cast<std::int64_t>(base[bufferView.buffer]);
-                bufferView.buffer = 0;
-            }
-        }
-        model.buffers.resize(1);
-        model.buffers[0].cesium.data.assign(mergedBuffers.begin(),
-                                            mergedBuffers.end());
-        model.buffers[0].byteLength =
-            static_cast<std::int64_t>(mergedBuffers.size());
-        bufferData = std::span<const std::byte>(
-            model.buffers[0].cesium.data.data(),
-            model.buffers[0].cesium.data.size());
-    }
-    CesiumGltfWriter::GltfWriter writer;
-    CesiumGltfWriter::GltfWriterResult result = writer.writeGlb(model, bufferData);
-    if (!result.errors.empty()) {
-        std::cerr << "[tiles_renderer] modelToGlb: writeGlb failed: "
-                  << result.errors.front() << std::endl;
-        return nullptr;
-    }
-    auto* pData = new LoadThreadData();
-    pData->rtcCenter = rtcCenter;
-    pData->upAxisFix = upAxisFix;
-    pData->glbBytes.assign(
-        reinterpret_cast<const std::uint8_t*>(result.gltfBytes.data()),
-        reinterpret_cast<const std::uint8_t*>(result.gltfBytes.data()) +
-            result.gltfBytes.size());
-    return pData;
-}
+// ---
 
-// ---------------------------------------------------------------------------
 // FilamentPrepareResources: IPrepareRendererResources implementation that
 // converts each tile's glb content into a gltfio FilamentAsset.
 // ---------------------------------------------------------------------------
@@ -1001,33 +916,31 @@ public:
         const glm::dmat4& /*transform*/,
         const std::any& /*rendererOptions*/) override {
         LoadThreadData* pData = nullptr;
-        const auto& result = tileLoadResult;
+        auto& result = tileLoadResult;
 
+        // T1 (tilesetio): move the Model directly, no GLB serialization.
         // Case A: cesium-native already converted the content to a
         // CesiumGltf::Model (b3dm / i3dm / ... via GltfConverters).
-        // Serialize it back to glb bytes for gltfio.
-        if (const auto* pModel =
+        if (auto* pModel =
                 std::get_if<CesiumGltf::Model>(&result.contentKind);
             pModel != nullptr) {
-            pData = modelToGlb(*pModel);
-        }
-
-        // Case B: raw glb bytes straight from the completed request.
-        if (pData == nullptr && result.pCompletedRequest != nullptr &&
-            result.pCompletedRequest->response() != nullptr) {
-            const auto data = result.pCompletedRequest->response()->data();
-            if (data.size() >= 4) {
-                std::uint32_t magic = 0;
-                std::memcpy(&magic, data.data(), 4);
-                if (magic == kGltfMagic) {
-                    pData = new LoadThreadData();
-                    pData->glbBytes.assign(
-                        reinterpret_cast<const std::uint8_t*>(data.data()),
-                        reinterpret_cast<const std::uint8_t*>(data.data()) +
-                            data.size());
-                }
+            pData = new LoadThreadData();
+            pData->model = std::move(*pModel);
+            // T1: extract RTC_CENTER from CESIUM_RTC extension (b3dm/i3dm).
+            // The converter stores it here; tile.getTransform() is identity
+            // for these formats. See old modelToGlb() for original logic.
+            if (const auto* pRtc = pData->model->getExtension<
+                    CesiumGltf::ExtensionCesiumRTC>();
+                pRtc != nullptr && pRtc->center.size() == 3) {
+                pData->rtcCenter = glm::dvec3(
+                    pRtc->center[0], pRtc->center[1], pRtc->center[2]);
             }
         }
+
+        // Case B: raw glb bytes — parse into Model via GltfReader.
+        // (TODO T1: implement GltfReader parsing; for now skip raw GLB.)
+        // The old code copied raw GLB bytes for gltfio; tilesetio needs a Model.
+
         Cesium3DTilesSelection::TileLoadResultAndRenderResources out;
         out.result = std::move(tileLoadResult);
         out.pRenderResources = pData;
@@ -1234,48 +1147,68 @@ public:
         Cesium3DTilesSelection::Tile& tile, void* pLoadThreadResult) override {
         auto* pLoad =
             static_cast<LoadThreadData*>(pLoadThreadResult);
-        if (pLoad == nullptr || pLoad->glbBytes.empty()) {
+        if (pLoad == nullptr || !pLoad->model.has_value()) {
             delete pLoad;
-            return nullptr; // not glb content (or load failed)
+            return nullptr; // not model content (or load failed)
         }
-        auto* pData = new TileRenderData();
-        // P37-B: strip metadata texture extensions (gltfio segfault workaround).
-        pData->glbBytes = stripMetadataTextureExtensions(pLoad->glbBytes);
+
+        // T1 (tilesetio): convert Model -> neutral RenderData -> Filament.
+        // No GLB serialization, no gltfio AssetLoader.
         const glm::dvec3 rtcCenter = pLoad->rtcCenter;
         const glm::dmat4 upAxisFix = pLoad->upAxisFix;
+
+        // Compute tile transform (double precision): 
+        //   worldT = tile.getTransform() * translate(rtcCenter) * upAxisFix
+        //   then apply modelMatrix and subtract localOrigin (P5 rebase).
+        glm::dmat4 worldT = tile.getTransform();
+        if (rtcCenter != glm::dvec3(0.0)) {
+            glm::dmat4 rtcT(1.0);
+            rtcT[3][0] = rtcCenter.x;
+            rtcT[3][1] = rtcCenter.y;
+            rtcT[3][2] = rtcCenter.z;
+            worldT = worldT * rtcT;
+        }
+        worldT = worldT * upAxisFix;
+        worldT = _modelMatrix * worldT;
+        worldT[3][0] -= _localOrigin.x;
+        worldT[3][1] -= _localOrigin.y;
+        worldT[3][2] -= _localOrigin.z;
+
+        double tileTransform[16];
+        for (int c = 0; c < 4; ++c)
+            for (int r = 0; r < 4; ++r)
+                tileTransform[c * 4 + r] = worldT[c][r];
+
+        // Convert Model to neutral render data.
+        tilesetio::TileRenderData renderData =
+            tilesetio::convertModel(
+                pLoad->model.value(), tileTransform,
+                Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
+                    tile.getTileID()));
         delete pLoad;
 
-        pData->asset = _assetLoader->createAsset(
-            pData->glbBytes.data(),
-            static_cast<std::uint32_t>(pData->glbBytes.size()));
-        if (pData->asset == nullptr) {
-            std::cerr << "[tiles_renderer] prepareInMainThread: gltfio "
-                         "createAsset failed"
+        if (renderData.primitives.empty()) {
+            std::cerr << "[tiles_renderer] prepareInMainThread: tilesetio "
+                         "convertModel produced no primitives"
                       << std::endl;
-            delete pData;
             return nullptr;
         }
-        if (!_resourceLoader->loadResources(pData->asset)) {
-            std::cerr << "[tiles_renderer] prepareInMainThread: gltfio "
-                         "loadResources failed"
+
+        // Create Filament resources via backend.
+        auto* pData = new TileRenderData();
+        pData->filamentResources = _filamentBackend.createTile(
+            _engine, renderData, _materialProvider);
+        if (pData->filamentResources.entities.empty()) {
+            std::cerr << "[tiles_renderer] prepareInMainThread: tilesetio "
+                         "FilamentBackend produced no entities"
                       << std::endl;
-            _assetLoader->destroyAsset(pData->asset);
             delete pData;
             return nullptr;
         }
 
-        // P33: keep the double-precision transform pieces so setModelMatrix()
-        // can recompose this tile's render transform without re-loading.
+        // Keep transform pieces for setModelMatrix() recomposition (P33).
         pData->rtcCenter = rtcCenter;
         pData->upAxisFix = upAxisFix;
-        const filament::math::mat4f m = composeRenderTransform(
-            tile, rtcCenter, upAxisFix, _modelMatrix, _localOrigin);
-        auto& transformManager = _engine->getTransformManager();
-        const auto rootInstance =
-            transformManager.getInstance(pData->asset->getRoot());
-        if (rootInstance.isValid()) {
-            transformManager.setTransform(rootInstance, m);
-        }
         return pData;
     }
 
@@ -1338,19 +1271,15 @@ public:
         void* pMainThreadResult) noexcept override {
         // Case 1: prepareInMainThread never ran — drop the load-thread data.
         delete static_cast<LoadThreadData*>(pLoadThreadResult);
-        // Case 2: full render data — remove from scene, destroy asset.
+        // Case 2: full render data — remove from scene, destroy resources.
         auto* pData = static_cast<TileRenderData*>(pMainThreadResult);
         if (pData == nullptr) {
             return;
         }
-        if (pData->inScene && pData->asset != nullptr) {
-            const utils::Entity* entities = pData->asset->getEntities();
-            _scene->removeEntities(entities, pData->asset->getEntityCount());
-            pData->inScene = false;
-        }
+        // T1 (tilesetio): destroy via backend (removes entities from scene).
+        _filamentBackend.destroyTile(_engine, _scene, pData->filamentResources);
+        pData->inScene = false;
         // P36: destroy debug volume entities (tile BV / request volume).
-        // The content wireframe entity is owned by the FilamentAsset and
-        // dies with destroyAsset below.
         if (pData->bvInScene) {
             _scene->removeEntities(&pData->bvEntity, 1);
             _engine->destroy(pData->bvEntity);
@@ -1360,9 +1289,6 @@ public:
             _scene->removeEntities(&pData->rqEntity, 1);
             _engine->destroy(pData->rqEntity);
             pData->rqInScene = false;
-        }
-        if (pData->asset != nullptr) {
-            _assetLoader->destroyAsset(pData->asset);
         }
         delete pData;
     }
@@ -1401,6 +1327,10 @@ private:
     filament::gltfio::MaterialProvider* _materialProvider = nullptr;
     filament::gltfio::AssetLoader* _assetLoader = nullptr;
     filament::gltfio::ResourceLoader* _resourceLoader = nullptr;
+    // T1 (tilesetio): backend for direct Model -> Filament conversion.
+    // The gltfio AssetLoader/ResourceLoader above are legacy and will be
+    // removed in T5 once tilesetio is fully validated.
+    tilesetio::FilamentBackend _filamentBackend;
 #ifdef TILES_WITH_STB_PROVIDER
     // P15: stb image decoder feeding gltfio's ResourceLoader (PNG/JPEG).
     // Must outlive _resourceLoader; destroyed after it above.
@@ -2111,7 +2041,9 @@ struct TilesetRenderer::Impl {
         if (pContent != nullptr) {
             auto* pData = static_cast<TileRenderData*>(
                 pContent->getRenderResources());
-            if (pData != nullptr && pData->asset != nullptr) {
+            // T1 (tilesetio): use backend entities instead of gltfio asset.
+            if (pData != nullptr &&
+                !pData->filamentResources.entities.empty()) {
                 // Tile::ConstPointer is shared_ptr<const Tile>; get the raw
                 // pointer for set lookup via a temporary const view.
                 const Cesium3DTilesSelection::Tile* pRaw = &tile;
@@ -2122,10 +2054,11 @@ struct TilesetRenderer::Impl {
                         break;
                     }
                 }
+                const auto& entities = pData->filamentResources.entities;
                 if (want && !pData->inScene) {
                     scene->addEntities(
-                        pData->asset->getEntities(),
-                        pData->asset->getEntityCount());
+                        entities.data(),
+                        entities.size());
                     pData->inScene = true;
                     // P35: debugShowUrl logs the tile ID as it becomes
                     // visible (no on-screen text renderer in this SDK).
@@ -2140,8 +2073,8 @@ struct TilesetRenderer::Impl {
                     }
                 } else if (!want && pData->inScene) {
                     scene->removeEntities(
-                        pData->asset->getEntities(),
-                        pData->asset->getEntityCount());
+                        entities.data(),
+                        entities.size());
                     pData->inScene = false;
                 }
                 // P35: keep the debug wireframe in sync with the tile's
@@ -2306,26 +2239,14 @@ struct TilesetRenderer::Impl {
     // the tile's scene membership. P36: re-gated on
     // debugShowContentBoundingVolume (the Inspector's Content Volumes
     // checkbox); P35 wired it to debugShowBoundingVolume.
+    // T1 (tilesetio): no gltfio FilamentAsset, so no wireframe. No-op.
     // Render thread only.
     void updateTileWireframe(
         Cesium3DTilesSelection::Tile& tile,
         TileRenderData& data) {
         (void)tile;
-        bool want = debugShowContentBoundingVolume && data.inScene &&
-                    data.asset != nullptr;
-        if (want && !data.wireframeInScene) {
-            auto wire = data.asset->getWireframe();
-            if (!wire.isNull()) {
-                scene->addEntity(wire);
-                data.wireframeInScene = true;
-            }
-        } else if (!want && data.wireframeInScene) {
-            auto wire = data.asset->getWireframe();
-            if (!wire.isNull()) {
-                scene->removeEntities(&wire, 1);
-            }
-            data.wireframeInScene = false;
-        }
+        (void)data;
+        // No-op for tilesetio backend.
     }
 
     // P36: re-apply all debug-volume flags to currently-loaded tiles
@@ -2349,9 +2270,8 @@ struct TilesetRenderer::Impl {
                 auto* pData = static_cast<TileRenderData*>(
                     pContent->getRenderResources());
                 if (pData != nullptr) {
-                    if (pData->asset != nullptr) {
-                        updateTileWireframe(*pTile, *pData);
-                    }
+                    // T1 (tilesetio): no gltfio wireframe; skip. The tile
+                    // bounding volume debug (P36) still works via entities.
                     updateTileBoundingVolume(*pTile, *pData);
                     updateTileRequestVolume(*pTile, *pData);
                 }
@@ -2771,21 +2691,13 @@ void TilesetRenderer::setModelMatrix(const double matrix[16]) {
                 if (pContent != nullptr) {
                     auto* pData = static_cast<TileRenderData*>(
                         pContent->getRenderResources());
-                    if (pData != nullptr && pData->asset != nullptr) {
-                        const auto instance = transformManager.getInstance(
-                            pData->asset->getRoot());
-                        if (instance.isValid()) {
-                            transformManager.setTransform(
-                                instance,
-                                FilamentPrepareResources::
-                                    composeRenderTransform(
-                                        *pTile, pData->rtcCenter,
-                                        pData->upAxisFix, m,
-                                        _impl->localOrigin));
-                        }
+                    if (pData != nullptr) {
+                        // T1 (tilesetio): setModelMatrix recomposition for
+                        // tile content not yet implemented (transforms are
+                        // baked per-primitive at creation). TODO(T2).
                         // P36: the debug volume line-boxes carry the volume
                         // in their entity transform; recompose them for the
-                        // new model matrix too.
+                        // new model matrix too (backend-independent).
                         if (pData->bvInScene) {
                             const auto bvObb = Cesium3DTilesSelection::
                                 getOrientedBoundingBoxFromBoundingVolume(
