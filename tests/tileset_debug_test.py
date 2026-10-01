@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image
 
 REPO = os.path.join(os.path.dirname(__file__), "..")
-DEMO = os.path.join(REPO, "build", "linux", "tiles_demo")
+DEMO = None  # set from --demo in main()
 DATA = os.path.join(os.path.dirname(__file__), "data", "p3_box_tileset",
                     "tileset.json")
 TMP = "/tmp/p35_test"
@@ -103,12 +103,11 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--sanitized", action="store_true",
                     help="run demo under run_sanitized.py (no xvfb)")
-    ap.add_argument("--demo", default=DEMO)
+    ap.add_argument("--demo", required=True)
     ap.add_argument("--tileset", default=DATA)
     args = ap.parse_args()
+    DEMO = args.demo
     SANITIZED = args.sanitized
-    # --demo/--tileset accepted for CTest uniformity; the p3 fixture paths
-    # above are used (same as tileset_cache_test.py).
     test_a_bounding_volume()
     test_b_show_url()
     test_c_toggle_no_crash()
