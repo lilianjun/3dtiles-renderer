@@ -77,9 +77,11 @@ FilamentTileResources FilamentBackend::createTile(
             prim.normals.size() == static_cast<size_t>(vertexCount) * 3;
         const bool hasUVs =
             prim.uvs.size() == static_cast<size_t>(vertexCount) * 2;
-        // Use PBR material for solid colors when we have normals.
-        // TANGENTS are computed from normals for proper diffuse lighting.
-        const bool usePbr = hasNormals;
+        // P37: Always use UNLIT (direct colors, no lighting). Per user
+        // 2026-10-01, this stage uses no lighting on both sides (Cesium
+        // benchmark uses pow(diffuse, 2.2) direct color). PBR would require
+        // lights and would render black without them.
+        const bool usePbr = false;
 
         // VertexBuffer: POSITION (float3), TANGENTS (float4 quaternion) if
         // we have normals, UV0 (float2) if present.
