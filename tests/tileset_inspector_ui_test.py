@@ -25,6 +25,7 @@ def run_demo(demo, tileset_path, out_png, inspector_frames):
         tileset_path,
         "--screenshot",
         out_png,
+        "--stats",  # P36 gap #1: verify tileset actually loads.
     ]
     if inspector_frames > 0:
         cmd += ["--inspector", "--inspector-smoke", str(inspector_frames)]
@@ -56,7 +57,15 @@ def main():
         assert "Inspector mode" in stdout, "no Inspector banner in stdout"
         assert "separate window" in stdout, "not using separate-window mode"
         assert "[demo] OK" in stdout, "no OK marker"
-        print("[test] Part A+B PASS: inspector smoke exits 0, window created")
+        # P36 gap #1: verify the tileset actually loaded (not just clear).
+        assert "[stats]" in stdout, "no stats output in Inspector mode"
+        # Parse loaded count from [stats] line.
+        import re
+        m = re.search(r'loaded=(\d+)', stdout)
+        assert m, "no loaded= in stats"
+        loaded = int(m.group(1))
+        assert loaded > 0, f"tileset did not load (loaded={loaded})"
+        print(f"[test] Part A+B PASS: inspector smoke exits 0, tileset loaded={loaded}")
 
         # Part C: longer run must not crash.
         long_png = os.path.join(out_dir, "p36b_long.png")

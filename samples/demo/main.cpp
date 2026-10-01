@@ -518,6 +518,22 @@ int runInspectorMode(SDL_Window* window, const DemoArgs& args, int width,
     }
 
     std::cout << "[demo] Inspector mode (separate window)" << std::endl;
+
+    // P36 gap #1 fix: load the tileset in Inspector mode too (was only
+    // loaded in normal mode, so Inspector showed empty scene).
+    if (!args.tileset.empty()) {
+        const std::string& tilesetPath = args.tileset;
+        bool ok = tiles_renderer::Renderer::loadTileset(tilesetPath);
+        if (!ok) {
+            std::cerr << "[demo] Inspector: failed to load tileset: "
+                      << tilesetPath << std::endl;
+            // Continue anyway (panel still useful for debugging).
+        } else {
+            std::cout << "[demo] Inspector: tileset loaded: " << tilesetPath
+                      << std::endl;
+        }
+    }
+
     int exitCode = 0;
     int rendered = 0;
     const int smokeFrames = args.inspectorSmoke;
@@ -672,6 +688,21 @@ int runInspectorMode(SDL_Window* window, const DemoArgs& args, int width,
     ImGui::DestroyContext();
     std::cout << "[demo] Inspector mode: rendered " << rendered << " frames"
               << std::endl;
+    // P36 gap #1: output stats so tests can verify the tileset actually
+    // loaded (not just clear screen). Format matches normal --stats mode.
+    if (args.stats) {
+        const auto st = tiles_renderer::Renderer::tileStats();
+        std::cout << "[stats] frame=" << rendered
+                  << " selected=" << st.selectedTiles
+                  << " loading=" << st.tilesLoading
+                  << " loaded=" << st.tilesLoaded
+                  << " failed=" << st.tilesFailed
+                  << " bytes=" << st.bytesLoaded
+                  << " visited=" << st.tilesVisited
+                  << " pending=" << st.pendingRequests
+                  << " processing=" << st.tilesProcessing
+                  << std::endl;
+    }
     if (exitCode == 0) {
         std::cout << "[demo] OK" << std::endl;
     }
