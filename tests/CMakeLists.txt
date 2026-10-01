@@ -113,18 +113,28 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
               --demo "$<TARGET_FILE:tiles_demo>"
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
     set_tests_properties(tileset_debug PROPERTIES TIMEOUT 900)
-    add_test(NAME tileset_inspector_sdk
-      COMMAND "${Python3_EXECUTABLE}"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_inspector_sdk_test.py"
-              --demo "$<TARGET_FILE:tiles_demo>"
-              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
-    set_tests_properties(tileset_inspector_sdk PROPERTIES TIMEOUT 900)
-    add_test(NAME tileset_inspector_ui
-      COMMAND "${Python3_EXECUTABLE}"
-              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_inspector_ui_test.py"
-              --demo "$<TARGET_FILE:tiles_demo>"
-              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
-    set_tests_properties(tileset_inspector_ui PROPERTIES TIMEOUT 900)
+    # P36-A: skip the pixel-strict inspector_sdk under TILES_SANITIZE;
+    # the sanitizer_inspector_sdk scenario covers it in the ASan lane
+    # (the ASan-instrumented demo needs the run_san.py wrapper).
+    if(NOT TILES_SANITIZE)
+      add_test(NAME tileset_inspector_sdk
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tileset_inspector_sdk_test.py"
+                --demo "$<TARGET_FILE:tiles_demo>"
+                --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
+      set_tests_properties(tileset_inspector_sdk PROPERTIES TIMEOUT 900)
+    endif()
+    # P36-B: Inspector UI smoke test; skip under TILES_SANITIZE (no
+    # sanitizer-specific UI scenario; the SDK side is covered by
+    # sanitizer_inspector_sdk).
+    if(NOT TILES_SANITIZE)
+      add_test(NAME tileset_inspector_ui
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tileset_inspector_ui_test.py"
+                --demo "$<TARGET_FILE:tiles_demo>"
+                --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
+      set_tests_properties(tileset_inspector_ui PROPERTIES TIMEOUT 900)
+    endif()
   else()
     message(WARNING "[P32] Python3 not found — tileset_events test skipped")
   endif()
