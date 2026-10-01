@@ -238,22 +238,52 @@ public:
     static std::int64_t timeSinceLoadMs();
     static std::string rootTileId();
 
-    // P35: debug switches (subset of cesium.js debug*). All must be called
-    // on the render thread. Values are stashed and forwarded across
-    // loadTileset() like the P33 display flags.
+    // P35: debug switches (subset of cesium.js debug*). P36: split into
+    // tile / content / request volumes to match the Cesium3DTilesInspector
+    // Display section 1:1. All must be called on the render thread. Values
+    // are stashed and forwarded across loadTileset() like the P33 display
+    // flags.
     //
-    // - setDebugShowBoundingVolume(true): draws each loaded tile's
-    //   bounding-box hierarchy as lines (via FilamentAsset::getWireframe).
+    // - setDebugShowBoundingVolume(true): draws each *tile's* bounding
+    //   volume from tileset.json as line boxes (box volumes exact; sphere
+    //   approximated by its box; region volumes skipped).
+    // - setDebugShowContentBoundingVolume(true): draws each loaded tile's
+    //   content bounding-box hierarchy as lines (via
+    //   FilamentAsset::getWireframe). This is what P35's
+    //   setDebugShowBoundingVolume drew; the flag was split in P36 so the
+    //   Inspector's Bounding/Content volume checkboxes map 1:1.
+    // - setDebugShowViewerRequestVolume(true): draws each tile's
+    //   viewerRequestVolume (when the tileset declares one) as line boxes.
     // - setDebugShowUrl(true): logs the IDs of tiles as they become
     //   visible to stderr (no on-screen text renderer in this SDK).
+    // - setDebugFreezeFrame(true): skips the tile selection/LOD update;
+    //   the last frame's tiles keep rendering (cesium.js debugFreezeFrame).
     //
     // NOT provided: debugWireframe — Filament v1.77 has no runtime
     // wireframe toggle for gltfio materials (rasterization mode is baked
     // at material build time). See ADR-0034.
     static void setDebugShowBoundingVolume(bool show);
     static bool isDebugShowBoundingVolume();
+    static void setDebugShowContentBoundingVolume(bool show);
+    static bool isDebugShowContentBoundingVolume();
+    static void setDebugShowViewerRequestVolume(bool show);
+    static bool isDebugShowViewerRequestVolume();
     static void setDebugShowUrl(bool show);
     static bool isDebugShowUrl();
+    static void setDebugFreezeFrame(bool freeze);
+    static bool isDebugFreezeFrame();
+
+    // P36: overlay hook for dev-tool UIs (e.g. the Inspector panel in
+    // tiles_demo --inspector). The callback runs on the render thread
+    // inside renderFrame(), after the 3D view is rendered and before the
+    // frame is presented; it also runs inside readPixels() so screenshots
+    // capture the overlay. Not set by default (zero overhead). The demo
+    // uses nativeEngineHandle() to build its overlay with the Filament API.
+    using OverlayCallback = std::function<void()>;
+    static void setOverlayCallback(OverlayCallback cb);
+    // Opaque handle to the underlying filament::Engine (nullptr when not
+    // initialized or when built without Filament). For dev-tool use only.
+    static void* nativeEngineHandle();
 
     // P34: cesium.js-style cache / statistics / method alignment. All must
     // be called on the render thread.
@@ -345,6 +375,15 @@ public:
         std::int64_t tilesLoaded = -1;
         std::int64_t tilesFailed = -1;
         std::int64_t bytesLoaded = -1;
+        // P36: Inspector statistics section.
+        //   tilesVisited    — tiles in the instantiated tree (walked)
+        //   pendingRequests — tiles queued for load (worker + main queues)
+        //   tilesProcessing — tiles with content in flight
+        //                     (ContentLoading/ContentLoaded)
+        // tilesLoading == pendingRequests + tilesProcessing.
+        std::int64_t tilesVisited = -1;
+        std::int64_t pendingRequests = -1;
+        std::int64_t tilesProcessing = -1;
     };
 
     // P17: current TileStats (see above). Like every Renderer method except

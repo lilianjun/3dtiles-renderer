@@ -113,6 +113,12 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
               --demo "$<TARGET_FILE:tiles_demo>"
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
     set_tests_properties(tileset_debug PROPERTIES TIMEOUT 900)
+    add_test(NAME tileset_inspector_sdk
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_inspector_sdk_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
+    set_tests_properties(tileset_inspector_sdk PROPERTIES TIMEOUT 900)
   else()
     message(WARNING "[P32] Python3 not found — tileset_events test skipped")
   endif()
@@ -783,6 +789,16 @@ if(TILES_SANITIZE AND TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux"
               --demo "$<TARGET_FILE:tiles_demo>"
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
     set_tests_properties(sanitizer_debug PROPERTIES TIMEOUT 900)
+    # P36-A: Inspector SDK gap APIs under ASan/LSan/UBSan — debug line-box
+    # entity lifecycle (create/add/remove/destroy), the freeze-frame path,
+    # and the extended stats walk.
+    add_test(NAME sanitizer_inspector_sdk
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_inspector_sdk_test.py"
+              --sanitized
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
+    set_tests_properties(sanitizer_inspector_sdk PROPERTIES TIMEOUT 900)
   else()
     message(WARNING "[P6] Python3 not found — sanitizer scenario tests skipped")
   endif()

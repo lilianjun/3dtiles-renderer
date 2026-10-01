@@ -139,11 +139,18 @@ public:
     void trimLoadedTiles();
     bool hasExtension(const std::string& name) const;
 
-    // P35: debug switches (see renderer.h). Stashed per TilesetRenderer;
-    // Renderer::set* forwards to the live one (or stashes pre-load).
-    // Must be called on the render thread.
+    // P35: debug switches (see renderer.h). P36: split into tile /
+    // content / request volumes + freeze frame. Stashed per
+    // TilesetRenderer; Renderer::set* forwards to the live one (or stashes
+    // pre-load). Must be called on the render thread.
     void setDebugShowBoundingVolume(bool show);
     bool isDebugShowBoundingVolume() const;
+    void setDebugShowContentBoundingVolume(bool show);
+    bool isDebugShowContentBoundingVolume() const;
+    void setDebugShowViewerRequestVolume(bool show);
+    bool isDebugShowViewerRequestVolume() const;
+    void setDebugFreezeFrame(bool freeze);
+    bool isDebugFreezeFrame() const;
     void setDebugShowUrl(bool show);
     bool isDebugShowUrl() const;
 

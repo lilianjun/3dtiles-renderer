@@ -9,6 +9,23 @@ A = Android, i = iOS, wasm = WebAssembly.
 ## [Unreleased]
 
 ### Added
+- P36-A: Inspector SDK gap APIs (first of three P36 phases; no ImGui yet).
+  New public API: `Renderer::setDebugShowContentBoundingVolume(bool)` /
+  getter (the old P35 `debugShowBoundingVolume` wireframe behavior, split
+  out — `debugShowBoundingVolume` now draws tileset.json tile bounding
+  volumes as yellow line boxes instead), `Renderer::setDebugShowViewerRequestVolume(bool)` /
+  getter (cyan line boxes for tiles declaring `viewerRequestVolume`),
+  `Renderer::setDebugFreezeFrame(bool)` / getter (skips tile selection
+  updates while continuing to render), `Renderer::setOverlayCallback()` /
+  `OverlayCallback` (host UI hook invoked after the 3D view, also in the
+  `readPixels()` screenshot path), `Renderer::nativeEngineHandle()`
+  (opaque Filament engine pointer for the demo's ImGui backend).
+  `TileStats` gains `tilesVisited` (walked tree size), `pendingRequests`
+  (worker+main queue depth), `tilesProcessing` (in-flight content), with
+  the invariant `tilesLoading == pendingRequests + tilesProcessing`.
+  Live `setModelMatrix()` now also recomposes the debug line-box entity
+  transforms. Demo gains `--debug-content-volume`, `--debug-request-volume`,
+  `--debug-freeze-frame`. SDK stays zero-SDL, zero-ImGui.
 - P35: cesium.js-aligned tileset debug switches (fifth tileset-API
   alignment phase, subset). New public API:
   `Renderer::setDebugShowBoundingVolume(bool)` /

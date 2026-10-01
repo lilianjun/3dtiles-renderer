@@ -47,9 +47,14 @@
 
 #ifdef TILES_WITH_FILAMENT
 #include <filament/Engine.h>
+#include <filament/IndexBuffer.h>
 #include <filament/LightManager.h>
+#include <filament/Material.h>
+#include <filament/MaterialInstance.h>
+#include <filament/RenderableManager.h>
 #include <filament/Scene.h>
 #include <filament/TransformManager.h>
+#include <filament/VertexBuffer.h>
 #include <gltfio/AssetLoader.h>
 #include <gltfio/FilamentAsset.h>
 #include <gltfio/MaterialProvider.h>
@@ -62,6 +67,8 @@
 #endif
 #include <gltfio/materials/uberarchive.h>
 #include <utils/Entity.h>
+#include <utils/EntityManager.h>
+#include "unlit_color_filamat.h" // P36: debug line-box material (matc)
 #endif
 
 #include <chrono>
@@ -574,7 +581,17 @@ struct TileRenderData {
     bool inScene = false;
     // P35: whether this tile's debug wireframe (getWireframe()) is in the
     // scene. Managed by updateTileVisibility / updateWireframeVisibility.
+    // P36: re-gated on debugShowContentBoundingVolume (was
+    // debugShowBoundingVolume in P35; see ADR-0035).
     bool wireframeInScene = false;
+    // P36: debug line-box entities for the tile bounding volume (tileset.json)
+    // and the viewer request volume. Created lazily by
+    // updateTileBoundingVolume / updateTileRequestVolume, destroyed in free().
+    // The entity transform carries the volume, so no per-tile geometry.
+    utils::Entity bvEntity;
+    bool bvInScene = false;
+    utils::Entity rqEntity;
+    bool rqInScene = false;
     glm::dvec3 rtcCenter{0.0, 0.0, 0.0};
     glm::dmat4 upAxisFix{1.0};
 };
@@ -1114,6 +1131,8 @@ public:
     // by TilesetRenderer::Impl::setModelMatrix. Render thread only.
     void setModelMatrix(const glm::dmat4& matrix) { _modelMatrix = matrix; }
     const glm::dmat4& modelMatrix() const { return _modelMatrix; }
+    // P36: read access for debug volume transforms (Impl::createVolumeEntity).
+    const glm::dvec3& localOrigin() const { return _localOrigin; }
 
     void free(
         Cesium3DTilesSelection::Tile& /*tile*/, void* pLoadThreadResult,
@@ -1129,6 +1148,19 @@ public:
             const utils::Entity* entities = pData->asset->getEntities();
             _scene->removeEntities(entities, pData->asset->getEntityCount());
             pData->inScene = false;
+        }
+        // P36: destroy debug volume entities (tile BV / request volume).
+        // The content wireframe entity is owned by the FilamentAsset and
+        // dies with destroyAsset below.
+        if (pData->bvInScene) {
+            _scene->removeEntities(&pData->bvEntity, 1);
+            _engine->destroy(pData->bvEntity);
+            pData->bvInScene = false;
+        }
+        if (pData->rqInScene) {
+            _scene->removeEntities(&pData->rqEntity, 1);
+            _engine->destroy(pData->rqEntity);
+            pData->rqInScene = false;
         }
         if (pData->asset != nullptr) {
             _assetLoader->destroyAsset(pData->asset);
@@ -1199,6 +1231,38 @@ struct TilesetRenderer::Impl {
 #if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
     Impl(filament::Engine* engine_, filament::Scene* scene_)
         : engine(engine_), scene(scene_) {}
+
+    // P36: destroy shared debug line resources (entities are owned per
+    // tile and die in free()).
+    ~Impl() {
+        // P36: remove all debug volume entities BEFORE destroying the
+        // shared line-box resources: the entities hold MaterialInstances
+        // that Filament refuses to destroy while still referenced by a
+        // Renderable. Clearing the flags and re-applying walks the tree
+        // and removes every bvEntity/rqEntity (tileset still alive here;
+        // member destruction runs after the destructor body).
+        debugShowBoundingVolume = false;
+        debugShowContentBoundingVolume = false;
+        debugShowViewerRequestVolume = false;
+        updateDebugVolumeVisibility();
+        if (engine != nullptr) {
+            if (debugLineVb != nullptr) {
+                engine->destroy(debugLineVb);
+            }
+            if (debugLineIb != nullptr) {
+                engine->destroy(debugLineIb);
+            }
+            if (debugLineMaterialBv != nullptr) {
+                engine->destroy(debugLineMaterialBv);
+            }
+            if (debugLineMaterialRq != nullptr) {
+                engine->destroy(debugLineMaterialRq);
+            }
+            if (debugLineMaterial != nullptr) {
+                engine->destroy(debugLineMaterial);
+            }
+        }
+    }
 
     // P19: pending cache budget; applied to TilesetOptions at construction
     // and live-mutated afterwards. -1 = cesium-native default (512MB).
@@ -1882,8 +1946,11 @@ struct TilesetRenderer::Impl {
                     pData->inScene = false;
                 }
                 // P35: keep the debug wireframe in sync with the tile's
-                // scene membership and the debugShowBoundingVolume flag.
+                // scene membership and the debug flags (P36: content
+                // wireframe + tile BV + request volume).
                 updateTileWireframe(tile, *pData);
+                updateTileBoundingVolume(tile, *pData);
+                updateTileRequestVolume(tile, *pData);
                 if (pData->inScene) {
                     ++renderedCount;
                 }
@@ -1894,15 +1961,158 @@ struct TilesetRenderer::Impl {
         }
     }
 
+    // P36: debug line-box resources for the tile/request volume overlays.
+    // One shared unit-box (±1) LINES geometry; each tile's bvEntity /
+    // rqEntity carries its volume in the entity transform, so toggling is
+    // add/remove-entity only. Render thread only; built lazily.
+    void ensureDebugLineResources() {
+        if (debugLineMaterial != nullptr) {
+            return;
+        }
+        debugLineMaterial = filament::Material::Builder()
+                                .package(unlit_color_filamat,
+                                         unlit_color_filamat_len)
+                                .build(*engine);
+        debugLineMaterialBv = debugLineMaterial->createInstance();
+        debugLineMaterialBv->setParameter(
+            "color", filament::RgbType::LINEAR,
+            filament::math::float3{1.0f, 1.0f, 0.0f}); // tile BV: yellow
+        debugLineMaterialRq = debugLineMaterial->createInstance();
+        debugLineMaterialRq->setParameter(
+            "color", filament::RgbType::LINEAR,
+            filament::math::float3{0.0f, 1.0f, 1.0f}); // request vol: cyan
+        // Unit box corners at ±1; 12 edges as 24 indices.
+        static const filament::math::float3 kBoxVerts[8] = {
+            {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
+            {-1, -1, 1},  {1, -1, 1},  {1, 1, 1},  {-1, 1, 1}};
+        static const std::uint16_t kBoxIndices[24] = {
+            0, 1, 1, 2, 2, 3, 3, 0, // bottom
+            4, 5, 5, 6, 6, 7, 7, 4, // top
+            0, 4, 1, 5, 2, 6, 3, 7  // sides
+        };
+        debugLineVb = filament::VertexBuffer::Builder()
+                          .vertexCount(8)
+                          .bufferCount(1)
+                          .attribute(filament::VertexAttribute::POSITION, 0,
+                                     filament::VertexBuffer::AttributeType::
+                                         FLOAT3)
+                          .build(*engine);
+        debugLineVb->setBufferAt(
+            *engine, 0,
+            filament::VertexBuffer::BufferDescriptor(
+                kBoxVerts, sizeof(kBoxVerts)));
+        debugLineIb =
+            filament::IndexBuffer::Builder()
+                .indexCount(24)
+                .bufferType(filament::IndexBuffer::IndexType::USHORT)
+                .build(*engine);
+        debugLineIb->setBuffer(
+            *engine, filament::IndexBuffer::BufferDescriptor(
+                         kBoxIndices, sizeof(kBoxIndices)));
+    }
+
+    // P36: entity transform for a debug volume box. The OBB is in tileset
+    // space (cesium-native pre-applies tileTransform); render space is
+    // modelMatrix * (tilesetSpace - localOrigin), mirroring
+    // composeRenderTransform's P33 rule that localOrigin never moves with
+    // modelMatrix.
+    static filament::math::mat4f composeVolumeTransform(
+        const glm::dvec3& center, const glm::dmat3& halfAxes,
+        const glm::dmat4& modelMatrix, const glm::dvec3& localOrigin) {
+        const glm::dmat3 rotScale(modelMatrix);
+        const glm::dmat3 ha = rotScale * halfAxes;
+        const glm::dvec4 tc =
+            modelMatrix * glm::dvec4(center - localOrigin, 1.0);
+        const glm::dmat4 m(
+            glm::dvec4(ha[0], 0.0), glm::dvec4(ha[1], 0.0),
+            glm::dvec4(ha[2], 0.0), glm::dvec4(tc.x, tc.y, tc.z, 1.0));
+        filament::math::mat4f out;
+        for (int c = 0; c < 4; ++c) {
+            for (int r = 0; r < 4; ++r) {
+                out[c][r] = static_cast<float>(m[c][r]);
+            }
+        }
+        return out;
+    }
+
+    // P36: create one debug line-box entity for an OBB volume.
+    utils::Entity createVolumeEntity(
+        const CesiumGeometry::OrientedBoundingBox& obb,
+        filament::MaterialInstance* materialInstance) {
+        ensureDebugLineResources();
+        utils::Entity e = utils::EntityManager::get().create();
+        filament::RenderableManager::Builder(1)
+            .boundingBox({{-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}})
+            .material(0, materialInstance)
+            .geometry(0, filament::RenderableManager::PrimitiveType::LINES,
+                      debugLineVb, debugLineIb, 0, 24)
+            .culling(false)
+            .receiveShadows(false)
+            .castShadows(false)
+            .build(*engine, e);
+        auto& transformManager = engine->getTransformManager();
+        const auto instance = transformManager.getInstance(e);
+        transformManager.setTransform(
+            instance,
+            composeVolumeTransform(obb.getCenter(), obb.getHalfAxes(),
+                                   prepareResources->modelMatrix(),
+                                   prepareResources->localOrigin()));
+        scene->addEntity(e);
+        return e;
+    }
+
+    // P36: tile bounding volume (tileset.json) as a yellow line box.
+    // Any volume type works: getOrientedBoundingBoxFromBoundingVolume
+    // converts sphere/region/OBB to an OBB (regions via the WGS84
+    // ellipsoid — exact for our box fixtures, conservative otherwise).
+    void updateTileBoundingVolume(
+        Cesium3DTilesSelection::Tile& tile, TileRenderData& data) {
+        const bool want = debugShowBoundingVolume && data.inScene;
+        if (want && !data.bvInScene) {
+            const CesiumGeometry::OrientedBoundingBox obb =
+                Cesium3DTilesSelection::getOrientedBoundingBoxFromBoundingVolume(
+                    tile.getBoundingVolume());
+            data.bvEntity = createVolumeEntity(obb, debugLineMaterialBv);
+            data.bvInScene = true;
+        } else if (!want && data.bvInScene) {
+            scene->removeEntities(&data.bvEntity, 1);
+            engine->destroy(data.bvEntity);
+            data.bvInScene = false;
+        }
+    }
+
+    // P36: viewer request volume (when the tileset declares one) as a cyan
+    // line box. Tiles without a request volume never get an entity.
+    void updateTileRequestVolume(
+        Cesium3DTilesSelection::Tile& tile, TileRenderData& data) {
+        const std::optional<Cesium3DTilesSelection::BoundingVolume>& rq =
+            tile.getViewerRequestVolume();
+        const bool want =
+            debugShowViewerRequestVolume && data.inScene && rq.has_value();
+        if (want && !data.rqInScene) {
+            const CesiumGeometry::OrientedBoundingBox obb =
+                Cesium3DTilesSelection::getOrientedBoundingBoxFromBoundingVolume(
+                    rq.value());
+            data.rqEntity = createVolumeEntity(obb, debugLineMaterialRq);
+            data.rqInScene = true;
+        } else if (!want && data.rqInScene) {
+            scene->removeEntities(&data.rqEntity, 1);
+            engine->destroy(data.rqEntity);
+            data.rqInScene = false;
+        }
+    }
+
     // P35: add/remove one tile's debug wireframe (FilamentAsset::getWireframe,
     // a LINES renderable of the transformed bounding-box hierarchy) to match
-    // the tile's scene membership and the debugShowBoundingVolume flag.
+    // the tile's scene membership. P36: re-gated on
+    // debugShowContentBoundingVolume (the Inspector's Content Volumes
+    // checkbox); P35 wired it to debugShowBoundingVolume.
     // Render thread only.
     void updateTileWireframe(
         Cesium3DTilesSelection::Tile& tile,
         TileRenderData& data) {
         (void)tile;
-        bool want = debugShowBoundingVolume && data.inScene &&
+        bool want = debugShowContentBoundingVolume && data.inScene &&
                     data.asset != nullptr;
         if (want && !data.wireframeInScene) {
             auto wire = data.asset->getWireframe();
@@ -1919,9 +2129,9 @@ struct TilesetRenderer::Impl {
         }
     }
 
-    // P35: re-apply the debugShowBoundingVolume flag to all currently-loaded
-    // tiles (called when the flag toggles). Render thread only.
-    void updateWireframeVisibility() {
+    // P36: re-apply all debug-volume flags to currently-loaded tiles
+    // (called when any flag toggles). Render thread only.
+    void updateDebugVolumeVisibility() {
         if (tileset == nullptr) {
             return;
         }
@@ -1939,8 +2149,12 @@ struct TilesetRenderer::Impl {
             if (pContent != nullptr) {
                 auto* pData = static_cast<TileRenderData*>(
                     pContent->getRenderResources());
-                if (pData != nullptr && pData->asset != nullptr) {
-                    updateTileWireframe(*pTile, *pData);
+                if (pData != nullptr) {
+                    if (pData->asset != nullptr) {
+                        updateTileWireframe(*pTile, *pData);
+                    }
+                    updateTileBoundingVolume(*pTile, *pData);
+                    updateTileRequestVolume(*pTile, *pData);
                 }
             }
             for (auto& child : pTile->getChildren()) {
@@ -1999,6 +2213,22 @@ struct TilesetRenderer::Impl {
     // P35: debug switches (see renderer.h).
     bool debugShowBoundingVolume = false;
     bool debugShowUrl = false;
+    // P36: Inspector Display section (see renderer.h / ADR-0035).
+    // debugShowBoundingVolume now draws the *tile* bounding volume
+    // (tileset.json); the P35 asset wireframe moved to
+    // debugShowContentBoundingVolume.
+    bool debugShowContentBoundingVolume = false;
+    bool debugShowViewerRequestVolume = false;
+    // P36: Inspector Update section — skip tile selection/LOD update.
+    bool debugFreezeFrame = false;
+    // P36: shared debug line-box resources (lazy; see
+    // ensureDebugLineResources). The unit-box geometry is shared; each
+    // tile's bvEntity/rqEntity carries the volume in its transform.
+    filament::Material* debugLineMaterial = nullptr;
+    filament::MaterialInstance* debugLineMaterialBv = nullptr; // yellow
+    filament::MaterialInstance* debugLineMaterialRq = nullptr; // cyan
+    filament::VertexBuffer* debugLineVb = nullptr;
+    filament::IndexBuffer* debugLineIb = nullptr;
     // P33: load/update timestamps for timeSinceLoadMs().
     std::chrono::steady_clock::time_point loadTime{};
     std::chrono::steady_clock::time_point firstUpdateTime{};
@@ -2120,6 +2350,9 @@ Renderer::TileStats TilesetRenderer::tileStats() const {
     // make "loaded" lie during streaming.
     std::int64_t loadedCount = 0;
     std::int64_t failedCount = 0;
+    // P36: tiles visited by the walk (instantiated tree size) for the
+    // Inspector statistics section.
+    std::int64_t visitedCount = 0;
     const Cesium3DTilesSelection::Tile* pRoot =
         _impl->tileset->getRootTile();
     if (pRoot != nullptr) {
@@ -2128,6 +2361,7 @@ Renderer::TileStats TilesetRenderer::tileStats() const {
         while (!stack.empty()) {
             const Cesium3DTilesSelection::Tile* pTile = stack.back();
             stack.pop_back();
+            ++visitedCount;
             const auto state = pTile->getState();
             if (state == Cesium3DTilesSelection::TileLoadState::Done) {
                 ++loadedCount;
@@ -2155,6 +2389,11 @@ Renderer::TileStats TilesetRenderer::tileStats() const {
     stats.tilesFailed = failedCount;
     stats.tilesLoading += inFlightContent;
     stats.bytesLoaded = _impl->tileset->getTotalDataBytes();
+    // P36: Inspector statistics section.
+    stats.tilesVisited = visitedCount;
+    stats.pendingRequests = static_cast<std::int64_t>(_impl->lastWorkerQueue) +
+                            static_cast<std::int64_t>(_impl->lastMainQueue);
+    stats.tilesProcessing = inFlightContent;
     return stats;
 #else
     return Renderer::TileStats{};
@@ -2344,6 +2583,45 @@ void TilesetRenderer::setModelMatrix(const double matrix[16]) {
                                         *pTile, pData->rtcCenter,
                                         pData->upAxisFix, m,
                                         _impl->localOrigin));
+                        }
+                        // P36: the debug volume line-boxes carry the volume
+                        // in their entity transform; recompose them for the
+                        // new model matrix too.
+                        if (pData->bvInScene) {
+                            const auto bvObb = Cesium3DTilesSelection::
+                                getOrientedBoundingBoxFromBoundingVolume(
+                                    pTile->getBoundingVolume());
+                            const auto bvInstance =
+                                transformManager.getInstance(
+                                    pData->bvEntity);
+                            if (bvInstance.isValid()) {
+                                transformManager.setTransform(
+                                    bvInstance,
+                                    Impl::composeVolumeTransform(
+                                        bvObb.getCenter(),
+                                        bvObb.getHalfAxes(), m,
+                                        _impl->localOrigin));
+                            }
+                        }
+                        if (pData->rqInScene) {
+                            const auto& rq =
+                                pTile->getViewerRequestVolume();
+                            if (rq.has_value()) {
+                                const auto rqObb = Cesium3DTilesSelection::
+                                    getOrientedBoundingBoxFromBoundingVolume(
+                                        rq.value());
+                                const auto rqInstance =
+                                    transformManager.getInstance(
+                                        pData->rqEntity);
+                                if (rqInstance.isValid()) {
+                                    transformManager.setTransform(
+                                        rqInstance,
+                                        Impl::composeVolumeTransform(
+                                            rqObb.getCenter(),
+                                            rqObb.getHalfAxes(), m,
+                                            _impl->localOrigin));
+                                }
+                            }
                         }
                     }
                 }
@@ -2542,13 +2820,13 @@ bool TilesetRenderer::hasExtension(const std::string& name) const {
 #endif
 }
 
-// P35: debug switches. setDebugShowBoundingVolume re-applies the wireframe
-// visibility to all currently-loaded tiles immediately (same pattern as
-// P33 setModelMatrix re-applying transforms).
+// P35: debug switches. P36: the volume flags re-apply to all
+// currently-loaded tiles immediately (same pattern as P33 setModelMatrix
+// re-applying transforms).
 void TilesetRenderer::setDebugShowBoundingVolume(bool show) {
 #if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
     _impl->debugShowBoundingVolume = show;
-    _impl->updateWireframeVisibility();
+    _impl->updateDebugVolumeVisibility();
 #else
     (void)show;
 #endif
@@ -2557,6 +2835,56 @@ void TilesetRenderer::setDebugShowBoundingVolume(bool show) {
 bool TilesetRenderer::isDebugShowBoundingVolume() const {
 #if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
     return _impl->debugShowBoundingVolume;
+#else
+    return false;
+#endif
+}
+
+void TilesetRenderer::setDebugShowContentBoundingVolume(bool show) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->debugShowContentBoundingVolume = show;
+    _impl->updateDebugVolumeVisibility();
+#else
+    (void)show;
+#endif
+}
+
+bool TilesetRenderer::isDebugShowContentBoundingVolume() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->debugShowContentBoundingVolume;
+#else
+    return false;
+#endif
+}
+
+void TilesetRenderer::setDebugShowViewerRequestVolume(bool show) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->debugShowViewerRequestVolume = show;
+    _impl->updateDebugVolumeVisibility();
+#else
+    (void)show;
+#endif
+}
+
+bool TilesetRenderer::isDebugShowViewerRequestVolume() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->debugShowViewerRequestVolume;
+#else
+    return false;
+#endif
+}
+
+void TilesetRenderer::setDebugFreezeFrame(bool freeze) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->debugFreezeFrame = freeze;
+#else
+    (void)freeze;
+#endif
+}
+
+bool TilesetRenderer::isDebugFreezeFrame() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->debugFreezeFrame;
 #else
     return false;
 #endif

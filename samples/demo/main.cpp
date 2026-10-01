@@ -69,6 +69,9 @@ struct DemoArgs {
     std::string hasExtensionName;  // P34: query hasExtension(NAME) at the
                                    // end, print [tileset-info] hasExtension
     bool debugBoundingVolume = false;  // P35: setDebugShowBoundingVolume
+    bool debugContentVolume = false;   // P36: setDebugShowContentBoundingVolume
+    bool debugRequestVolume = false;   // P36: setDebugShowViewerRequestVolume
+    bool debugFreezeFrame = false;     // P36: setDebugFreezeFrame
                                        // before the first frame
     bool debugShowUrl = false;         // P35: setDebugShowUrl before the
                                        // first frame
@@ -215,6 +218,15 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
             // P35: Renderer::setDebugShowBoundingVolume(true) before the
             // first frame (test hook).
             out.debugBoundingVolume = true;
+        } else if (arg == "--debug-content-volume") {
+            // P36: Renderer::setDebugShowContentBoundingVolume(true).
+            out.debugContentVolume = true;
+        } else if (arg == "--debug-request-volume") {
+            // P36: Renderer::setDebugShowViewerRequestVolume(true).
+            out.debugRequestVolume = true;
+        } else if (arg == "--debug-freeze-frame") {
+            // P36: Renderer::setDebugFreezeFrame(true).
+            out.debugFreezeFrame = true;
         } else if (arg == "--debug-show-url") {
             // P35: Renderer::setDebugShowUrl(true) before the first frame
             // (test hook).
@@ -569,6 +581,18 @@ int main(int argc, char** argv) {
                         tiles_renderer::Renderer::
                             setDebugShowBoundingVolume(true);
                     }
+                    // P36: apply the new debug switches right after load.
+                    if (args.debugContentVolume) {
+                        tiles_renderer::Renderer::
+                            setDebugShowContentBoundingVolume(true);
+                    }
+                    if (args.debugRequestVolume) {
+                        tiles_renderer::Renderer::
+                            setDebugShowViewerRequestVolume(true);
+                    }
+                    if (args.debugFreezeFrame) {
+                        tiles_renderer::Renderer::setDebugFreezeFrame(true);
+                    }
                     if (args.debugShowUrl) {
                         tiles_renderer::Renderer::setDebugShowUrl(true);
                     }
@@ -855,7 +879,13 @@ int main(int argc, char** argv) {
                               << " loading=" << st.tilesLoading
                               << " loaded=" << st.tilesLoaded
                               << " failed=" << st.tilesFailed
-                              << " bytes=" << st.bytesLoaded << std::endl;
+                              << " bytes=" << st.bytesLoaded
+                              // P36: extended Inspector statistics; appended
+                              // (stats_test.py's regex matches the prefix).
+                              << " visited=" << st.tilesVisited
+                              << " pending=" << st.pendingRequests
+                              << " processing=" << st.tilesProcessing
+                              << std::endl;
                 }
                 if (args.printSelected) {
                     // P20: per-frame selected tile IDs (frustum/LOD tests).

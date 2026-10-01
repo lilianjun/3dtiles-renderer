@@ -100,9 +100,14 @@ bool g_preloadWhenHidden = false;
 double g_modelMatrix[16] = {1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
                             0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0};
 // P35: debug switches stashed across loadTileset() calls; forwarded to
-// each new TilesetRenderer at load.
+// each new TilesetRenderer at load. P36: split volume flags + freeze frame
+// + overlay callback.
 bool g_debugShowBoundingVolume = false;
+bool g_debugShowContentBoundingVolume = false;
+bool g_debugShowViewerRequestVolume = false;
 bool g_debugShowUrl = false;
+bool g_debugFreezeFrame = false;
+Renderer::OverlayCallback g_overlayCallback;
 
 #ifdef TILES_WITH_FILAMENT
 
@@ -600,7 +605,11 @@ bool Renderer::renderFrame() {
             target.y + d * std::sin(pitch),
             target.z + d * std::cos(pitch) * std::cos(yaw)};
         s.camera->lookAt(eye, target, {0.0f, 1.0f, 0.0f});
-        s.tileset->update(s.width, s.height, s.orbit);
+        // P36: debugFreezeFrame skips the tile selection/LOD update; the
+        // last frame's tiles keep rendering (cesium.js debugFreezeFrame).
+        if (!g_debugFreezeFrame) {
+            s.tileset->update(s.width, s.height, s.orbit);
+        }
         if (s.triangleInScene) {
             s.scene->remove(s.renderable);
             s.triangleInScene = false;
@@ -611,6 +620,11 @@ bool Renderer::renderFrame() {
     }
     if (s.renderer->beginFrame(s.swapChain)) {
         s.renderer->render(s.view);
+        // P36: dev-tool overlay (Inspector panel). Runs after the 3D view,
+        // before present; the demo renders its own UI view here.
+        if (g_overlayCallback) {
+            g_overlayCallback();
+        }
         s.renderer->endFrame();
         // Dispatch any pending driver callbacks (e.g. readPixels completion)
         // on this thread, once per frame as Filament recommends.
@@ -653,6 +667,10 @@ bool Renderer::readPixels(std::vector<std::uint8_t>& outRgba,
         if (s.renderer->beginFrame(s.swapChain)) {
             issued = true;
             s.renderer->render(s.view);
+            // P36: include the dev-tool overlay in screenshots too.
+            if (g_overlayCallback) {
+                g_overlayCallback();
+            }
             s.renderer->readPixels(
                 0, 0, outWidth, outHeight,
                 filament::backend::PixelBufferDescriptor(
@@ -750,6 +768,11 @@ bool Renderer::loadTileset(const std::string& tilesetUrl,
     tileset->setPreloadWhenHidden(g_preloadWhenHidden);
     tileset->setModelMatrix(g_modelMatrix);
     tileset->setDebugShowBoundingVolume(g_debugShowBoundingVolume);
+    tileset->setDebugShowContentBoundingVolume(
+        g_debugShowContentBoundingVolume);
+    tileset->setDebugShowViewerRequestVolume(
+        g_debugShowViewerRequestVolume);
+    tileset->setDebugFreezeFrame(g_debugFreezeFrame);
     tileset->setDebugShowUrl(g_debugShowUrl);
     // P22: build-then-commit. The new TilesetRenderer is fully loaded
     // before it replaces the old one, so a failed loadTileset() (bad
@@ -1111,8 +1134,9 @@ bool Renderer::hasExtension(const std::string& name) {
     return false;
 }
 
-// P35: debug switches (see renderer.h). Stash-then-forward across
-// loadTileset(), same pattern as the P33 display flags.
+// P35: debug switches (see renderer.h). P36: split volume flags + freeze
+// frame. Stash-then-forward across loadTileset(), same pattern as the P33
+// display flags.
 void Renderer::setDebugShowBoundingVolume(bool show) {
     if (!g_initialized) {
         return;
@@ -1127,6 +1151,69 @@ void Renderer::setDebugShowBoundingVolume(bool show) {
 
 bool Renderer::isDebugShowBoundingVolume() {
     return g_debugShowBoundingVolume;
+}
+
+void Renderer::setDebugShowContentBoundingVolume(bool show) {
+    if (!g_initialized) {
+        return;
+    }
+    g_debugShowContentBoundingVolume = show;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setDebugShowContentBoundingVolume(show);
+    }
+#endif
+}
+
+bool Renderer::isDebugShowContentBoundingVolume() {
+    return g_debugShowContentBoundingVolume;
+}
+
+void Renderer::setDebugShowViewerRequestVolume(bool show) {
+    if (!g_initialized) {
+        return;
+    }
+    g_debugShowViewerRequestVolume = show;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setDebugShowViewerRequestVolume(show);
+    }
+#endif
+}
+
+bool Renderer::isDebugShowViewerRequestVolume() {
+    return g_debugShowViewerRequestVolume;
+}
+
+void Renderer::setDebugFreezeFrame(bool freeze) {
+    if (!g_initialized) {
+        return;
+    }
+    g_debugFreezeFrame = freeze;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setDebugFreezeFrame(freeze);
+    }
+#endif
+}
+
+bool Renderer::isDebugFreezeFrame() {
+    return g_debugFreezeFrame;
+}
+
+void Renderer::setOverlayCallback(OverlayCallback cb) {
+    g_overlayCallback = std::move(cb);
+}
+
+void* Renderer::nativeEngineHandle() {
+#ifdef TILES_WITH_FILAMENT
+    if (!g_initialized) {
+        return nullptr;
+    }
+    return static_cast<void*>(g_state.engine);
+#else
+    return nullptr;
+#endif
 }
 
 void Renderer::setDebugShowUrl(bool show) {
