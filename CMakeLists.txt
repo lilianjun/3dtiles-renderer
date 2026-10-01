@@ -508,6 +508,9 @@ if(TILES_WITH_FILAMENT)
     add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}")
     add_dependencies(tiles_renderer tiles_materials)
 
+    # P36-B pivot: the Filament ImGui backend was abandoned (see ADR-0035);
+    # the UI material is no longer needed. The Inspector uses a separate
+    # SDL3 window with imgui_impl_sdlrenderer3.
     # P4: cross platforms build no demo/tests, so nothing would ever link
     # the SDK — add a shared-lib link check to validate the prebuilt lib
     # list (paths + symbol resolution) on each wired platform.
@@ -585,12 +588,40 @@ if(TILES_WITH_SDL3)
     FetchContent_Populate(stb)
   endif()
 
+  # P36-B: Dear ImGui (demo-only UI for the Inspector panel; the SDK
+  # stays zero-ImGui). Pin a release tag.
+  FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG        v1.92.2b
+    GIT_SHALLOW    TRUE
+  )
+  FetchContent_GetProperties(imgui)
+  if(NOT imgui_POPULATED)
+    FetchContent_Populate(imgui)
+  endif()
+  # ImGui ships no CMakeLists: build the core + SDL3 backend as a
+  # demo-private static lib. The Filament renderer backend is our own
+  # (samples/demo/imgui_filament_backend.cpp).
+  add_library(imgui_demo STATIC
+    "${imgui_SOURCE_DIR}/imgui.cpp"
+    "${imgui_SOURCE_DIR}/imgui_draw.cpp"
+    "${imgui_SOURCE_DIR}/imgui_tables.cpp"
+    "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+    "${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp"
+    "${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp"
+  )
+  target_include_directories(imgui_demo PUBLIC
+    "${imgui_SOURCE_DIR}" "${imgui_SOURCE_DIR}/backends")
+  target_link_libraries(imgui_demo PUBLIC SDL3::SDL3-static)
+  target_compile_features(imgui_demo PRIVATE cxx_std_20)
+
   add_executable(tiles_demo samples/demo/main.cpp)
   tiles_apply_sanitizers(tiles_demo)
   if(DEFINED TILES_WINDOWS_DEFS)
     target_compile_definitions(tiles_demo PRIVATE ${TILES_WINDOWS_DEFS})
   endif()
-  target_link_libraries(tiles_demo PRIVATE tiles_renderer SDL3::SDL3-static)
+  target_link_libraries(tiles_demo PRIVATE tiles_renderer SDL3::SDL3-static imgui_demo)
   target_include_directories(tiles_demo PRIVATE "${stb_SOURCE_DIR}")
   target_compile_definitions(tiles_demo PRIVATE TILES_WITH_SDL3)
   target_compile_features(tiles_demo PRIVATE cxx_std_20)

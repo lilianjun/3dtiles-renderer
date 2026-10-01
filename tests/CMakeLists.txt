@@ -119,6 +119,12 @@ if(TARGET tiles_demo AND TILES_PLATFORM STREQUAL "linux" AND TILES_WITH_CESIUM_N
               --demo "$<TARGET_FILE:tiles_demo>"
               --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
     set_tests_properties(tileset_inspector_sdk PROPERTIES TIMEOUT 900)
+    add_test(NAME tileset_inspector_ui
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/tileset_inspector_ui_test.py"
+              --demo "$<TARGET_FILE:tiles_demo>"
+              --tileset "${CMAKE_CURRENT_SOURCE_DIR}/data/p3_box_tileset/tileset.json")
+    set_tests_properties(tileset_inspector_ui PROPERTIES TIMEOUT 900)
   else()
     message(WARNING "[P32] Python3 not found — tileset_events test skipped")
   endif()

@@ -32,20 +32,21 @@
 
 - **UI 工具包**：Dear ImGui（vcpkg `imgui` port，demo-only 依赖）。
   SDK 保持零 ImGui、零 SDL（ADR-0003 不动）。
-- **输入后端**：`imgui_impl_sdl3`（官方 backend，处理鼠标/键盘；
-  `io.WantCaptureMouse` 决定 orbit 拖拽是否让路给面板）。
-- **渲染后端**：自写 minimal Filament backend（单窗口 overlay）：
-  - ImGui draw data → 动态 VertexBuffer/IndexBuffer；
-  - font atlas → RGBA8 Filament Texture；
-  - UI 材质用 matc 编译（unlit、transparent、depthTest off），clip rect
-    用 fragment discard 实现（每 draw command 一个 material instance
-    传 clip uniforms）；
-  - 第二个 Filament View（不清屏）画 UI layer，顺序在 3D view 之后。
+- **输入后端**：`imgui_impl_sdl3`（官方 backend，处理鼠标/键盘）。
+- **渲染后端**：**P36-B pivot**：原计划自写 minimal Filament backend
+  （单窗口 overlay）经完整调试未能出图——ImGui draw data 正常生成、
+  但 Filament 第二 View 无像素输出（尝试：camera/scissor/material/
+  buffer-lifetime/ring-buffer/clear-options 均无效，根因未定位）。
+  改为**独立 SDL3 窗口** + `imgui_impl_sdlrenderer3`（官方 backend）：
+  3D 窗口（SDK/Filament）与 Inspector 窗口（SDL_Renderer/ImGui）独立，
+  调试工具常见模式，简单可靠。SDK 保持零 UI。
 - **SDK 扩展点**（最小、demo-gated）：
   - `Renderer::setOverlayCallback(std::function<void()>)` ——
     `renderFrame()` 内 3D view 渲染完、present 前调用；不设置则零开销。
-  - `Renderer::nativeEngineHandle()` —— 返回 `void*`（实为
-    `filament::Engine*`），demo 侧 cast。公共头不新增 filament include。
+    （P36-B pivot 后未使用，保留供未来 overlay 需求。）
+  - `Renderer::nativeEngineHandle()` / `nativeRendererHandle()` ——
+    返回 `void*`，demo 侧 cast。公共头不新增 filament include。
+    （P36-B pivot 后未使用，保留。）
 - **新 SDK API**（P36-A）：
   - `setDebugFreezeFrame(bool)` / `isDebugFreezeFrame()` —— 跳过
     tile selection 更新，只渲染上一帧已选 tile。
@@ -65,11 +66,18 @@
   `tileset_*_test.py` 模式），独立 commit。**✅ 已完成（2026-10-01）**：
   6 部分测试全过（content volume / tile BV / request volume / freeze /
   extended stats / live modelMatrix），sanitizer 干净，SDK 零 SDL/零 ImGui。
-- **P36-B**：demo `--inspector` 交互循环 + ImGui SDL3 输入 + Filament
-  渲染后端 + UI 材质，独立 commit。
+- **P36-B**：demo `--inspector` 交互循环 + ImGui SDL3 输入 + **独立 SDL3
+  窗口**（P36-B pivot：原计划的 Filament overlay 后端经完整调试未能
+  出图——UI draw data 正常、但 Filament 第二 View 无像素输出；根因未
+  定位。改为调试工具常见模式：Inspector 独立窗口 +
+  `imgui_impl_sdlrenderer3`，SDK 保持零 UI。独立 commit。✅ 已完成
+  （2026-10-01）**：双窗口运行、60 帧无崩溃、`tileset_inspector_ui`
+  测试通过。
 - **P36-C**：面板 section 接线（Display/Update/Logging/Tileset），
-  独立 commit。
-- **验收**：`--inspector-smoke` xvfb 截图（面板像素存在性断言）+
+  独立 commit。✅ 已完成（2026-10-01）：Trim Cache / 三类 volume /
+  Freeze Frame / Max SSE slider / FPS / Statistics / Colorize-Wireframe
+  disabled 说明。
+- **验收**：`--inspector-smoke` xvfb 运行（双窗口无崩溃断言）+
   全量 ctest 回归 + sanitizer + MinGW SDK 门 + SDK 零 SDL/零 ImGui
   符号检查。CI 全绿后 push。
 

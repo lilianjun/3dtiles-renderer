@@ -284,6 +284,11 @@ public:
     // Opaque handle to the underlying filament::Engine (nullptr when not
     // initialized or when built without Filament). For dev-tool use only.
     static void* nativeEngineHandle();
+    // Opaque handle to the underlying filament::Renderer (nullptr when not
+    // initialized or when built without Filament). The overlay callback
+    // uses this to render its own UI view inside the frame. For dev-tool
+    // use only.
+    static void* nativeRendererHandle();
 
     // P34: cesium.js-style cache / statistics / method alignment. All must
     // be called on the render thread.

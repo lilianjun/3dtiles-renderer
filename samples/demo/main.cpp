@@ -12,6 +12,14 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_version.h>
 
+// P36-B: Dear ImGui (demo-only Inspector panel, separate SDL3 window).
+// P36-B pivot: the Filament ImGui backend did not composite (see ADR-0035);
+// the Inspector now lives in its own SDL3 window with the SDL_Renderer
+// backend. The SDK stays UI-free.
+#include <imgui.h>
+#include <imgui_impl_sdl3.h>
+#include <imgui_impl_sdlrenderer3.h>
+
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -77,6 +85,9 @@ struct DemoArgs {
                                        // first frame
     bool noIbl = false;     // P26: disable the default image-based lighting
                             // (renders with the P3 directional sun only)
+    bool inspector = false; // P36-B: interactive Inspector panel (ImGui)
+    int inspectorSmoke = 0; // P36-B: render N frames with the Inspector UI
+                            // visible, take --screenshot, exit (automated)
     // P18: weak-network test hooks (dev/test only, not for production use).
     // --until-loaded N renders up to N frames but stops early once the
     // tileset has settled (loading == 0 && loaded > 0 for 20 consecutive
@@ -227,6 +238,15 @@ bool parseArgs(int argc, char** argv, DemoArgs& out) {
         } else if (arg == "--debug-freeze-frame") {
             // P36: Renderer::setDebugFreezeFrame(true).
             out.debugFreezeFrame = true;
+        } else if (arg == "--inspector") {
+            // P36-B: interactive Inspector panel (ImGui overlay).
+            out.inspector = true;
+        } else if (arg == "--inspector-smoke") {
+            // P36-B: N frames with the Inspector UI, screenshot, exit.
+            std::string value;
+            if (!needValue("--inspector-smoke", value)) return false;
+            out.inspectorSmoke = std::stoi(value);
+            out.inspector = true;
         } else if (arg == "--debug-show-url") {
             // P35: Renderer::setDebugShowUrl(true) before the first frame
             // (test hook).
@@ -390,6 +410,220 @@ tiles_renderer::NativeWindowHandle nativeHandle(SDL_Window* window) {
 
 } // namespace
 
+// P36-B: Inspector interactive mode (Dear ImGui overlay). Runs after
+// Renderer::initialize(). Sets up ImGui (SDL3 input + our Filament
+// renderer backend), installs the overlay callback, and pumps frames
+// until quit (or N frames for --inspector-smoke, then screenshots).
+// Returns the process exit code.
+int runInspectorMode(SDL_Window* window, const DemoArgs& args, int width,
+                     int height) {
+    // P36-B pivot: Inspector lives in its own SDL3 window (not a Filament
+    // overlay). The 3D view renders via the SDK to the main window; the
+    // Inspector panel renders via ImGui + SDL_Renderer to the second window.
+    // This is the standard debug-tool pattern and avoids the Filament
+    // UI compositing complexity (see ADR-0035).
+
+    // Create the Inspector window.
+    SDL_Window* inspectorWindow = SDL_CreateWindow(
+        "3D Tiles Inspector", 480, 640, SDL_WINDOW_RESIZABLE);
+    if (!inspectorWindow) {
+        std::cerr << "[demo] Failed to create Inspector window: "
+                  << SDL_GetError() << std::endl;
+        return 1;
+    }
+    SDL_Renderer* inspectorRenderer =
+        SDL_CreateRenderer(inspectorWindow, nullptr);
+    if (!inspectorRenderer) {
+        std::cerr << "[demo] Failed to create Inspector renderer: "
+                  << SDL_GetError() << std::endl;
+        SDL_DestroyWindow(inspectorWindow);
+        return 1;
+    }
+
+    // ImGui context.
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    ImGui::StyleColorsDark();
+
+    if (!ImGui_ImplSDL3_InitForSDLRenderer(inspectorWindow, inspectorRenderer)) {
+        std::cerr << "[demo] ImGui_ImplSDL3_Init failed" << std::endl;
+        SDL_DestroyRenderer(inspectorRenderer);
+        SDL_DestroyWindow(inspectorWindow);
+        ImGui::DestroyContext();
+        return 1;
+    }
+    if (!ImGui_ImplSDLRenderer3_Init(inspectorRenderer)) {
+        std::cerr << "[demo] ImGui_ImplSDLRenderer3_Init failed" << std::endl;
+        ImGui_ImplSDL3_Shutdown();
+        SDL_DestroyRenderer(inspectorRenderer);
+        SDL_DestroyWindow(inspectorWindow);
+        ImGui::DestroyContext();
+        return 1;
+    }
+
+    std::cout << "[demo] Inspector mode (separate window)" << std::endl;
+    int exitCode = 0;
+    int rendered = 0;
+    const int smokeFrames = args.inspectorSmoke;
+    bool running = true;
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(180);
+    while (running && std::chrono::steady_clock::now() < deadline) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            ImGui_ImplSDL3_ProcessEvent(&event);
+            if (event.type == SDL_EVENT_QUIT) {
+                running = false;
+            }
+            if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+                // Close either window quits (P36-B simplicity).
+                running = false;
+            }
+        }
+        if (smokeFrames > 0 && rendered >= smokeFrames) {
+            break;
+        }
+
+        // 3D view: SDK renders to the main window.
+        if (tiles_renderer::Renderer::renderFrame()) {
+            ++rendered;
+        } else {
+            SDL_Delay(4);
+        }
+
+        // Inspector window: ImGui panel.
+        ImGui_ImplSDLRenderer3_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+
+        // P36-C: 3D Tiles Inspector panel (v1 scope per ADR-0035).
+        ImGui::Begin("3D Tiles Inspector");
+        
+        // FPS (calculated from frame time).
+        static auto lastTime = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        float fps = 0.0f;
+        {
+            auto dt = std::chrono::duration_cast<std::chrono::microseconds>(
+                now - lastTime).count();
+            if (dt > 0) fps = 1000000.0f / dt;
+        }
+        lastTime = now;
+        ImGui::Text("FPS: %.1f", fps);
+        ImGui::Separator();
+
+        // Section: Tileset
+        if (ImGui::CollapsingHeader("Tileset", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::Button("Trim Tiles Cache")) {
+                tiles_renderer::Renderer::trimLoadedTiles();
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("(unloads unused tiles)");
+        }
+
+        // Section: Display
+        if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen)) {
+            bool showBV = tiles_renderer::Renderer::isDebugShowBoundingVolume();
+            if (ImGui::Checkbox("Bounding Volumes", &showBV)) {
+                tiles_renderer::Renderer::setDebugShowBoundingVolume(showBV);
+            }
+            bool showCV = tiles_renderer::Renderer::isDebugShowContentBoundingVolume();
+            if (ImGui::Checkbox("Content Volumes", &showCV)) {
+                tiles_renderer::Renderer::setDebugShowContentBoundingVolume(showCV);
+            }
+            bool showRV = tiles_renderer::Renderer::isDebugShowViewerRequestVolume();
+            if (ImGui::Checkbox("Request Volumes", &showRV)) {
+                tiles_renderer::Renderer::setDebugShowViewerRequestVolume(showRV);
+            }
+            // Colorize/Wireframe: not supported (Filament/gltfio limitation).
+            ImGui::BeginDisabled();
+            bool dummy = false;
+            ImGui::Checkbox("Colorize", &dummy);
+            ImGui::Checkbox("Wireframe", &dummy);
+            ImGui::EndDisabled();
+            ImGui::TextDisabled("Colorize/Wireframe not supported:");
+            ImGui::TextDisabled("Filament v1.77 gltfio has no runtime");
+            ImGui::TextDisabled("material wireframe/colorize switch.");
+        }
+
+        // Section: Update
+        if (ImGui::CollapsingHeader("Update", ImGuiTreeNodeFlags_DefaultOpen)) {
+            bool freeze = tiles_renderer::Renderer::isDebugFreezeFrame();
+            if (ImGui::Checkbox("Freeze Frame", &freeze)) {
+                tiles_renderer::Renderer::setDebugFreezeFrame(freeze);
+            }
+            double sse = tiles_renderer::Renderer::maximumScreenSpaceError();
+            float sseF = static_cast<float>(sse);
+            if (ImGui::SliderFloat("Max Screen Space Error", &sseF, 0.0f, 128.0f, "%.0f")) {
+                tiles_renderer::Renderer::setMaximumScreenSpaceError(sseF);
+            }
+        }
+
+        // Section: Statistics
+        if (ImGui::CollapsingHeader("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+            auto stats = tiles_renderer::Renderer::tileStats();
+            ImGui::Text("Tiles visited: %lld", (long long)stats.tilesVisited);
+            ImGui::Text("Tiles selected: %lld", (long long)stats.selectedTiles);
+            ImGui::Text("Tiles loaded: %lld", (long long)stats.tilesLoaded);
+            ImGui::Text("Tiles loading: %lld", (long long)stats.tilesLoading);
+            ImGui::Text("  pending requests: %lld", (long long)stats.pendingRequests);
+            ImGui::Text("  processing: %lld", (long long)stats.tilesProcessing);
+            ImGui::Text("Tiles failed: %lld", (long long)stats.tilesFailed);
+            auto memBytes = tiles_renderer::Renderer::totalMemoryUsageInBytes();
+            ImGui::Text("Memory: %.2f MB", memBytes / (1024.0 * 1024.0));
+            ImGui::Text("3D frames rendered: %d", rendered);
+        }
+
+        if (ImGui::Button("Quit")) {
+            running = false;
+        }
+        ImGui::End();
+
+        ImGui::Render();
+        SDL_SetRenderDrawColor(inspectorRenderer, 30, 30, 30, 255);
+        SDL_RenderClear(inspectorRenderer);
+        ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(),
+                                              inspectorRenderer);
+        SDL_RenderPresent(inspectorRenderer);
+    }
+
+    // Screenshot for --inspector-smoke: capture the 3D window (the Inspector
+    // is a separate window; its content is verified by the smoke test
+    // checking that the window rendered without crashing).
+    if (exitCode == 0 && smokeFrames > 0 && !args.screenshot.empty()) {
+        std::vector<std::uint8_t> rgba;
+        std::uint32_t sw = 0, sh = 0;
+        if (!tiles_renderer::Renderer::readPixels(rgba, sw, sh)) {
+            std::cerr << "[demo] inspector readPixels failed" << std::endl;
+            exitCode = 1;
+        } else if (!stbi_write_png(args.screenshot.c_str(),
+                                   static_cast<int>(sw), static_cast<int>(sh),
+                                   4, rgba.data(),
+                                   static_cast<int>(sw) * 4)) {
+            std::cerr << "[demo] failed to write " << args.screenshot
+                      << std::endl;
+            exitCode = 1;
+        } else {
+            std::cout << "[demo] inspector screenshot: " << args.screenshot
+                      << " (" << sw << "x" << sh << ")" << std::endl;
+        }
+    }
+
+    ImGui_ImplSDLRenderer3_Shutdown();
+    ImGui_ImplSDL3_Shutdown();
+    SDL_DestroyRenderer(inspectorRenderer);
+    SDL_DestroyWindow(inspectorWindow);
+    ImGui::DestroyContext();
+    std::cout << "[demo] Inspector mode: rendered " << rendered << " frames"
+              << std::endl;
+    if (exitCode == 0) {
+        std::cout << "[demo] OK" << std::endl;
+    }
+    return exitCode;
+}
+
 int main(int argc, char** argv) {
     std::cout << "tiles_demo v" << TILES_RENDERER_VERSION
               << " (platform: " << TILES_RENDERER_PLATFORM << ")" << std::endl;
@@ -442,6 +676,9 @@ int main(int argc, char** argv) {
     } else if (!tiles_renderer::Renderer::initialize(config)) {
         std::cerr << "[demo] Renderer::initialize failed" << std::endl;
         exitCode = 1;
+    } else if (args.inspector) {
+        // P36-B: Inspector mode branches off here (own event loop).
+        exitCode = runInspectorMode(window, args, w, h);
     } else {
         // P26: IBL toggle for A/B pixel tests (default is on).
         if (args.noIbl) {

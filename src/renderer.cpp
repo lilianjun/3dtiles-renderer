@@ -1216,6 +1216,17 @@ void* Renderer::nativeEngineHandle() {
 #endif
 }
 
+void* Renderer::nativeRendererHandle() {
+#ifdef TILES_WITH_FILAMENT
+    if (!g_initialized) {
+        return nullptr;
+    }
+    return static_cast<void*>(g_state.renderer);
+#else
+    return nullptr;
+#endif
+}
+
 void Renderer::setDebugShowUrl(bool show) {
     if (!g_initialized) {
         return;
