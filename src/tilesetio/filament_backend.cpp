@@ -230,22 +230,14 @@ FilamentTileResources FilamentBackend::createTile(
                 filament::TextureSampler::MagFilter::LINEAR);
             mi->setParameter("baseColorMap", tex, sampler);
         } else {
-            // Solid color: use PBR if we have normals (gives diffuse lighting).
-            if (usePbr) {
-                mi = _pbrMaterial->createInstance();
-                mi->setParameter(
-                    "baseColor",
-                    filament::math::float4(
-                        prim.color[0], prim.color[1], prim.color[2], prim.color[3]));
-                mi->setParameter("metallic", 0.0f);
-                mi->setParameter("roughness", 0.9f);
-            } else {
-                mi = _material->createInstance();
-                mi->setParameter(
-                    "color",
-                    filament::math::float3(
-                        prim.color[0], prim.color[1], prim.color[2]));
-            }
+            // Solid color: use UNLIT (no lighting, direct color).
+            // Per user 2026-10-01: lighting is not the goal for this stage.
+            // Both Cesium benchmark and our renderer use direct colors.
+            mi = _material->createInstance();
+            mi->setParameter(
+                "color",
+                filament::math::float3(
+                    prim.color[0], prim.color[1], prim.color[2]));
         }
         res.materialInstances.push_back(mi);
 
