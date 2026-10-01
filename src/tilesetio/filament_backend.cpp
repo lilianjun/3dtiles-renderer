@@ -4,6 +4,7 @@
 
 #include "filament_backend.h"
 
+#include "pbr_color_filamat.h"
 #include "unlit_color_filamat.h"
 #include "unlit_textured_filamat.h"
 
@@ -36,6 +37,12 @@ FilamentTileResources FilamentBackend::createTile(
                                 .package(unlit_textured_filamat,
                                          unlit_textured_filamat_len)
                                 .build(*engine);
+    }
+    // Create the shared PBR material on first use (for primitives with normals).
+    if (!_pbrMaterial) {
+        _pbrMaterial = filament::Material::Builder()
+                           .package(pbr_color_filamat, pbr_color_filamat_len)
+                           .build(*engine);
     }
 
     for (const auto& prim : data.primitives) {

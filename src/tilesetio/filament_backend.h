@@ -36,7 +36,7 @@ public:
     FilamentBackend& operator=(const FilamentBackend&) = delete;
 
     // Create Filament resources for a tile's render data.
-    // The backend creates and owns a shared unlit Material on first use.
+    // The backend creates and owns shared materials on first use.
     // Returns per-tile resources for later destruction.
     // The caller adds entities to the scene and applies tileTransform.
     FilamentTileResources createTile(
@@ -55,6 +55,7 @@ public:
 private:
     filament::Material* _material = nullptr;         // unlit solid color
     filament::Material* _texturedMaterial = nullptr; // unlit with texture
+    filament::Material* _pbrMaterial = nullptr;      // PBR lit (with normals)
 };
 
 } // namespace tilesetio
