@@ -968,6 +968,10 @@ public:
                 // P37: mark model so convertModel skips its own upAxisFix
                 // (already applied via pData->upAxisFix at asset root,
                 // or not needed for cmpt merges).
+                // TODO(P37): cmpt merge i3dm instances have coordinate space
+                // issues (SSIM 0.4855). The instance translations may be in
+                // a different space than the node transform. Needs deeper
+                // investigation of CmptToGltfConverter output.
                 pData->model->extras["tilesetio_i3dmFixApplied"] =
                     CesiumUtility::JsonValue(true);
                 expandGpuInstancing(pData->model.value());
