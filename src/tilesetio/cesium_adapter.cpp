@@ -413,6 +413,22 @@ TileRenderData convertModel(
                 }
             }
 
+            // P37: Cesium.js renders point clouds without colors as DARKGRAY
+            // (#A9A9A9). See PntsLoader.js: "By default, point clouds are
+            // rendered as dark gray." Our pd.color defaults to white; override
+            // for POINTS primitives with no vertex colors.
+            // DARKGRAY sRGB (0.6627) -> linear ≈ 0.404 (via srgbToLinear).
+            if (pd.primType == 2 && pd.colors.empty()) {
+                const bool isDefaultWhite =
+                    pd.color[0] == 1.0f && pd.color[1] == 1.0f &&
+                    pd.color[2] == 1.0f;
+                if (isDefaultWhite) {
+                    pd.color[0] = 0.404f;
+                    pd.color[1] = 0.404f;
+                    pd.color[2] = 0.404f;
+                }
+            }
+
             out.primitives.push_back(std::move(pd));
         }
     };
