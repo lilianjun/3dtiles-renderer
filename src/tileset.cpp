@@ -792,13 +792,15 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
             }
             // P37: For cmpt merges, the node matrix is already Z-up (with
             // ECEF baked by the converter), but instance TRS is still Y-up.
-            // Convert instance TRS to Z-up: (x,y,z)->(x,z,-y).
+            // Convert instance TRS to Z-up to match upAxisFix: (x,y,z)->(x,-z,y).
             glm::dvec3 tz(t);
             glm::dquat rq(r.w, r.x, r.y, r.z);
             glm::dvec3 sz(s);
             if (convertInstanceYUpToZUp) {
-                tz = glm::dvec3(t.x, t.z, -t.y);
-                const glm::dquat fixQ(-0.7071067811865476, 0.0, 0.0, 0.7071067811865476);
+                tz = glm::dvec3(t.x, -t.z, t.y);
+                // Quaternion for +90 deg about X (Y-up -> Z-up), matching upAxisFix.
+                // upAxisFix maps (x,y,z)->(x,-z,y).
+                const glm::dquat fixQ(0.7071067811865476, 0.7071067811865476, 0.0, 0.0);
                 rq = fixQ * rq * glm::inverse(fixQ);
                 sz = glm::dvec3(s.x, s.z, s.y);
             }

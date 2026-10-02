@@ -448,13 +448,13 @@ TileRenderData convertModel(
         };
 
     if (!model.scenes.empty()) {
-        int sceneIdx = model.scene >= 0 &&
-                       static_cast<size_t>(model.scene) < model.scenes.size()
-                           ? model.scene
-                           : 0;
-        for (int rootNode :
-             model.scenes[static_cast<size_t>(sceneIdx)].nodes)
-            traverse(rootNode, glm::dmat4(1.0));
+        // P37: Traverse ALL scenes, not just the default. expandGpuInstancing
+        // splices clones into the scene where the instanced node was found,
+        // which may differ from model.scene (e.g., cmpt merge has 3 scenes).
+        for (size_t s = 0; s < model.scenes.size(); ++s) {
+            for (int rootNode : model.scenes[s].nodes)
+                traverse(rootNode, glm::dmat4(1.0));
+        }
     } else {
         // No scenes: fall back to all nodes as roots (defensive).
         for (size_t i = 0; i < model.nodes.size(); ++i)
