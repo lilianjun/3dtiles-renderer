@@ -795,11 +795,27 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
             // Convert instance TRS to Z-up to match upAxisFix: (x,y,z)->(x,-z,y).
             // HOWEVER: if translation is large (>1000), it's an absolute ECEF
             // position (not Y-up), do NOT convert; use as-is.
+            // Additionally, per Cesium.js I3dmLoader, when EAST_NORTH_UP is
+            // true (absolute positions), the instance rotation is the ENU to
+            // ECEF frame at the position, not identity.
             glm::dvec3 tz(t);
             glm::dquat rq(r.w, r.x, r.y, r.z);
             glm::dvec3 sz(s);
             bool isAbsolute = glm::length(glm::dvec3(t.x, t.y, t.z)) > 1000.0;
-            if (convertInstanceYUpToZUp && !isAbsolute) {
+            if (isAbsolute) {
+                // Compute ENU-to-ECEF rotation at position tz.
+                // up = normalize(position), east = normalize(cross(Z, up)),
+                // north = cross(up, east). Rotation columns: [east, north, up].
+                glm::dvec3 up = glm::normalize(tz);
+                glm::dvec3 east = glm::normalize(glm::cross(glm::dvec3(0,0,1), up));
+                glm::dvec3 north = glm::cross(up, east);
+                glm::dmat3 enuRot(east, north, up);
+                // Combine with instance rotation (if any): enu * instanceRot
+                glm::dmat3 instRot(rq);
+                glm::dmat3 combined = enuRot * instRot;
+                rq = glm::quat_cast(combined);
+                // tz stays as absolute ECEF; do NOT apply Y-up conversion.
+            } else if (convertInstanceYUpToZUp) {
                 tz = glm::dvec3(t.x, -t.z, t.y);
                 // Quaternion for +90 deg about X (Y-up -> Z-up), matching upAxisFix.
                 // upAxisFix maps (x,y,z)->(x,-z,y).
