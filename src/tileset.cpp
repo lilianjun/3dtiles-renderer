@@ -793,10 +793,13 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
             // P37: For cmpt merges, the node matrix is already Z-up (with
             // ECEF baked by the converter), but instance TRS is still Y-up.
             // Convert instance TRS to Z-up to match upAxisFix: (x,y,z)->(x,-z,y).
+            // HOWEVER: if translation is large (>1000), it's an absolute ECEF
+            // position (not Y-up), do NOT convert; use as-is.
             glm::dvec3 tz(t);
             glm::dquat rq(r.w, r.x, r.y, r.z);
             glm::dvec3 sz(s);
-            if (convertInstanceYUpToZUp) {
+            bool isAbsolute = glm::length(glm::dvec3(t.x, t.y, t.z)) > 1000.0;
+            if (convertInstanceYUpToZUp && !isAbsolute) {
                 tz = glm::dvec3(t.x, -t.z, t.y);
                 // Quaternion for +90 deg about X (Y-up -> Z-up), matching upAxisFix.
                 // upAxisFix maps (x,y,z)->(x,-z,y).
@@ -808,7 +811,15 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
                 glm::translate(glm::dmat4(1.0), tz) *
                 glm::mat4_cast(rq) *
                 glm::scale(glm::dmat4(1.0), sz);
-            const glm::dmat4 m = base * inst;
+            // P37: If instance translation is absolute (large), it's already
+            // the full position; do NOT multiply by base (double-count).
+            // Otherwise, it's a local offset: m = base * inst.
+            glm::dmat4 m;
+            if (isAbsolute) {
+                m = inst;
+            } else {
+                m = base * inst;
+            }
             Node clone = node; // copies mesh, name, children, ...
             clone.extensions.erase(kExt);
             clone.matrix.assign(
