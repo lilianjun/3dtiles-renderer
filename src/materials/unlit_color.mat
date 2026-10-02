@@ -9,9 +9,8 @@ material {
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        // P37: Match Cesium benchmark CustomShader:
-        // material.diffuse = pow(material.diffuse, vec3(2.2)).
-        // baseColorFactor is sRGB; convert to linear.
-        material.baseColor.rgb = pow(materialParams.color, vec3(2.2));
+        // P37: baseColorFactor from Cesium Native is already linear
+        // (srgbToLinear applied in converter). Output directly.
+        material.baseColor.rgb = materialParams.color;
     }
 }

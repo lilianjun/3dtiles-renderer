@@ -7,9 +7,9 @@ material {
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        // P37: Match Cesium benchmark CustomShader:
-        // material.diffuse = pow(material.diffuse, vec3(2.2)).
-        // COLOR_0 vertex colors (pnts) are sRGB; convert to linear.
-        material.baseColor.rgb = pow(getColor().rgb, vec3(2.2));
+        // P37: COLOR_0 from Cesium Native PntsToGltfConverter is already
+        // linear (srgbToLinear applied in converter). Output directly;
+        // Filament does linear->sRGB at output.
+        material.baseColor.rgb = getColor().rgb;
     }
 }
