@@ -2152,15 +2152,38 @@ struct TilesetRenderer::Impl {
                     }
                 }
                 const auto& entities = pData->filamentResources.entities;
-                if (want && !pData->inScene) {
+                // P37-FLOAT: Floating-origin: compute modelView = view * model
+                // in double on CPU (small result), upload to GPU. Shader never
+                // sees large world/view matrices, only the small view-space
+                // modelView. Update every frame when view is available.
+                bool useModelView = hasViewMatrix;
+                if (want && (!pData->inScene || useModelView)) {
                     // T1 (tilesetio): apply tile transform to each entity.
                     {
                         auto& tm = engine->getTransformManager();
                         filament::math::mat4f m;
-                        for (int c = 0; c < 4; ++c)
-                            for (int r = 0; r < 4; ++r)
-                                m[c][r] = static_cast<float>(
-                                    pData->tileTransform[c * 4 + r]);
+                        if (useModelView) {
+                            // modelView = view * model in double, then to float.
+                            // Both view and model may be large, but the product
+                            // is small (view-space). Computed in double, no
+                            // precision loss.
+                            glm::dmat4 view(1.0);
+                            glm::dmat4 model(1.0);
+                            for (int c = 0; c < 4; ++c)
+                                for (int r = 0; r < 4; ++r) {
+                                    view[c][r] = viewMatrix[c * 4 + r];
+                                    model[c][r] = pData->tileTransform[c * 4 + r];
+                                }
+                            glm::dmat4 mv = view * model;
+                            for (int c = 0; c < 4; ++c)
+                                for (int r = 0; r < 4; ++r)
+                                    m[c][r] = static_cast<float>(mv[c][r]);
+                        } else {
+                            for (int c = 0; c < 4; ++c)
+                                for (int r = 0; r < 4; ++r)
+                                    m[c][r] = static_cast<float>(
+                                        pData->tileTransform[c * 4 + r]);
+                        }
                         for (auto e : entities) {
                             tm.setTransform(tm.getInstance(e), m);
                         }
@@ -2393,6 +2416,11 @@ struct TilesetRenderer::Impl {
 
     filament::Engine* engine = nullptr;
     filament::Scene* scene = nullptr;
+    // P37-FLOAT: Double-precision view matrix for the current frame.
+    // Used for floating-origin: modelView = view * model computed in double
+    // on CPU, small result uploaded to GPU. Shader never sees large matrices.
+    double viewMatrix[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    bool hasViewMatrix = false;
     // Destruction order matters (reverse of declaration): tileset first,
     // then asyncSystem, then taskProcessor — so background tasks are joined
     // only after the tileset is gone.
@@ -2743,6 +2771,15 @@ void TilesetRenderer::setShow(bool show) {
     _impl->show = show;
 #else
     (void)show;
+#endif
+}
+
+void TilesetRenderer::setViewMatrix(const double viewMatrix[16]) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    std::memcpy(_impl->viewMatrix, viewMatrix, 16 * sizeof(double));
+    _impl->hasViewMatrix = true;
+#else
+    (void)viewMatrix;
 #endif
 }
 
