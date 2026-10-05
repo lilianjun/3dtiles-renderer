@@ -816,10 +816,10 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
                 rq = glm::quat_cast(combined);
                 // tz stays as absolute ECEF; do NOT apply Y-up conversion.
             } else if (convertInstanceYUpToZUp) {
-                // Original Y-up to Z-up for instance TRS (reverted: the
-                // (x,-z,y) variant broke i3dm_tileset_screenshot).
-                tz = glm::dvec3(t.x, t.z, -t.y);
-                const glm::dquat fixQ(-0.7071067811865476, 0.0, 0.0, 0.7071067811865476);
+                tz = glm::dvec3(t.x, -t.z, t.y);
+                // Quaternion for +90 deg about X (Y-up -> Z-up), matching upAxisFix.
+                // upAxisFix maps (x,y,z)->(x,-z,y).
+                const glm::dquat fixQ(0.7071067811865476, 0.7071067811865476, 0.0, 0.0);
                 rq = fixQ * rq * glm::inverse(fixQ);
                 sz = glm::dvec3(s.x, s.z, s.y);
             }
