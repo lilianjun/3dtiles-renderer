@@ -115,6 +115,11 @@ async function run() {
     useBrowserRecommendedResolution: false,
   });
   viewer.resolutionScale = 1.0;
+  // P37: Force pixelRatio=1.0 for deterministic 1px point rendering.
+  // Without this, headless Chrome's window.devicePixelRatio (often 2) makes
+  // gl_PointSize = 2 via PointCloud.js u_pointSize *= frameState.pixelRatio,
+  // causing a harness-environment artifact (2-3px points vs spec 1px).
+  viewer.scene.pixelRatio = 1.0;
 
   // P37-C param alignment: disable sky, atmosphere, shadows, IBL.
   viewer.scene.skyBox = undefined;
