@@ -51,7 +51,7 @@ function serveDirectory(rootDir, port) {
       fs.readFile(filePath, (err, data) => {
         if (err) { res.writeHead(404); res.end(); return; }
         const ext = path.extname(filePath).toLowerCase();
-        res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
+        res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream', 'Access-Control-Allow-Origin': '*' });
         res.end(data);
       });
     });
@@ -84,6 +84,7 @@ async function main() {
 
   const browser = await puppeteer.launch({
     headless: 'new',
+    executablePath: '/home/hatch/workspace/chrome-feasibility/chrome-headless-shell-linux64/chrome-headless-shell',
     args: [
       '--use-gl=swiftshader',  // Software WebGL
       '--enable-unsafe-swiftshader',
@@ -118,7 +119,7 @@ async function run() {
 
   // P37-C param alignment: disable sky, atmosphere, shadows, IBL.
   viewer.scene.skyBox = undefined;
-  viewer.scene.skyAtmosphere = false;
+  viewer.scene.skyAtmosphere.show = false;
   viewer.scene.shadowMap.enabled = false;
   viewer.scene.globe = undefined;  // No globe, just the tileset.
   viewer.scene.backgroundColor = new Cesium.Color(${bg[0]}, ${bg[1]}, ${bg[2]}, ${bg[3]});
