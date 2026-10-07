@@ -46,6 +46,12 @@ struct TileRenderData {
     // Column-major 4x4. Applied by the orchestrator to the renderable entities.
     double tileTransform[16];
 
+    // P37: CESIUM_RTC center from glTF extension (for PNTS RTC_CENTER).
+    // Positions are relative to this center. Backend uses it to compute
+    // the RTC model-view matrix per spec: rtcCenterEye = view * rtcCenter.
+    double rtcCenter[3] = {0, 0, 0};
+    bool hasRtcCenter = false;
+
     // Human-readable tile ID for logging.
     std::string tileId;
 };
