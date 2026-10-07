@@ -436,6 +436,39 @@ TileRenderData convertModel(
             if (pd.primType == 2) {
                 const size_t numPoints = pd.positions.size() / 3;
                 if (numPoints > 0) {
+                    // P37: Rebase large ECEF positions to local origin.
+                    // PNTS positions may be in ECEF (1.2M) with no node
+                    // transform; float32 loses precision (~0.1m error).
+                    // Subtract center, fold into tileTransform.
+                    glm::dvec3 center(0.0);
+                    for (size_t i = 0; i < numPoints; ++i) {
+                        center.x += pd.positions[i * 3];
+                        center.y += pd.positions[i * 3 + 1];
+                        center.z += pd.positions[i * 3 + 2];
+                    }
+                    center /= static_cast<double>(numPoints);
+                    if (glm::length(center) > 1000.0) {
+                        // Fold into out.tileTransform: out = T(center) * in
+                        glm::dmat4 inT(1.0);
+                        for (int cc = 0; cc < 4; ++cc)
+                            for (int rr = 0; rr < 4; ++rr)
+                                inT[cc][rr] = out.tileTransform[cc * 4 + rr];
+                        glm::dmat4 transMat(1.0);
+                        transMat[3] = glm::dvec4(center, 1.0);
+                        glm::dmat4 combined = transMat * inT;
+                        for (int cc = 0; cc < 4; ++cc)
+                            for (int rr = 0; rr < 4; ++rr)
+                                out.tileTransform[cc * 4 + rr] = combined[cc][rr];
+                        // Subtract center from positions (now small)
+                        for (size_t i = 0; i < numPoints; ++i) {
+                            pd.positions[i * 3] = static_cast<float>(
+                                pd.positions[i * 3] - center.x);
+                            pd.positions[i * 3 + 1] = static_cast<float>(
+                                pd.positions[i * 3 + 1] - center.y);
+                            pd.positions[i * 3 + 2] = static_cast<float>(
+                                pd.positions[i * 3 + 2] - center.z);
+                        }
+                    }
                     std::vector<float> quadPos;
                     std::vector<float> quadCol;
                     std::vector<float> quadUv;

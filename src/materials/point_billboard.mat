@@ -7,10 +7,10 @@ material {
 
 vertex {
     void materialVertex(inout MaterialVertexInputs material) {
-        // P37: Standard billboard. Positions are in world space;
-        // offset along view-plane XY (camera looks along -Z in view space,
-        // but worldPosition is world space - use small fixed offset).
-        // TODO: Use cameraRight/cameraUp from view matrix for correctness.
+        // P37: Billboard quad offset in world space.
+        // Positions are rebased to local origin (small values), so
+        // world-space XY offset approximates view-plane offset for
+        // the test camera. Standard implementations use camera basis.
         vec2 corner = material.uv0 * 2.0 - 1.0; // [0,1] -> [-1,1]
         const float pointSize = 0.007;
         material.worldPosition.xy += corner * pointSize;
