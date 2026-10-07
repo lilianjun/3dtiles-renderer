@@ -429,6 +429,54 @@ TileRenderData convertModel(
                 }
             }
 
+            // P37: Convert POINTS to billboard quads for mature cross-API
+            // point rendering (GL_POINTS rasterization is inconsistent).
+            // Each point -> 4 verts (same position) with UV encoding the
+            // corner; vertex shader billboards in view space.
+            if (pd.primType == 2) {
+                const size_t numPoints = pd.positions.size() / 3;
+                if (numPoints > 0) {
+                    std::vector<float> quadPos;
+                    std::vector<float> quadCol;
+                    std::vector<float> quadUv;
+                    std::vector<uint32_t> quadIdx;
+                    quadPos.reserve(numPoints * 12);
+                    quadUv.reserve(numPoints * 8);
+                    quadIdx.reserve(numPoints * 6);
+                    const bool hasColors = !pd.colors.empty();
+                    if (hasColors) quadCol.reserve(numPoints * 12);
+                    // Corners: (-1,-1), (1,-1), (1,1), (-1,1) encoded as UV [0,1]
+                    const float corners[4][2] = {{0,0}, {1,0}, {1,1}, {0,1}};
+                    for (size_t i = 0; i < numPoints; ++i) {
+                        const float x = pd.positions[i * 3];
+                        const float y = pd.positions[i * 3 + 1];
+                        const float z = pd.positions[i * 3 + 2];
+                        const uint32_t base = static_cast<uint32_t>(
+                            quadPos.size() / 3);
+                        for (int k = 0; k < 4; ++k) {
+                            quadPos.insert(quadPos.end(), {x, y, z});
+                            quadUv.insert(quadUv.end(),
+                                          {corners[k][0], corners[k][1]});
+                            if (hasColors) {
+                                quadCol.insert(quadCol.end(), {
+                                    pd.colors[i * 3], pd.colors[i * 3 + 1],
+                                    pd.colors[i * 3 + 2]});
+                            }
+                        }
+                        quadIdx.insert(quadIdx.end(), {
+                            base, base + 1, base + 2,
+                            base, base + 2, base + 3,
+                        });
+                    }
+                    pd.positions = std::move(quadPos);
+                    pd.uvs = std::move(quadUv);
+                    if (hasColors) pd.colors = std::move(quadCol);
+                    pd.indices = std::move(quadIdx);
+                    pd.primType = 0; // TRIANGLES
+                    pd.isBillboard = true;
+                }
+            }
+
             out.primitives.push_back(std::move(pd));
         }
     };

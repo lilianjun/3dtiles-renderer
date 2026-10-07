@@ -1,0 +1,28 @@
+material {
+    name : point_billboard,
+    shadingModel : unlit,
+    requires : [ color, uv0 ],
+    culling : none
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        // P37: Billboard point rendering.
+        // Each point -> 4 verts (same position), UV encodes corner.
+        // Due to floating-origin (entity transform = modelView, camera =
+        // identity), material.worldPosition is already in view space.
+        // Offset XY in view space for camera-facing quads.
+        vec2 corner = material.uv0 * 2.0 - 1.0; // [0,1] -> [-1,1]
+        // P37: Fixed-size billboard tuned for ~1-2px.
+        // TODO: Distance-scaled for constant screen size (needs tuning).
+        float pointSize = 0.007;
+        material.worldPosition.xy += corner * pointSize;
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor.rgb = getColor().rgb;
+    }
+}

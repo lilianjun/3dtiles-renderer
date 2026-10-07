@@ -8,6 +8,7 @@
 #include "unlit_color_filamat.h"
 #include "unlit_textured_filamat.h"
 #include "unlit_vertex_color_filamat.h"
+#include "point_billboard_filamat.h"
 
 #include <filament/IndexBuffer.h>
 #include <filament/RenderableManager.h>
@@ -73,6 +74,13 @@ FilamentTileResources FilamentBackend::createTile(
                                    .package(unlit_vertex_color_filamat,
                                             unlit_vertex_color_filamat_len)
                                    .build(*engine);
+    }
+    // P37: Billboard material for point quads (mature cross-API points).
+    if (!_billboardMaterial) {
+        _billboardMaterial = filament::Material::Builder()
+                                 .package(point_billboard_filamat,
+                                          point_billboard_filamat_len)
+                                 .build(*engine);
     }
 
     for (const auto& prim : data.primitives) {
@@ -270,7 +278,12 @@ FilamentTileResources FilamentBackend::createTile(
         } else if (hasColors) {
             // P37: Vertex colors (pnts point clouds) - use vertex color material.
             // The material reads COLOR attribute, no uniform color needed.
-            mi = _vertexColorMaterial->createInstance();
+            // If billboard, use the billboard material (vertex shader expands).
+            if (prim.isBillboard) {
+                mi = _billboardMaterial->createInstance();
+            } else {
+                mi = _vertexColorMaterial->createInstance();
+            }
         } else {
             // Solid color: use UNLIT (no lighting, direct color).
             // Per user 2026-10-01: lighting is not the goal for this stage.

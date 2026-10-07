@@ -33,6 +33,9 @@ struct PrimitiveData {
     // P37: primitive type for rendering (0=TRIANGLES, 1=LINES, 2=POINTS).
     // TRIANGLES is default; LINES for CESIUM_primitive_outline; POINTS for pnts.
     int primType = 0;
+    // P37: true if this was a POINTS primitive expanded to billboard quads.
+    // Backend uses point_billboard material (vertex shader billboarding).
+    bool isBillboard = false;
 };
 
 // Complete render data for one tile.
