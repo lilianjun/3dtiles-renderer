@@ -7,15 +7,12 @@ material {
 
 vertex {
     void materialVertex(inout MaterialVertexInputs material) {
-        // P37: Billboard point rendering.
-        // Each point -> 4 verts (same position), UV encodes corner.
-        // Due to floating-origin (entity transform = modelView, camera =
-        // identity), material.worldPosition is already in view space.
-        // Offset XY in view space for camera-facing quads.
+        // P37: Standard billboard. Positions are in world space;
+        // offset along view-plane XY (camera looks along -Z in view space,
+        // but worldPosition is world space - use small fixed offset).
+        // TODO: Use cameraRight/cameraUp from view matrix for correctness.
         vec2 corner = material.uv0 * 2.0 - 1.0; // [0,1] -> [-1,1]
-        // P37: Fixed-size billboard tuned for ~1-2px.
-        // TODO: Distance-scaled for constant screen size (needs tuning).
-        float pointSize = 0.007;
+        const float pointSize = 0.007;
         material.worldPosition.xy += corner * pointSize;
     }
 }
