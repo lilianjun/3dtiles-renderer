@@ -433,11 +433,94 @@ private:
 
 // ---------------------------------------------------------------------------
 // RoutingAssetAccessor: http(s) URLs go through the SDK's NonThrowingCurlAccessor
-// (libcurl, blocking worker threads); everything else (plain paths, file://)
-// is served from the local filesystem.
+// (libcurl, blocking worker threads); data: URIs are decoded inline;
+// everything else (plain paths, file://) is served from the local filesystem.
 // ---------------------------------------------------------------------------
+// P37: Minimal base64 decoder for data: URI support (BatchedWithContentDataUri).
+static std::vector<std::byte> decodeBase64(const std::string& in) {
+    static const std::string chars =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::vector<std::byte> out;
+    int val = 0, bits = -8;
+    for (unsigned char c : in) {
+        if (c == '=') break;
+        auto pos = chars.find(c);
+        if (pos == std::string::npos) continue;
+        val = (val << 6) + static_cast<int>(pos);
+        bits += 6;
+        if (bits >= 0) {
+            out.push_back(static_cast<std::byte>((val >> bits) & 0xFF));
+            bits -= 8;
+        }
+    }
+    return out;
+}
+
 class RoutingAssetAccessor : public CesiumAsync::IAssetAccessor {
 public:
+    // P37: Handle data: URIs (e.g. data:application/octet-stream;base64,...).
+    static bool isDataUri(const std::string& url) {
+        return url.compare(0, 5, "data:") == 0;
+    }
+    static std::shared_ptr<CesiumAsync::IAssetRequest> makeDataUriRequest(
+        const std::string& url) {
+        std::string contentType = "application/octet-stream";
+        std::vector<std::byte> bytes;
+        auto comma = url.find(',');
+        if (comma != std::string::npos) {
+            std::string meta = url.substr(5, comma - 5);
+            std::string data = url.substr(comma + 1);
+            auto semi = meta.find(';');
+            if (semi != std::string::npos) {
+                contentType = meta.substr(0, semi);
+                if (meta.substr(semi + 1) == "base64") {
+                    bytes = decodeBase64(data);
+                }
+            } else if (!meta.empty()) {
+                contentType = meta;
+            }
+            // Non-base64 data URIs: treat as raw (unlikely for 3D Tiles).
+            if (bytes.empty() && !data.empty()) {
+                bytes.reserve(data.size());
+                for (char c : data) bytes.push_back(static_cast<std::byte>(c));
+            }
+        }
+        // Reuse LocalFileAssetAccessor's response/request types via a simple
+        // inline implementation (they're nested, so we duplicate minimal logic).
+        struct DataResponse : public CesiumAsync::IAssetResponse {
+            DataResponse(std::string ct, std::vector<std::byte> d)
+                : _ct(std::move(ct)), _data(std::move(d)) {}
+            std::uint16_t statusCode() const override { return 200; }
+            std::string contentType() const override { return _ct; }
+            const CesiumAsync::HttpHeaders& headers() const override {
+                return _headers;
+            }
+            std::span<const std::byte> data() const override { return _data; }
+            std::string _ct;
+            std::vector<std::byte> _data;
+            CesiumAsync::HttpHeaders _headers;
+        };
+        struct DataRequest : public CesiumAsync::IAssetRequest {
+            DataRequest(
+                std::string u, std::shared_ptr<CesiumAsync::IAssetResponse> r)
+                : _url(std::move(u)), _resp(std::move(r)) {}
+            const std::string& method() const override { return _method; }
+            const std::string& url() const override { return _url; }
+            const CesiumAsync::HttpHeaders& headers() const override {
+                return _headers;
+            }
+            const CesiumAsync::IAssetResponse* response() const override {
+                return _resp.get();
+            }
+            std::string _method = "GET";
+            std::string _url;
+            CesiumAsync::HttpHeaders _headers;
+            std::shared_ptr<CesiumAsync::IAssetResponse> _resp;
+        };
+        auto pResp = std::make_shared<DataResponse>(
+            std::move(contentType), std::move(bytes));
+        return std::make_shared<DataRequest>(url, std::move(pResp));
+    }
     RoutingAssetAccessor()
         : _pCurl(std::make_shared<NonThrowingCurlAccessor>()),
           _pLocal(std::make_shared<LocalFileAssetAccessor>()) {}
@@ -445,6 +528,11 @@ public:
     CesiumAsync::Future<std::shared_ptr<CesiumAsync::IAssetRequest>> get(
         const CesiumAsync::AsyncSystem& asyncSystem, const std::string& url,
         const std::vector<THeader>& headers) override {
+        if (isDataUri(url)) {
+            return asyncSystem.createResolvedFuture<
+                std::shared_ptr<CesiumAsync::IAssetRequest>>(
+                makeDataUriRequest(url));
+        }
         if (isHttp(url)) {
             return _pCurl->get(asyncSystem, url, headers);
         }
