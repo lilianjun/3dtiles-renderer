@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>__CESIUM_DONE__</title>
+<script src="/cesium/Cesium.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; width: 400px; height: 300px; overflow: hidden; }
+  #cesiumContainer { position: absolute; top: 0; left: 0; width: 400px; height: 300px; }
+  .cesium-viewer-bottom { display: none !important; }
+</style>
+<style>
+.cesium-credit-lightbox-overlay {
+  display: none;
+  z-index: 1;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(80, 80, 80, 0.8);
+}
+
+.cesium-credit-lightbox {
+  background-color: #303336;
+  color: #ffffff;
+  position: relative;
+  min-height: 100px;
+  margin: auto;
+}
+.cesium-credit-lightbox > ul > li a,
+.cesium-credit-lightbox > ul > li a:visited,
+.cesium-credit-wrapper a,
+.cesium-credit-wrapper a:visited {
+  color: #ffffff;
+}
+.cesium-credit-lightbox > ul > li a:hover {
+  color: #48b;
+}
+.cesium-credit-lightbox.cesium-credit-lightbox-expanded {
+  border: 1px solid #444;
+  border-radius: 5px;
+  max-width: 370px;
+}
+.cesium-credit-lightbox.cesium-credit-lightbox-mobile {
+  height: 100%;
+  width: 100%;
+}
+.cesium-credit-lightbox-title {
+  padding: 20px 20px 0 20px;
+}
+.cesium-credit-lightbox-close {
+  font-size: 18pt;
+  cursor: pointer;
+  position: absolute;
+  top: 0;
+  right: 6px;
+  color: #ffffff;
+}
+.cesium-credit-lightbox-close:hover {
+  color: #48b;
+}
+.cesium-credit-lightbox > ul {
+  margin: 0;
+  padding: 12px 20px 12px 40px;
+  font-size: 13px;
+}
+.cesium-credit-lightbox > ul > li {
+  padding-bottom: 6px;
+}
+.cesium-credit-lightbox > ul > li * {
+  padding: 0;
+  margin: 0;
+}
+
+.cesium-credit-expand-link {
+  padding-left: 5px;
+  cursor: pointer;
+  text-decoration: underline;
+  color: #ffffff;
+}
+.cesium-credit-expand-link:hover {
+  color: #48b;
+}
+
+.cesium-credit-text {
+  color: #ffffff;
+}
+
+.cesium-credit-delimiter {
+  padding: 0 5px;
+}
+
+.cesium-credit-textContainer *,
+.cesium-credit-logoContainer * {
+  display: inline;
+}
+
+.cesium-credit-textContainer a:hover {
+  color: #48b
+}
+
+.cesium-credit-textContainer .cesium-credit-wrapper:first-of-type {
+  padding-left: 5px;
+}
+</style></head>
+<body>
+<div id="cesiumContainer"><div class="cesium-viewer"><div class="cesium-viewer-cesiumWidgetContainer"><div class="cesium-widget"><canvas width="400" height="300" style="image-rendering: pixelated;"></canvas><div class="cesium-credit-lightbox-overlay"><div class="cesium-credit-lightbox"><div class="cesium-credit-lightbox-title">Data provided by:</div><a class="cesium-credit-lightbox-close">×</a><ul></ul></div></div></div></div><div class="cesium-viewer-bottom" style="left: 5px; bottom: 3px; right: 0px;"><div class="cesium-widget-credits"><div class="cesium-credit-logoContainer" style="display: inline;"><div class="cesium-credit-wrapper" style="display: inline;"><a href="https://cesium.com/" target="_blank"><img src="http://127.0.0.1:18777/cesium/Assets/Images/ion-credit.png" style="vertical-align: -7px" title="Cesium ion"></a></div></div><div class="cesium-credit-textContainer" style="display: inline;"></div><a class="cesium-credit-expand-link" style="display: none;">Data attribution</a></div></div><div class="cesium-viewer-toolbar"></div></div></div>
+<script>
+const q = new URLSearchParams(window.location.search);
+const tilesetUrl = q.get('tileset');
+
+async function run() {
+  const viewer = new Cesium.Viewer('cesiumContainer', {
+    animation: false, baseLayerPicker: false, fullscreenButton: false,
+    geocoder: false, homeButton: false, infoBox: false,
+    sceneModePicker: false, selectionIndicator: false,
+    timeline: false, navigationHelpButton: false,
+    useBrowserRecommendedResolution: false,
+  });
+  viewer.resolutionScale = 1.0;
+  viewer.canvas.width = 400;
+  viewer.canvas.height = 300;
+  viewer.resize();
+
+  // Clean scene for benchmark.
+  viewer.scene.skyBox = undefined;
+  if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
+  viewer.scene.shadowMap.enabled = false;
+  viewer.scene.globe = undefined;
+  viewer.scene.backgroundColor = new Cesium.Color(0.1, 0.1, 0.1, 1.0);
+  if (viewer.scene.sun) viewer.scene.sun.show = false;
+  if (viewer.scene.moon) viewer.scene.moon.show = false;
+  if (viewer.scene.imageBasedLighting) {
+    viewer.scene.imageBasedLighting.imageBasedLightingFactor = new Cesium.Cartesian2(0, 0);
+  }
+
+  const tileset = await Cesium.Cesium3DTileset.fromUrl(tilesetUrl);
+
+  // P37: Disable lighting - use direct colors (unlit).
+  // Per user 2026-10-01: lighting is not the goal for this stage.
+  // Root cause found 2026-10-01: Cesium's UNLIT treats sRGB baseColor as
+  // linear, then output does linear->sRGB (gamma 1/2.2 brightening).
+  // Our renderer outputs raw material values directly (correct).
+  // Fix: convert sRGB->linear in shader so output linear->sRGB restores original.
+  try {
+    tileset.customShader = new Cesium.CustomShader({
+      lightingModel: Cesium.LightingModel.UNLIT,
+      fragmentShaderText: `
+        void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+          material.diffuse = pow(material.diffuse, vec3(2.2));
+        }
+      `,
+    });
+  } catch (e) {
+    console.log('CustomShader UNLIT not supported:', e);
+  }
+  try {
+    if (Cesium.ToneMapping) {
+      viewer.scene.toneMapping = Cesium.ToneMapping.LINEAR;
+    }
+  } catch (e) {
+    console.log('ToneMapping LINEAR not supported:', e);
+  }
+
+  viewer.scene.primitives.add(tileset);
+  await tileset.readyPromise;
+
+  // Automatic framing.
+  await viewer.zoomTo(tileset);
+
+  // Wait for tiles with event-driven completion (no dumb fixed waits).
+  // allTilesLoaded fires when the tile queue is empty; then wait a few
+  // RAF frames to ensure the final frame is actually rendered.
+  const tilesReady = await new Promise((resolve) => {
+    let done = false;
+    const finish = (timedOut) => {
+      if (!done) {
+        done = true;
+        resolve(!timedOut);
+      }
+    };
+    tileset.allTilesLoaded.addEventListener(() => finish(false));
+    // Safety net: 30s timeout (logs warning, doesn't silently hang).
+    setTimeout(() => {
+      console.log('WARNING: tile load timeout, proceeding anyway');
+      finish(true);
+    }, 30000);
+  });
+
+  // Wait 3 RAF frames to ensure rendering is complete.
+  await new Promise((resolve) => {
+    let frames = 0;
+    const tick = () => {
+      if (++frames >= 3) resolve();
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
+  // Extract params.
+  const cam = viewer.camera;
+  const params = {
+    width: 400,
+    height: 300,
+    camera: {
+      position: [cam.position.x, cam.position.y, cam.position.z],
+      direction: [cam.direction.x, cam.direction.y, cam.direction.z],
+      up: [cam.up.x, cam.up.y, cam.up.z],
+      right: [cam.right.x, cam.right.y, cam.right.z],
+      fov: Cesium.Math.toDegrees(cam.frustum.fov),
+      aspectRatio: cam.frustum.aspectRatio,
+      near: cam.frustum.near,
+      far: cam.frustum.far,
+      viewMatrix: Array.from(cam.viewMatrix),
+      projectionMatrix: Array.from(cam.frustum.projectionMatrix),
+    },
+    // P37: Unlit rendering, no light params needed.
+    backgroundColor: [
+      viewer.scene.backgroundColor.red,
+      viewer.scene.backgroundColor.green,
+      viewer.scene.backgroundColor.blue,
+      viewer.scene.backgroundColor.alpha,
+    ],
+    tilesLoaded: tileset.tilesLoaded,
+  };
+  const el = document.createElement('div');
+  el.id = '__params__';
+  el.textContent = JSON.stringify(params);
+  document.body.appendChild(el);
+
+  // P37: Capture screenshot via canvas.toDataURL so a single --dump-dom run
+  // gets both params and image (previously needed 2 Chrome launches).
+  try {
+    const dataUrl = viewer.canvas.toDataURL('image/png');
+    const imgEl = document.createElement('div');
+    imgEl.id = '__screenshot__';
+    imgEl.textContent = dataUrl;
+    document.body.appendChild(imgEl);
+  } catch (e) {
+    console.log('Screenshot capture failed:', e);
+  }
+
+  document.title = '__CESIUM_DONE__';
+}
+run().catch(e => {
+  document.title = '__CESIUM_ERROR__';
+  const el = document.createElement('div');
+  el.id = '__error__';
+  el.textContent = String(e);
+  document.body.appendChild(el);
+});
+</script>
+
+
+<div id="__params__">{"width":400,"height":300,"camera":{"position":[1215046.7503501123,-4736445.071943256,4081556.7649450176],"direction":[-0.23149659891398802,0.902410483203083,0.3634069956624863],"up":[0.09030134277272545,-0.3520089657805276,0.9316304822747944],"right":[0.968635634376879,0.24848542777253785,1.2490009027033014e-16],"fov":59.99999999999999,"aspectRatio":1.3333333333333333,"near":0.1,"far":10000000000,"viewMatrix":[0.968635634376879,0.09030134277272545,0.23149659891398802,0,0.24848542777253785,-0.3520089657805276,-0.902410483203083,0,1.2490009027033014e-16,0.9316304822747944,-0.3634069956624863,0,2.0513502718074568e-9,-5579494.18169695,-3072230.5946901543,1],"projectionMatrix":[1.7320508075688772,0,0,0,0,2.309401076758503,0,0,0,0,-1.00000000002,-1,0,0,-0.200000000002,0]},"backgroundColor":[0.1,0.1,0.1,1],"tilesLoaded":true}</div><div id="__screenshot__">data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAAEsCAYAAADtt+XCAAAAAXNSR0IArs4c6QAAD3RJREFUeF7t3LGubUUZwPF1LW5lonbkPoeWPoAaH8FAqDCxoCHGgsrCEButtDIhPAKJPAAlHU9hpyZUFEI23JPcXDyctb49M998Mz/qPWtm/b5J/tn7AM9evHjx1eEfAgQIECBwUeCZgFwU83ECBAgQ+EZAQFwEAgQIEAgJCEiIzSICBAgQEBB3gAABAgRCAgISYrOIAAECBATEHSBAgACBkICAhNgsIkCAAAEBcQcIECBAICQgICE2iwgQIEBAQNwBAgQIEAgJCEiIzSICBAgQEBB3gAABAgRCAgISYrOIAAECBATEHSBAgACBkICAhNgsIkCAAAEBcQcIECBAICQgICE2iwgQIEBAQNwBAgQIEAgJCEiIzSICBAgQEBB3gAABAgRCAgISYrOIAAECBATEHSBAgACBkICAhNgsIkCAAAEBcQcIECBAICQgICE2iwgQIEBAQNwBAgQIEAgJCEiIzSICBAgQEBB3gAABAgRCAgISYrOIAAECBATEHSBAgACBkICAhNgsIkCAAAEBcQcIECBAICQgICE2iwgQIEBAQNwBAgQIEAgJCEiIzSICBAgQEBB3gAABAgRCAgISYrOIAAECBATEHSBAgACBkICAhNgsIkCAAAEBcQcIECBAICQgICE2iwgQIEBAQNwBAgQIEAgJCEiIzSICBAgQEBB3gAABAgRCAgISYrOIAAECBATEHSBAgACBkICAhNgsIkCAAAEBcQcIECBAICQgICE2iwgQIEBAQNwBAgQIEAgJCEiIzSICBAgQEBB3gAABAgRCAgISYrOIAAECBATEHSBAgACBkICAhNgsIkCAAAEBcQcIECBAICQgICE2iwgQIEBAQNwBAgQIEAgJCEiIzSICBAgQEBB3gAABAgRCAgISYrOIAAECBATEHSBAgACBkICAhNgsIkCAAAEBcQcIECBAICQgICE2iwgQIEBAQNwBAgQIEAgJCEiIzSICBAgQEBB3gAABAgRCAgISYrOIAAECBATEHSBAgACBkICAhNgsIkCAAAEBcQcIECBAICQgICE2iwgQIEBAQNwBAgQIEAgJCEiIzSICBAgQEBB3gAABAgRCAgISYrOIAAECBATEHSBAgACBkICAhNgsIkCAAAEBcQcI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</div></body></html>
