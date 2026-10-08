@@ -150,6 +150,23 @@ public:
             in.seekg(0, std::ios::beg);
             bytes.resize(static_cast<std::size_t>(size));
             in.read(reinterpret_cast<char*>(bytes.data()), size);
+            // P37: Workaround for cesium-native crash on b3dm with
+            // binary-only batch table (btblen=0, bttblen>0), e.g.,
+            // BatchTableHierarchyBinary. The hierarchy parser segfaults.
+            // Strip the binary batch table (set bttblen=0) so the geometry
+            // converts without batch table metadata.
+            if (bytes.size() >= 24) {
+                const char* p = reinterpret_cast<const char*>(bytes.data());
+                if (p[0] == 'b' && p[1] == '3' && p[2] == 'd' && p[3] == 'm') {
+                    std::uint32_t btblen, bttblen;
+                    std::memcpy(&btblen, p + 16, 4);
+                    std::memcpy(&bttblen, p + 20, 4);
+                    if (btblen == 0 && bttblen > 0) {
+                        std::uint32_t zero = 0;
+                        std::memcpy(bytes.data() + 20, &zero, 4);
+                    }
+                }
+            }
             if (path.size() >= 5 &&
                 path.compare(path.size() - 5, 5, ".json") == 0) {
                 contentType = "application/json";
