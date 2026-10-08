@@ -14,9 +14,9 @@ fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         vec4 tex = texture(materialParams_baseColorMap, getUV0());
-        // P37: Match Cesium benchmark's pow(diffuse, vec3(2.2)).
-        vec3 linearTex = pow(tex.rgb, vec3(2.2));
-        material.baseColor.rgb = linearTex * materialParams.color;
+        // P37: Texture is SRGB8_ALPHA8, hardware already decoded sRGB->linear.
+        // Do NOT pow() here (would double-convert).
+        material.baseColor.rgb = tex.rgb * materialParams.color;
         material.baseColor.a = tex.a * materialParams.color.b;
     }
 }

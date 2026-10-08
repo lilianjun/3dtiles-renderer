@@ -8,7 +8,6 @@
 #include "unlit_color_filamat.h"
 #include "unlit_textured_filamat.h"
 #include "unlit_vertex_color_filamat.h"
-#include "point_billboard_filamat.h"
 
 #include <filament/IndexBuffer.h>
 #include <filament/RenderableManager.h>
@@ -75,13 +74,6 @@ FilamentTileResources FilamentBackend::createTile(
                                             unlit_vertex_color_filamat_len)
                                    .build(*engine);
     }
-    // P37: Billboard material for point quads (mature cross-API points).
-    if (!_billboardMaterial) {
-        _billboardMaterial = filament::Material::Builder()
-                                 .package(point_billboard_filamat,
-                                          point_billboard_filamat_len)
-                                 .build(*engine);
-    }
 
     for (const auto& prim : data.primitives) {
         if (prim.positions.empty())
@@ -93,9 +85,9 @@ FilamentTileResources FilamentBackend::createTile(
             prim.normals.size() == static_cast<size_t>(vertexCount) * 3;
         const bool hasUVs =
             prim.uvs.size() == static_cast<size_t>(vertexCount) * 2;
-        // P37: vertex colors for pnts point clouds.
+        // P37: vertex colors for pnts point clouds (RGBA, 4 floats).
         const bool hasColors =
-            prim.colors.size() == static_cast<size_t>(vertexCount) * 3;
+            prim.colors.size() == static_cast<size_t>(vertexCount) * 4;
         // P37: Always use UNLIT (direct colors, no lighting). Per user
         // 2026-10-01, this stage uses no lighting on both sides (Cesium
         // benchmark uses pow(diffuse, 2.2) direct color). PBR would require
@@ -129,13 +121,13 @@ FilamentTileResources FilamentBackend::createTile(
                 static_cast<uint8_t>(uvBuffer),
                 filament::VertexBuffer::AttributeType::FLOAT2);
         }
-        // P37: vertex colors (COLOR_0) for pnts.
+        // P37: vertex colors (COLOR_0) for pnts (RGBA).
         if (hasColors) {
             colorBuffer = ++bufferIndex;
             vbBuilder.attribute(
                 filament::VertexAttribute::COLOR,
                 static_cast<uint8_t>(colorBuffer),
-                filament::VertexBuffer::AttributeType::FLOAT3);
+                filament::VertexBuffer::AttributeType::FLOAT4);
         }
         filament::VertexBuffer* vb = vbBuilder.build(*engine);
 
@@ -242,12 +234,16 @@ FilamentTileResources FilamentBackend::createTile(
         filament::MaterialInstance* mi = nullptr;
         if (!prim.texPixels.empty() && prim.texWidth > 0 && prim.texHeight > 0) {
             // Create Filament Texture from RGBA pixels.
+            // P37: Use SRGB8_ALPHA8 (not RGBA8). baseColorTexture is sRGB
+            // per glTF spec; Cesium decodes sRGB->linear on sample. SRGB8
+            // makes Filament do the same in hardware. (p25: 10.5% diff
+            // was from missing sRGB decode.)
             filament::Texture* tex =
                 filament::Texture::Builder()
                     .width(static_cast<uint32_t>(prim.texWidth))
                     .height(static_cast<uint32_t>(prim.texHeight))
                     .levels(1)
-                    .format(filament::Texture::InternalFormat::RGBA8)
+                    .format(filament::Texture::InternalFormat::SRGB8_A8)
                     .sampler(filament::Texture::Sampler::SAMPLER_2D)
                     .build(*engine);
             // Copy pixels (one necessary copy).
@@ -289,16 +285,14 @@ FilamentTileResources FilamentBackend::createTile(
             filament::TextureSampler sampler(
                 filament::TextureSampler::MinFilter::LINEAR,
                 filament::TextureSampler::MagFilter::LINEAR);
+            // P37: glTF default sampler wrap is REPEAT (not CLAMP).
+            sampler.setWrapModeS(filament::TextureSampler::WrapMode::REPEAT);
+            sampler.setWrapModeT(filament::TextureSampler::WrapMode::REPEAT);
             mi->setParameter("baseColorMap", tex, sampler);
         } else if (hasColors) {
             // P37: Vertex colors (pnts point clouds) - use vertex color material.
             // The material reads COLOR attribute, no uniform color needed.
-            // If billboard, use the billboard material (vertex shader expands).
-            if (prim.isBillboard) {
-                mi = _billboardMaterial->createInstance();
-            } else {
-                mi = _vertexColorMaterial->createInstance();
-            }
+            mi = _vertexColorMaterial->createInstance();
         } else {
             // Solid color: use UNLIT (no lighting, direct color).
             // Per user 2026-10-01: lighting is not the goal for this stage.
