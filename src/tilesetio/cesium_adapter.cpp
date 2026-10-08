@@ -428,6 +428,7 @@ TileRenderData convertModel(
                                 pd.texWidth = img.pAsset->width;
                                 pd.texHeight = img.pAsset->height;
                                 pd.texPixels = img.pAsset->pixelData;
+
                             }
                         }
                     }
@@ -456,7 +457,7 @@ TileRenderData convertModel(
             // normals so child wins depth test vs parent in ADD refinement.
             if (isChildTile && !pd.normals.empty() &&
                 pd.normals.size() == pd.positions.size()) {
-                const float eps = 0.1f; // 10cm
+                const float eps = 0.001f; // 1mm
                 for (size_t i = 0; i < pd.positions.size(); i += 3) {
                     pd.positions[i+0] += pd.normals[i+0] * eps;
                     pd.positions[i+1] += pd.normals[i+1] * eps;
