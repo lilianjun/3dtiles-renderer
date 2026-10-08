@@ -92,6 +92,30 @@ bool readColors(
         }
         return true;
     }
+    // Try vec3 unsigned byte (normalized).
+    CesiumGltf::AccessorView<glm::u8vec3> viewUb3(model, accessorIndex);
+    if (viewUb3.status() == CesiumGltf::AccessorViewStatus::Valid) {
+        out.resize(static_cast<size_t>(viewUb3.size()) * 4);
+        for (int64_t i = 0; i < viewUb3.size(); ++i) {
+            out[static_cast<size_t>(i) * 4 + 0] = viewUb3[i].x / 255.0f;
+            out[static_cast<size_t>(i) * 4 + 1] = viewUb3[i].y / 255.0f;
+            out[static_cast<size_t>(i) * 4 + 2] = viewUb3[i].z / 255.0f;
+            out[static_cast<size_t>(i) * 4 + 3] = 1.0f;
+        }
+        return true;
+    }
+    // Try vec4 unsigned byte (normalized).
+    CesiumGltf::AccessorView<glm::u8vec4> viewUb4(model, accessorIndex);
+    if (viewUb4.status() == CesiumGltf::AccessorViewStatus::Valid) {
+        out.resize(static_cast<size_t>(viewUb4.size()) * 4);
+        for (int64_t i = 0; i < viewUb4.size(); ++i) {
+            out[static_cast<size_t>(i) * 4 + 0] = viewUb4[i].x / 255.0f;
+            out[static_cast<size_t>(i) * 4 + 1] = viewUb4[i].y / 255.0f;
+            out[static_cast<size_t>(i) * 4 + 2] = viewUb4[i].z / 255.0f;
+            out[static_cast<size_t>(i) * 4 + 3] = viewUb4[i].w / 255.0f;
+        }
+        return true;
+    }
     return false;
 }
 
