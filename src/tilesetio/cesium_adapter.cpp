@@ -60,32 +60,35 @@ bool readUVs(
     return true;
 }
 
-// P37: Read vec3/vec4 float vertex colors (COLOR_0). Outputs RGB (3 per vertex).
+// P37: Read vec3/vec4 float vertex colors (COLOR_0). Outputs RGBA (4 per vertex).
+// Alpha defaults to 1.0 for vec3; preserved from vec4.
 bool readColors(
     const CesiumGltf::Model& model,
     int accessorIndex,
     std::vector<float>& out) {
     if (accessorIndex < 0)
         return false;
-    // Try vec3 first.
+    // Try vec3 first (alpha=1.0).
     CesiumGltf::AccessorView<glm::vec3> view3(model, accessorIndex);
     if (view3.status() == CesiumGltf::AccessorViewStatus::Valid) {
-        out.resize(static_cast<size_t>(view3.size()) * 3);
+        out.resize(static_cast<size_t>(view3.size()) * 4);
         for (int64_t i = 0; i < view3.size(); ++i) {
-            out[static_cast<size_t>(i) * 3 + 0] = view3[i].x;
-            out[static_cast<size_t>(i) * 3 + 1] = view3[i].y;
-            out[static_cast<size_t>(i) * 3 + 2] = view3[i].z;
+            out[static_cast<size_t>(i) * 4 + 0] = view3[i].x;
+            out[static_cast<size_t>(i) * 4 + 1] = view3[i].y;
+            out[static_cast<size_t>(i) * 4 + 2] = view3[i].z;
+            out[static_cast<size_t>(i) * 4 + 3] = 1.0f;
         }
         return true;
     }
-    // Try vec4 (ignore alpha).
+    // Try vec4 (preserve alpha).
     CesiumGltf::AccessorView<glm::vec4> view4(model, accessorIndex);
     if (view4.status() == CesiumGltf::AccessorViewStatus::Valid) {
-        out.resize(static_cast<size_t>(view4.size()) * 3);
+        out.resize(static_cast<size_t>(view4.size()) * 4);
         for (int64_t i = 0; i < view4.size(); ++i) {
-            out[static_cast<size_t>(i) * 3 + 0] = view4[i].x;
-            out[static_cast<size_t>(i) * 3 + 1] = view4[i].y;
-            out[static_cast<size_t>(i) * 3 + 2] = view4[i].z;
+            out[static_cast<size_t>(i) * 4 + 0] = view4[i].x;
+            out[static_cast<size_t>(i) * 4 + 1] = view4[i].y;
+            out[static_cast<size_t>(i) * 4 + 2] = view4[i].z;
+            out[static_cast<size_t>(i) * 4 + 3] = view4[i].w;
         }
         return true;
     }
@@ -331,6 +334,12 @@ TileRenderData convertModel(
                 static_cast<size_t>(prim.material) < model.materials.size()) {
                 const auto& mat =
                     model.materials[static_cast<size_t>(prim.material)];
+                // P37: alphaMode (OPAQUE=0, MASK=1, BLEND=2).
+                if (mat.alphaMode == CesiumGltf::Material::AlphaMode::MASK) {
+                    pd.alphaMode = 1;
+                } else if (mat.alphaMode == CesiumGltf::Material::AlphaMode::BLEND) {
+                    pd.alphaMode = 2;
+                }
                 const auto& pbr = mat.pbrMetallicRoughness;
                 if (pbr) {
                     if (pbr->baseColorFactor.size() == 4) {
@@ -426,87 +435,6 @@ TileRenderData convertModel(
                     pd.color[0] = 0.404f;
                     pd.color[1] = 0.404f;
                     pd.color[2] = 0.404f;
-                }
-            }
-
-            // P37: Convert POINTS to billboard quads for mature cross-API
-            // point rendering (GL_POINTS rasterization is inconsistent).
-            // Each point -> 4 verts (same position) with UV encoding the
-            // corner; vertex shader billboards in view space.
-            if (pd.primType == 2) {
-                const size_t numPoints = pd.positions.size() / 3;
-                if (numPoints > 0) {
-                    // P37: Rebase large ECEF positions to local origin.
-                    // PNTS positions may be in ECEF (1.2M) with no node
-                    // transform; float32 loses precision (~0.1m error).
-                    // Subtract center, fold into tileTransform.
-                    glm::dvec3 center(0.0);
-                    for (size_t i = 0; i < numPoints; ++i) {
-                        center.x += pd.positions[i * 3];
-                        center.y += pd.positions[i * 3 + 1];
-                        center.z += pd.positions[i * 3 + 2];
-                    }
-                    center /= static_cast<double>(numPoints);
-                    if (glm::length(center) > 1000.0) {
-                        // Fold into out.tileTransform: out = T(center) * in
-                        glm::dmat4 inT(1.0);
-                        for (int cc = 0; cc < 4; ++cc)
-                            for (int rr = 0; rr < 4; ++rr)
-                                inT[cc][rr] = out.tileTransform[cc * 4 + rr];
-                        glm::dmat4 transMat(1.0);
-                        transMat[3] = glm::dvec4(center, 1.0);
-                        glm::dmat4 combined = transMat * inT;
-                        for (int cc = 0; cc < 4; ++cc)
-                            for (int rr = 0; rr < 4; ++rr)
-                                out.tileTransform[cc * 4 + rr] = combined[cc][rr];
-                        // Subtract center from positions (now small)
-                        for (size_t i = 0; i < numPoints; ++i) {
-                            pd.positions[i * 3] = static_cast<float>(
-                                pd.positions[i * 3] - center.x);
-                            pd.positions[i * 3 + 1] = static_cast<float>(
-                                pd.positions[i * 3 + 1] - center.y);
-                            pd.positions[i * 3 + 2] = static_cast<float>(
-                                pd.positions[i * 3 + 2] - center.z);
-                        }
-                    }
-                    std::vector<float> quadPos;
-                    std::vector<float> quadCol;
-                    std::vector<float> quadUv;
-                    std::vector<uint32_t> quadIdx;
-                    quadPos.reserve(numPoints * 12);
-                    quadUv.reserve(numPoints * 8);
-                    quadIdx.reserve(numPoints * 6);
-                    const bool hasColors = !pd.colors.empty();
-                    if (hasColors) quadCol.reserve(numPoints * 12);
-                    // Corners: (-1,-1), (1,-1), (1,1), (-1,1) encoded as UV [0,1]
-                    const float corners[4][2] = {{0,0}, {1,0}, {1,1}, {0,1}};
-                    for (size_t i = 0; i < numPoints; ++i) {
-                        const float x = pd.positions[i * 3];
-                        const float y = pd.positions[i * 3 + 1];
-                        const float z = pd.positions[i * 3 + 2];
-                        const uint32_t base = static_cast<uint32_t>(
-                            quadPos.size() / 3);
-                        for (int k = 0; k < 4; ++k) {
-                            quadPos.insert(quadPos.end(), {x, y, z});
-                            quadUv.insert(quadUv.end(),
-                                          {corners[k][0], corners[k][1]});
-                            if (hasColors) {
-                                quadCol.insert(quadCol.end(), {
-                                    pd.colors[i * 3], pd.colors[i * 3 + 1],
-                                    pd.colors[i * 3 + 2]});
-                            }
-                        }
-                        quadIdx.insert(quadIdx.end(), {
-                            base, base + 1, base + 2,
-                            base, base + 2, base + 3,
-                        });
-                    }
-                    pd.positions = std::move(quadPos);
-                    pd.uvs = std::move(quadUv);
-                    if (hasColors) pd.colors = std::move(quadCol);
-                    pd.indices = std::move(quadIdx);
-                    pd.primType = 0; // TRIANGLES
-                    pd.isBillboard = true;
                 }
             }
 

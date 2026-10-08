@@ -6,6 +6,7 @@
 
 #include "pbr_color_filamat.h"
 #include "unlit_color_filamat.h"
+#include "unlit_color_transparent_filamat.h"
 #include "unlit_textured_filamat.h"
 #include "unlit_vertex_color_filamat.h"
 
@@ -72,6 +73,13 @@ FilamentTileResources FilamentBackend::createTile(
         _vertexColorMaterial = filament::Material::Builder()
                                    .package(unlit_vertex_color_filamat,
                                             unlit_vertex_color_filamat_len)
+                                   .build(*engine);
+    }
+    // P37: Create the shared transparent material on first use (alphaMode=BLEND).
+    if (!_transparentMaterial) {
+        _transparentMaterial = filament::Material::Builder()
+                                   .package(unlit_color_transparent_filamat,
+                                            unlit_color_transparent_filamat_len)
                                    .build(*engine);
     }
 
@@ -297,11 +305,21 @@ FilamentTileResources FilamentBackend::createTile(
             // Solid color: use UNLIT (no lighting, direct color).
             // Per user 2026-10-01: lighting is not the goal for this stage.
             // Both Cesium benchmark and our renderer use direct colors.
-            mi = _material->createInstance();
-            mi->setParameter(
-                "color",
-                filament::math::float3(
-                    prim.color[0], prim.color[1], prim.color[2]));
+            // P37: alphaMode=BLEND uses transparent material.
+            if (prim.alphaMode == 2) {
+                mi = _transparentMaterial->createInstance();
+                mi->setParameter(
+                    "color",
+                    filament::math::float4(
+                        prim.color[0], prim.color[1], prim.color[2],
+                        prim.color[3]));
+            } else {
+                mi = _material->createInstance();
+                mi->setParameter(
+                    "color",
+                    filament::math::float3(
+                        prim.color[0], prim.color[1], prim.color[2]));
+            }
         }
         res.materialInstances.push_back(mi);
 
@@ -391,6 +409,14 @@ void FilamentBackend::destroyMaterial(filament::Engine* engine) {
     if (_pbrMaterial) {
         engine->destroy(_pbrMaterial);
         _pbrMaterial = nullptr;
+    }
+    if (_vertexColorMaterial) {
+        engine->destroy(_vertexColorMaterial);
+        _vertexColorMaterial = nullptr;
+    }
+    if (_transparentMaterial) {
+        engine->destroy(_transparentMaterial);
+        _transparentMaterial = nullptr;
     }
 }
 

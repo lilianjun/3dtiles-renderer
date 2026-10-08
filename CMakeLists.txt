@@ -561,28 +561,25 @@ if(TILES_WITH_FILAMENT)
       DEPENDS "${TILES_VC_FILAMAT}"
               "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
       COMMENT "Embedding unlit_vertex_color.filamat as C++ header")
-    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}" "${TILES_TEX_FILAMAT_H}" "${TILES_PBR_FILAMAT_H}" "${TILES_VC_FILAMAT_H}")
-    # P37: billboard quad material for pnts point clouds (mature cross-API
-    # point rendering; GL_POINTS rasterization is inconsistent across GL/DX).
-    set(TILES_PB_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/point_billboard.mat")
-    set(TILES_PB_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/point_billboard.filamat")
-    set(TILES_PB_FILAMAT_H
-        "${CMAKE_CURRENT_BINARY_DIR}/generated/point_billboard_filamat.h")
+        # P37: transparent unlit material for alphaMode=BLEND.
+    set(TILES_TC_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/unlit_color_transparent.mat")
+    set(TILES_TC_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_color_transparent.filamat")
+    set(TILES_TC_FILAMAT_H
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_color_transparent_filamat.h")
     add_custom_command(
-      OUTPUT "${TILES_PB_FILAMAT}"
-      COMMAND "${TILES_MATC}" -a all -o "${TILES_PB_FILAMAT}" "${TILES_PB_MAT_SRC}"
-      DEPENDS "${TILES_PB_MAT_SRC}"
-      COMMENT "matc: compiling point_billboard.mat (all backends)")
+      OUTPUT "${TILES_TC_FILAMAT}"
+      COMMAND "${TILES_MATC}" -a all -o "${TILES_TC_FILAMAT}" "${TILES_TC_MAT_SRC}"
+      DEPENDS "${TILES_TC_MAT_SRC}"
+      COMMENT "matc: compiling unlit_color_transparent.mat (all backends)")
     add_custom_command(
-      OUTPUT "${TILES_PB_FILAMAT_H}"
+      OUTPUT "${TILES_TC_FILAMAT_H}"
       COMMAND "${Python3_EXECUTABLE}"
               "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
-              "${TILES_PB_FILAMAT}" "${TILES_PB_FILAMAT_H}" point_billboard_filamat
-      DEPENDS "${TILES_PB_FILAMAT}"
+              "${TILES_TC_FILAMAT}" "${TILES_TC_FILAMAT_H}" unlit_color_transparent_filamat
+      DEPENDS "${TILES_TC_FILAMAT}"
               "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
-      COMMENT "Embedding point_billboard.filamat as C++ header")
-    add_custom_target(tiles_materials_bboard DEPENDS "${TILES_PB_FILAMAT_H}")
-    add_dependencies(tiles_renderer tiles_materials_bboard)
+      COMMENT "Embedding unlit_color_transparent.filamat as C++ header")
+    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}" "${TILES_TEX_FILAMAT_H}" "${TILES_PBR_FILAMAT_H}" "${TILES_VC_FILAMAT_H}" "${TILES_TC_FILAMAT_H}")
 
     # P36-B pivot: the Filament ImGui backend was abandoned (see ADR-0035);
     # the UI material is no longer needed. The Inspector uses a separate
