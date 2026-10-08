@@ -219,8 +219,22 @@ run().catch(e => { window.__error = String(e); window.__done = true; });
         console.log(`Params extracted and saved: ${process.env.CAPTURE_PARAMS}`);
     }
 
-    await page.screenshot({ path: output });
-    console.log(`Screenshot: ${output}`);
+    // Get image directly from WebGL canvas (not page screenshot)
+    const dataUrl = await page.evaluate(() => {
+        const canvas = document.querySelector('#cesiumContainer canvas');
+        if (!canvas) return null;
+        return canvas.toDataURL('image/png');
+    });
+    
+    if (!dataUrl) {
+        console.error('Failed to get canvas image');
+        process.exit(1);
+    }
+    
+    // Save data URL to file
+    const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+    fs.writeFileSync(output, Buffer.from(base64, 'base64'));
+    console.log(`Screenshot (from canvas): ${output}`);
 
     cesiumServer.close();
   } finally {

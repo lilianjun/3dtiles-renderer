@@ -15,7 +15,19 @@
 .cesium-viewer-bottom{display:none !important;}
 ```
 
-### 2. 确保画布铺满（page.evaluate，在 waitForFunction 之后、screenshot 之前）
+### 2. 从 canvas 直接取图（不用 page.screenshot）
+```javascript
+// 错误：page.screenshot() 截的是整个页面，可能含边框/背景
+// 正确：canvas.toDataURL() 取 WebGL 画布的纯渲染输出
+const dataUrl = await page.evaluate(() => {
+    const canvas = document.querySelector('#cesiumContainer canvas');
+    return canvas.toDataURL('image/png');
+});
+const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+fs.writeFileSync(output, Buffer.from(base64, 'base64'));
+```
+
+### 3. 确保画布铺满（page.evaluate，在 waitForFunction 之后、取图之前）
 ```javascript
 await page.evaluate((w, h) => {
     const canvas = document.querySelector('#cesiumContainer canvas');
@@ -24,11 +36,6 @@ await page.evaluate((w, h) => {
         canvas.height = h;
         canvas.style.width = w + 'px';
         canvas.style.height = h + 'px';
-    }
-    const container = document.getElementById('cesiumContainer');
-    if (container) {
-        container.style.width = w + 'px';
-        container.style.height = h + 'px';
     }
 }, width, height);
 ```
