@@ -103,7 +103,7 @@ async function main() {
 <!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <script src="http://localhost:${port + 1}/Cesium.js"></script>
-<style>html,body,#cesiumContainer{margin:0;padding:0;width:${width}px;height:${height}px;overflow:hidden}</style>
+<style>html,body,#cesiumContainer{margin:0;padding:0;width:${width}px;height:${height}px;overflow:hidden}.cesium-viewer-bottom{display:none!important}</style>
 </head><body>
 <div id="cesiumContainer"></div>
 <script>
@@ -170,6 +170,16 @@ run().catch(e => { window.__error = String(e); window.__done = true; });
 
     await page.setContent(html, { waitUntil: 'networkidle0' });
     await page.waitForFunction('window.__done === true', { timeout: 30000 });
+    // Ensure canvas fills viewport
+    await page.evaluate((w, h) => {
+        const canvas = document.querySelector('#cesiumContainer canvas');
+        if (canvas) {
+            canvas.width = w;
+            canvas.height = h;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+        }
+    }, width, height);
 
     const error = await page.evaluate('window.__error');
     if (error) {
