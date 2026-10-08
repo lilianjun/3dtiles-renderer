@@ -62,12 +62,17 @@ Filament 垂直 FOV 换算），喂给自研渲染器。
 
 ```bash
 node tests/data/cesiumjs/harness/batch_capture.js \
-  --list tilesets.txt --out captured [--width 400 --height 300]
+  --list tilesets.txt --out captured [--width 400 --height 300] [--jobs 2]
 ```
 
 `tilesets.txt` 每行 `<name> <tileset.json路径>`——**不带相机参数**，
 相机全部由 Cesium 自动构图。每项输出 `<out>/<name>/render.png` +
 `params.json`；单项失败不中断，最后打印 `N ok, M failed` 汇总。
+
+性能（实测）：单条约 13 秒（浏览器启动 + SwiftShader 软件渲染，
+含固定的 1 秒加载后静置）；`--jobs 2` 并行（默认 2，2 核机器），
+200 条约 22 分钟。用 minified Cesium 构建（同版本 1.146.0），输出
+与 unminified 逐像素一致。
 
 实测（2026-10-08）：`p8_pnts_cloud`（原点手工点云）+
 `TilesetWithDiscreteLOD`（ECEF 官方龙）均一次通过，400×300，
