@@ -82,9 +82,9 @@ python3 tests/data/benchmarks/conformance_test.py \
 **参数对齐规范**: `docs/plan/P37-C-param-alignment.md`
 
 **点云测试方法**: `docs/p37-pointcloud-testing.md`（2026-10-08）
-- 4 条核心规则
-- Harness 修改（logo 隐藏、画布铺满）
-- 手工数据测试流程
+- 核心规则：参数从 Cesium 渲染后提取、相机自动构图不许猜、Web 图来自 canvas
+- 采集流程已端到端实测：`batch_capture.js`（自动构图 + params.json 导出）
+- 作废数字清单（违反规则的旧 SSIM 结论不再引用）
 
 ## ADR 索引（35 个）
 
@@ -137,6 +137,7 @@ python3 tests/data/benchmarks/conformance_test.py \
 5. **常规事项自主决定** — 不问"要不要继续""该怎么做"
 6. **向上游发言先给草稿** — li 点头后才能发
 7. **外部 agent 分支隔离** — 只 commit 不 push，Muse review/验收/merge
+8. **Web 相机不许手写/猜** — 自动构图（viewBoundingSphere = zoomTo 位姿），参数渲染后提取
 
 ## 分支状态
 
@@ -149,5 +150,7 @@ python3 tests/data/benchmarks/conformance_test.py \
 1. Harness 脚本使用文档（`compare_ssim.py`）
 2. Demo CLI 完整 flags 文档
 3. `gen_p*.py` 索引（phase→脚本→输出）
-4. ~~Benchmark 采集可复现流程~~ — 已解决：`tests/data/cesiumjs/harness/batch_capture.js`（2026-10-08）
+4. ~~Benchmark 采集可复现流程~~ — 已实测解决（2026-10-08）：
+   `tests/data/cesiumjs/harness/batch_capture.js`，自动构图 + params.json
+   导出，2 fixture（原点点云 + ECEF 龙）一次通过、坏条目正常失败汇总
 5. `src/tilesetio/` 模块文档

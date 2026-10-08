@@ -3,12 +3,17 @@
  * Batch capture Cesium.js reference renders + params for conformance testing.
  *
  * For each tileset in the input list:
- *   1. Renders via cesium_render.js (Puppeteer + headless Chrome)
+ *   1. Renders via cesium_render.js (Puppeteer + headless Chrome), with the
+ *      camera AUTO-FRAMED by Cesium (viewBoundingSphere == zoomTo final pose)
  *   2. Extracts ACTUAL camera params from Cesium session (CAPTURE_PARAMS)
- *   3. Saves to <outDir>/<name>/render.png + params.json
+ * 3. Saves to <outDir>/<name>/render.png + params.json
+ *
+ * No camera guessing: the input list carries only <name> <tileset.json path>.
+ * The camera comes from Cesium itself; the extracted params.json is what the
+ * C++ renderer imports (see conformance_test.py).
  *
  * Usage:
- *   node batch_capture.js --list <tilesets.txt> --out <dir> [--width 800 --height 600]
+ *   node batch_capture.js --list <tilesets.txt> --out <dir> [--width 400 --height 300]
  *
  * tilesets.txt format (one per line):
  *   <name> <tileset.json path>
@@ -37,16 +42,14 @@ async function runCapture(name, tilesetPath, outDir, width, height) {
   const renderPng = path.join(benchDir, 'render.png');
   const paramsJson = path.join(benchDir, 'params.json');
   
-  // Default camera: will be overridden by actual extraction
-  // Use a reasonable default; the EXTRACTED params are what matter
+  // No eye/target/up: cesium_render.js auto-frames the whole tileset
+  // via viewBoundingSphere (zoomTo-equivalent). The EXTRACTED params are
+  // what matter; they are saved to params.json for the C++ renderer.
   const cmd = 'node';
   const cmdArgs = [
     path.join(__dirname, 'cesium_render.js'),
     '--tileset', tilesetPath,
     '--output', renderPng,
-    '--eye', '0,-25,15',
-    '--target', '0,0,0',
-    '--up', '0,0,1',
     '--fov', '60',
     '--background', '0.1,0.1,0.1,1',
     '--width', String(width),
@@ -78,11 +81,11 @@ async function main() {
   const args = parseArgs();
   const listFile = args.list;
   const outDir = args.out;
-  const width = parseInt(args.width || '800');
-  const height = parseInt(args.height || '600');
+  const width = parseInt(args.width || '400');
+  const height = parseInt(args.height || '300');
   
   if (!listFile || !outDir) {
-    console.error('Usage: node batch_capture.js --list <tilesets.txt> --out <dir> [--width 800 --height 600]');
+    console.error('Usage: node batch_capture.js --list <tilesets.txt> --out <dir> [--width 400 --height 300]');
     process.exit(1);
   }
   

@@ -2,13 +2,25 @@
 /**
  * P37-C2: CesiumJS headless rendering harness.
  *
- * For each tileset, renders with cesium.js using the SAME camera parameters
- * as our demo (see P37-C-param-alignment.md), then screenshots.
+ * Renders a tileset with cesium.js and captures the reference image
+ * DIRECTLY from the WebGL canvas (canvas.toDataURL), plus the ACTUAL
+ * camera parameters extracted from the Cesium session after rendering.
+ *
+ * Camera: by default the camera AUTO-Frames the whole tileset via
+ *   viewer.camera.viewBoundingSphere(tileset.boundingSphere)
+ * which is the synchronous, deterministic equivalent of viewer.zoomTo()
+ * (same default offset: heading 0, pitch -45deg, range auto-computed
+ * from bounding-sphere radius and fov). Explicit --eye/--target/--up
+ * overrides auto-framing (manual mode, for debugging only).
  *
  * Usage:
- *   node cesium_render.js --tileset <path> --output <png> \
- *     --eye x,y,z --target x,y,z --up x,y,z --fov deg \
- *     --background r,g,b,a --width W --height H
+ *   node cesium_render.js --tileset <path> --output <png>
+ *     [--eye x,y,z --target x,y,z --up x,y,z] [--fov deg]
+ *     [--background r,g,b,a] [--width W] [--height H]
+ *
+ * Params export: set CAPTURE_PARAMS=/path/params.json to save the
+ * post-render camera params (position/direction/up/fov/aspectRatio/
+ * near/far) + width/height/backgroundColor as JSON.
  *
  * The tileset path is served via a local HTTP server (cesium.js requires
  * http:// for tile loading, not file://).
@@ -65,13 +77,15 @@ async function main() {
   const tilesetDir = path.dirname(tilesetPath);
   const output = args.output || '/tmp/cesium_render.png';
 
-  const eye = args.eye.split(',').map(Number);
-  const target = args.target.split(',').map(Number);
+  const eye = args.eye ? args.eye.split(',').map(Number) : null;
+  const target = args.target ? args.target.split(',').map(Number) : null;
   const up = (args.up || '0,0,1').split(',').map(Number);
   const fov = parseFloat(args.fov || '60');
   const bg = (args.background || '0,0,0,1').split(',').map(Number);
-  const width = parseInt(args.width || '800');
-  const height = parseInt(args.height || '600');
+  const width = parseInt(args.width || '400');
+  const height = parseInt(args.height || '300');
+  // Auto-framing is the default. Explicit --eye switches to manual mode.
+  const autoFrame = !eye;
 
   // Serve the tileset directory.
   const port = 18777;
@@ -103,7 +117,7 @@ async function main() {
 <!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <script src="http://localhost:${port + 1}/Cesium.js"></script>
-<style>html,body,#cesiumContainer{margin:0;padding:0;width:${width}px;height:${height}px;overflow:hidden}.cesium-viewer-bottom{display:none!important}</style>
+<style>html,body,#cesiumContainer{margin:0;padding:0;width:${width}px;height:${height}px;overflow:hidden}#cesiumContainer canvas{width:${width}px!important;height:${height}px!important;display:block}.cesium-viewer-bottom{display:none!important}</style>
 </head><body>
 <div id="cesiumContainer"></div>
 <script>
@@ -116,6 +130,10 @@ async function run() {
     useBrowserRecommendedResolution: false,
   });
   viewer.resolutionScale = 1.0;
+  // Ensure the canvas backing store matches the requested size BEFORE
+  // any rendering happens (setting canvas.width/height later would
+  // clear the framebuffer).
+  viewer.resize();
 
   // P37-C param alignment: disable sky, atmosphere, shadows, IBL.
   viewer.scene.skyBox = undefined;
@@ -134,20 +152,34 @@ async function run() {
   viewer.scene.primitives.add(tileset);
   await tileset.readyPromise;
 
-  // Set camera (same params as our demo).
+  // Set frustum first (fov affects auto-framing range computation).
   viewer.camera.frustum.fov = Cesium.Math.toRadians(${fov});
   viewer.camera.frustum.aspectRatio = ${width} / ${height};
   viewer.camera.frustum.near = 0.1;
   viewer.camera.frustum.far = 10000.0;
   window.__viewer = viewer;  // Store for param extraction
-  viewer.camera.setView({
-    destination: new Cesium.Cartesian3(${eye[0]}, ${eye[1]}, ${eye[2]}),
-    orientation: {
-      direction: new Cesium.Cartesian3(
-        ${target[0]} - ${eye[0]}, ${target[1]} - ${eye[1]}, ${target[2]} - ${eye[2]}),
-      up: new Cesium.Cartesian3(${up[0]}, ${up[1]}, ${up[2]}),
-    },
-  });
+
+  if (${autoFrame}) {
+    // Auto-frame the whole tileset: synchronous, deterministic equivalent
+    // of viewer.zoomTo(tileset) (same default offset math, no flight
+    // animation). The camera ends up looking at the bounding-sphere
+    // center from a distance that fits the whole sphere in the frustum.
+    const bs = tileset.boundingSphere;
+    if (!bs) { throw new Error('auto-framing failed: tileset.boundingSphere is unavailable'); }
+    viewer.camera.viewBoundingSphere(bs);
+    window.__autoFramed = true;
+  } else {
+    // Manual override (debugging only): explicit eye/target/up.
+    viewer.camera.setView({
+      destination: new Cesium.Cartesian3(${eye ? eye[0] : 0}, ${eye ? eye[1] : 0}, ${eye ? eye[2] : 0}),
+      orientation: {
+        direction: new Cesium.Cartesian3(
+          ${target ? target[0] - eye[0] : 0}, ${target ? target[1] - eye[1] : 0}, ${target ? target[2] - eye[2] : 0}),
+        up: new Cesium.Cartesian3(${up[0]}, ${up[1]}, ${up[2]}),
+      },
+    });
+    window.__autoFramed = false;
+  }
 
   // Wait for tiles to load (allTilesLoaded event or timeout).
   await new Promise((resolve) => {
@@ -169,24 +201,35 @@ run().catch(e => { window.__error = String(e); window.__done = true; });
     // Serve cesium.js on port+1.
     const cesiumServer = await serveDirectory(cesiumPath, port + 1);
 
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    await page.waitForFunction('window.__done === true', { timeout: 30000 });
-    // Ensure canvas fills viewport
-    await page.evaluate((w, h) => {
-        const canvas = document.querySelector('#cesiumContainer canvas');
-        if (canvas) {
-            canvas.width = w;
-            canvas.height = h;
-            canvas.style.width = w + 'px';
-            canvas.style.height = h + 'px';
-        }
-    }, width, height);
+    // The page signals completion itself via window.__done; don't wait for
+    // network idle (fragile with large local script fetches).
+    await page.setContent(html, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction('window.__done === true', { timeout: 60000 });
 
+    // Check for Cesium-side errors BEFORE touching the viewer: if the
+    // tileset failed to load, window.__viewer was never created and the
+    // resize below would throw a confusing TypeError instead.
     const error = await page.evaluate('window.__error');
     if (error) {
       console.error('Cesium error:', error);
       process.exit(1);
     }
+
+    // Canvas sizing must happen AFTER layout is done. The in-page
+    // viewer.resize() runs before first layout (clientWidth reads 0),
+    // leaving the canvas at its 300x150 default. Re-sync here, then do
+    // a fresh synchronous render before export (see below).
+    await page.evaluate((w, h) => {
+        const viewer = window.__viewer;
+        if (!viewer) return;
+        const container = document.getElementById('cesiumContainer');
+        container.style.width = w + 'px';
+        container.style.height = h + 'px';
+        void container.offsetWidth; // force layout
+        viewer.resize();
+    }, width, height);
+    // NOTE: do NOT touch canvas.width/height directly: it would clear
+    // the framebuffer. viewer.resize() + a fresh render is the safe path.
 
     const tilesLoaded = await page.evaluate('window.__tilesLoaded');
     console.log(`tilesLoaded=${tilesLoaded}`);
@@ -209,9 +252,11 @@ run().catch(e => { window.__error = String(e); window.__done = true; });
     });
     
     if (extracted && process.env.CAPTURE_PARAMS) {
+        const autoFramed = await page.evaluate('window.__autoFramed === true');
         const params = {
             width: width,
             height: height,
+            autoFramed: autoFramed,
             camera: extracted,
             backgroundColor: [bg[0], bg[1], bg[2], bg[3]],
         };
@@ -219,8 +264,14 @@ run().catch(e => { window.__error = String(e); window.__done = true; });
         console.log(`Params extracted and saved: ${process.env.CAPTURE_PARAMS}`);
     }
 
-    // Get image directly from WebGL canvas (not page screenshot)
+    // Get image directly from the WebGL canvas (not a page screenshot).
+    // Cesium does NOT set preserveDrawingBuffer, so the drawing buffer may
+    // be cleared after compositing. Do a synchronous render and export the
+    // canvas in the SAME JS task, while the buffer is still valid.
     const dataUrl = await page.evaluate(() => {
+        const viewer = window.__viewer;
+        if (!viewer) return null;
+        viewer.scene.render();
         const canvas = document.querySelector('#cesiumContainer canvas');
         if (!canvas) return null;
         return canvas.toDataURL('image/png');
