@@ -3,7 +3,7 @@
 ## 核心规则（2026-10-08 确立）
 
 1. **只用 conformance_test.py 跑对比**，不手敲 demo/harness 命令
-2. **两边用完全相同的相机参数** — 官方 benchmark 从 Cesium 会话提取；手工数据则先定参数，两边都用同一套
+2. **参数必须从 Cesium 渲染后提取** — 先跑 Cesium，从实际会话中提取相机参数，再喂给我们的渲染器
 3. **无法复现的采集数据 = 错误数据**，不基于它做优化
 4. **先验证基础**：原生 POINTS + 1px 参考必须先过，不过则其他免谈
 
@@ -37,9 +37,17 @@ await page.evaluate((w, h) => {
 
 1. 生成 PNTS（Python struct）
 2. 创建 tileset.json（boundingVolume sphere）
-3. 用 harness 渲染 Cesium 参考图（指定相机参数）
-4. 创建 params.json（与步骤3相同的相机参数：position/direction/up/fov/aspectRatio/near/far/backgroundColor）
-5. 运行 conformance_test.py：
+3. 用 harness 渲染 Cesium 参考图，**同时提取相机参数**：
+   ```bash
+   CAPTURE_PARAMS=/path/to/bench/params.json node cesium_render.js \
+     --tileset /path/to/tileset.json \
+     --output /path/to/bench/render.png \
+     --eye "0,-25,15" --target "0,0,0" --up "0,0,1" \
+     --fov 46.83 --background "0.1,0.1,0.1,1" \
+     --width 400 --height 300
+   ```
+   参数从 Cesium 实际会话中提取，保存到 params.json
+4. 运行 conformance_test.py（读取上一步提取的 params.json）：
    ```bash
    python3 tests/data/benchmarks/conformance_test.py \
      --benchmark /path/to/bench \

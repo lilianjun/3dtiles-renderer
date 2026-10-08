@@ -139,6 +139,7 @@ async function run() {
   viewer.camera.frustum.aspectRatio = ${width} / ${height};
   viewer.camera.frustum.near = 0.1;
   viewer.camera.frustum.far = 10000.0;
+  window.__viewer = viewer;  // Store for param extraction
   viewer.camera.setView({
     destination: new Cesium.Cartesian3(${eye[0]}, ${eye[1]}, ${eye[2]}),
     orientation: {
@@ -189,6 +190,34 @@ run().catch(e => { window.__error = String(e); window.__done = true; });
 
     const tilesLoaded = await page.evaluate('window.__tilesLoaded');
     console.log(`tilesLoaded=${tilesLoaded}`);
+
+    // Extract ACTUAL camera params from Cesium (must be extracted after render, per rule)
+    const extracted = await page.evaluate(() => {
+        const viewer = window.__viewer;
+        if (!viewer) return null;
+        const cam = viewer.camera;
+        const frustum = cam.frustum;
+        return {
+            position: [cam.position.x, cam.position.y, cam.position.z],
+            direction: [cam.direction.x, cam.direction.y, cam.direction.z],
+            up: [cam.up.x, cam.up.y, cam.up.z],
+            fov: Cesium.Math.toDegrees(frustum.fov),
+            aspectRatio: frustum.aspectRatio,
+            near: frustum.near,
+            far: frustum.far,
+        };
+    });
+    
+    if (extracted && process.env.CAPTURE_PARAMS) {
+        const params = {
+            width: width,
+            height: height,
+            camera: extracted,
+            backgroundColor: [bg[0], bg[1], bg[2], bg[3]],
+        };
+        fs.writeFileSync(process.env.CAPTURE_PARAMS, JSON.stringify(params, null, 2));
+        console.log(`Params extracted and saved: ${process.env.CAPTURE_PARAMS}`);
+    }
 
     await page.screenshot({ path: output });
     console.log(`Screenshot: ${output}`);
