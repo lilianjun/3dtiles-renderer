@@ -484,6 +484,10 @@ bool Renderer::initialize(const RendererConfig& config) {
     s.view = s.engine->createView();
     s.view->setScene(s.scene);
     s.view->setPostProcessingEnabled(false); // faster on software GL; P2 demo
+    // P37: No MSAA. Per 2026-10-08 decision, no-AA is the correct comparison
+    // method (MSAA implementations differ between SwiftShader/WebGL and
+    // Filament, contributing ~0.5-0.9% systematic edge differences that mask
+    // real rendering gaps). Both sides render without anti-aliasing.
 
     s.cameraEntity = utils::EntityManager::get().create();
     s.camera = s.engine->createCamera(s.cameraEntity);

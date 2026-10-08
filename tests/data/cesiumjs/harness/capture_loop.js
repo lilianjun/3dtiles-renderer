@@ -206,6 +206,10 @@ async function initViewer() {
     sceneModePicker: false, selectionIndicator: false,
     timeline: false, navigationHelpButton: false,
     useBrowserRecommendedResolution: false,
+    // P37: No AA (2026-10-08 decision). WebGL antialias:false + Scene
+    // msaaSamples:1. No-AA is the correct comparison method.
+    contextOptions: { webgl: { antialias: false } },
+    msaaSamples: 1,
   });
   viewer.resolutionScale = 1.0;
   viewer.scene.skyBox = undefined;
