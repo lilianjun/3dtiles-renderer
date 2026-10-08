@@ -150,6 +150,20 @@ async function run() {
   }
 
   const tileset = await Cesium.Cesium3DTileset.fromUrl('${tilesetUrl}');
+  // P37: disable lighting -- output the authored color directly (no lighting
+  // calc), matching our renderer's unlit path. Cesium's UNLIT model applies
+  // czm_linearToSrgb at the end, but its material stage never decodes the
+  // baseColorFactor uniform (only textures and .pnts vertex colors are
+  // decoded). Pre-decode those paths so UNLIT outputs the raw color.
+  tileset.customShader = new Cesium.CustomShader({
+    lightingModel: Cesium.LightingModel.UNLIT,
+    fragmentShaderText:
+      'void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {\\n' +
+      '#if !defined(HAS_BASE_COLOR_TEXTURE) && !defined(HAS_SRGB_COLOR)\\n' +
+      '  material.diffuse = czm_srgbToLinear(material.diffuse);\\n' +
+      '#endif\\n' +
+      '}\\n',
+  });
   viewer.scene.primitives.add(tileset);
   await tileset.readyPromise;
 

@@ -251,9 +251,24 @@ FilamentTileResources FilamentBackend::createTile(
                     .sampler(filament::Texture::Sampler::SAMPLER_2D)
                     .build(*engine);
             // Copy pixels (one necessary copy).
+            // P37: flip rows vertically. Cesium Native decodes images
+            // top-row-first; Filament's setImage follows the GL convention
+            // (first row = bottom). Without the flip, textures render
+            // upside-down vs Cesium (measured 2026-10-08 on p25/p15:
+            // checker colors inverted).
             size_t pxSize = prim.texPixels.size();
             auto* pxCopy = new std::byte[pxSize];
-            std::memcpy(pxCopy, prim.texPixels.data(), pxSize);
+            const size_t rowBytes =
+                static_cast<size_t>(prim.texWidth) * 4u; // RGBA8
+            const size_t rowCount = static_cast<size_t>(prim.texHeight);
+            const std::byte* srcRows =
+                reinterpret_cast<const std::byte*>(prim.texPixels.data());
+            for (size_t r = 0; r < rowCount; ++r) {
+                std::memcpy(
+                    pxCopy + r * rowBytes,
+                    srcRows + (rowCount - 1u - r) * rowBytes,
+                    rowBytes);
+            }
             filament::Texture::PixelBufferDescriptor desc(
                 pxCopy,
                 pxSize,
