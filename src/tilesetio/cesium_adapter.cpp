@@ -144,7 +144,8 @@ TileRenderData convertModel(
     const CesiumGltf::Model& model,
     const double tileTransform[16],
     const std::string& tileId,
-    const double localOrigin[3]) {
+    const double localOrigin[3],
+    bool isChildTile) {
     TileRenderData out;
     out.tileId = tileId;
     std::memcpy(out.tileTransform, tileTransform, 16 * sizeof(double));
@@ -451,6 +452,17 @@ TileRenderData convertModel(
                 }
             }
 
+            // P37: Child tile coplanar nudge: push vertices slightly along
+            // normals so child wins depth test vs parent in ADD refinement.
+            if (isChildTile && !pd.normals.empty() &&
+                pd.normals.size() == pd.positions.size()) {
+                const float eps = 0.1f; // 10cm
+                for (size_t i = 0; i < pd.positions.size(); i += 3) {
+                    pd.positions[i+0] += pd.normals[i+0] * eps;
+                    pd.positions[i+1] += pd.normals[i+1] * eps;
+                    pd.positions[i+2] += pd.normals[i+2] * eps;
+                }
+            }
             // P37: CESIUM_primitive_outline extension - also render outlines as LINES.
             // The extension provides indices for the outline edges.
             if (const auto* pOutline =

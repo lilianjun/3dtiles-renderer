@@ -21,6 +21,7 @@ TileRenderData convertModel(
     const CesiumGltf::Model& model,
     const double tileTransform[16],
     const std::string& tileId,
-    const double localOrigin[3] = nullptr);
+    const double localOrigin[3] = nullptr,
+    bool isChildTile = false);
 
 } // namespace tilesetio
