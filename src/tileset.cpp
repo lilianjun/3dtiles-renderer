@@ -921,6 +921,16 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
             glm::dmat4 m;
             if (isAbsolute) {
                 m = inst;
+            } else if (convertInstanceYUpToZUp) {
+                // P37: For cmpt merges, base (node matrix) has ECEF baked,
+                // but the tile transform also provides ECEF. Strip the
+                // translation from base (keep rotation/scale) to avoid
+                // double-applying ECEF.
+                glm::dmat4 baseNoT = base;
+                baseNoT[3][0] = 0.0;
+                baseNoT[3][1] = 0.0;
+                baseNoT[3][2] = 0.0;
+                m = baseNoT * inst;
             } else {
                 m = base * inst;
             }

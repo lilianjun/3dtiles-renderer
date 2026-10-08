@@ -14,11 +14,11 @@ fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         vec4 tex = texture(materialParams_baseColorMap, getUV0());
-        // P37: Texture is SRGB8_A8, HW decodes sRGB->linear. Cesium UNLIT
-        // does linearToSrgb at output, so convert back here.
-        // (2026-10-08: was outputting linear directly -> dark, e.g. 91 vs 157)
-        vec3 srgbTex = pow(tex.rgb, vec3(1.0 / 2.2));
-        material.baseColor.rgb = srgbTex * materialParams.color;
+        // P37: Texture is SRGB8_A8, HW decodes sRGB->linear.
+        // Output linear directly (Filament framebuffer is linear;
+        // readPixels gets raw values). Do NOT sRGB-encode here.
+        // (2026-10-08: pow(1/2.2) made p25 worse 6.6%->10.6%)
+        material.baseColor.rgb = tex.rgb * materialParams.color;
         material.baseColor.a = tex.a * materialParams.color.b;
     }
 }
