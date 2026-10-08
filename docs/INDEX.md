@@ -146,8 +146,8 @@ python3 tests/data/benchmarks/conformance_test.py \
 
 ## 待补文档（已知缺口）
 
-1. Harness 脚本使用文档（`cesium_render.js`, `compare_ssim.py`）
+1. Harness 脚本使用文档（`compare_ssim.py`）
 2. Demo CLI 完整 flags 文档
 3. `gen_p*.py` 索引（phase→脚本→输出）
-4. Benchmark 采集可复现流程
+4. ~~Benchmark 采集可复现流程~~ — 已解决：`tests/data/cesiumjs/harness/batch_capture.js`（2026-10-08）
 5. `src/tilesetio/` 模块文档
