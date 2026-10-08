@@ -119,7 +119,8 @@ bool readNormals(
 TileRenderData convertModel(
     const CesiumGltf::Model& model,
     const double tileTransform[16],
-    const std::string& tileId) {
+    const std::string& tileId,
+    const double localOrigin[3]) {
     TileRenderData out;
     out.tileId = tileId;
     std::memcpy(out.tileTransform, tileTransform, 16 * sizeof(double));
@@ -249,6 +250,37 @@ TileRenderData convertModel(
         if (hasLargeTrans) {
             // Remove translation from worldMat, keep vertices local
             worldMat[3] = glm::dvec4(0.0, 0.0, 0.0, 1.0);
+        }
+        // P37: For cmpt merges, i3dm clone worldMat has ECEF baked in
+        // Y-up frame (from CmptToGltfConverter). Convert Y-up->Z-up
+        // (x,y,z)->(x,-z,y), then subtract tileECEF to get local offset.
+        // tileECEF = tileTransform_T + localOrigin.
+        if (localOrigin != nullptr) {
+            glm::dvec3 wt(worldMat[3][0], worldMat[3][1], worldMat[3][2]);
+            if (glm::length(wt) > 1e6) {
+                // Y-up to Z-up for the translation
+                glm::dvec3 wtZup(wt.x, -wt.z, wt.y);
+                glm::dvec3 tileT(out.tileTransform[12], out.tileTransform[13],
+                                 out.tileTransform[14]);
+                glm::dvec3 tileEcef(tileT.x + localOrigin[0],
+                                    tileT.y + localOrigin[1],
+                                    tileT.z + localOrigin[2]);
+                if (glm::length(tileEcef) > 1e6) {
+                    // Also rotate the 3x3 part Y-up->Z-up
+                    glm::dmat3 rot(worldMat);
+                    glm::dmat3 yup2zup(
+                        glm::dvec3(1,0,0),
+                        glm::dvec3(0,0,-1),
+                        glm::dvec3(0,1,0));
+                    glm::dmat3 rotZup = yup2zup * rot;
+                    for (int c = 0; c < 3; ++c)
+                        for (int r = 0; r < 3; ++r)
+                            worldMat[c][r] = rotZup[c][r];
+                    worldMat[3][0] = wtZup.x - tileEcef.x;
+                    worldMat[3][1] = wtZup.y - tileEcef.y;
+                    worldMat[3][2] = wtZup.z - tileEcef.z;
+                }
+            }
         }
         const auto& mesh = model.meshes[static_cast<size_t>(meshIdx)];
         for (const auto& prim : mesh.primitives) {

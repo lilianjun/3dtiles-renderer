@@ -904,12 +904,10 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
                 rq = glm::quat_cast(combined);
                 // tz stays as absolute ECEF; do NOT apply Y-up conversion.
             } else if (convertInstanceYUpToZUp) {
-                tz = glm::dvec3(t.x, -t.z, t.y);
-                // Quaternion for +90 deg about X (Y-up -> Z-up), matching upAxisFix.
-                // upAxisFix maps (x,y,z)->(x,-z,y).
-                const glm::dquat fixQ(0.7071067811865476, 0.7071067811865476, 0.0, 0.0);
-                rq = fixQ * rq * glm::inverse(fixQ);
-                sz = glm::dvec3(s.x, s.z, s.y);
+                // P37: For cmpt merges, keep instances Y-up (do NOT convert).
+                // convertModel converts the full worldMat Y-up->Z-up.
+                tz = glm::dvec3(t.x, t.y, t.z);
+                // rq, sz unchanged
             }
             const glm::dmat4 inst =
                 glm::translate(glm::dmat4(1.0), tz) *
@@ -922,15 +920,9 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
             if (isAbsolute) {
                 m = inst;
             } else if (convertInstanceYUpToZUp) {
-                // P37: For cmpt merges, base (node matrix) has ECEF baked,
-                // but the tile transform also provides ECEF. Strip the
-                // translation from base (keep rotation/scale) to avoid
-                // double-applying ECEF.
-                glm::dmat4 baseNoT = base;
-                baseNoT[3][0] = 0.0;
-                baseNoT[3][1] = 0.0;
-                baseNoT[3][2] = 0.0;
-                m = baseNoT * inst;
+                // P37: For cmpt merges, keep full base (with ECEF).
+                // convertModel subtracts tileECEF precisely (using localOrigin).
+                m = base * inst;
             } else {
                 m = base * inst;
             }
@@ -1369,11 +1361,13 @@ public:
                 tileTransform[c * 4 + r] = worldT[c][r];
 
         // Convert Model to neutral render data.
+        double localOriginArr[3] = {_localOrigin.x, _localOrigin.y, _localOrigin.z};
         tilesetio::TileRenderData renderData =
             tilesetio::convertModel(
                 pLoad->model.value(), tileTransform,
                 Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
-                    tile.getTileID()));
+                    tile.getTileID()),
+                localOriginArr);
         delete pLoad;
 
         if (renderData.primitives.empty()) {

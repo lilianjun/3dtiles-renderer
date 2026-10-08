@@ -20,6 +20,7 @@ namespace tilesetio {
 TileRenderData convertModel(
     const CesiumGltf::Model& model,
     const double tileTransform[16],
-    const std::string& tileId);
+    const std::string& tileId,
+    const double localOrigin[3] = nullptr);
 
 } // namespace tilesetio
