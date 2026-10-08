@@ -87,14 +87,15 @@ async function main() {
   // Auto-framing is the default. Explicit --eye switches to manual mode.
   const autoFrame = !eye;
 
-  // Serve the tileset directory.
-  const port = 18777;
+  // Serve the tileset directory. Port is configurable so parallel
+  // batch workers don't collide (batch passes --port per worker).
+  const port = parseInt(args.port || '18777');
   const server = await serveDirectory(tilesetDir, port);
   const tilesetUrl = `http://localhost:${port}/${path.basename(tilesetPath)}`;
 
-  // CesiumJS from local checkout (sparse checkout has the built version?).
-  // We use the npm cesium package instead for reliability.
-  const cesiumPath = path.join(__dirname, 'node_modules', 'cesium', 'Build', 'CesiumUnminified');
+  // CesiumJS from the npm cesium package. Use the minified build:
+  // same version, ~2x faster to fetch+parse than CesiumUnminified.
+  const cesiumPath = path.join(__dirname, 'node_modules', 'cesium', 'Build', 'Cesium');
 
   const browser = await puppeteer.launch({
     headless: 'new',

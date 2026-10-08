@@ -13,7 +13,11 @@
  * C++ renderer imports (see conformance_test.py).
  *
  * Usage:
- *   node batch_capture.js --list <tilesets.txt> --out <dir> [--width 400 --height 300]
+ *   node batch_capture.js --list <tilesets.txt> --out <dir> [--width 400 --height 300] [--jobs 2]
+ *
+ * --jobs: parallel captures (default 2). Each capture launches its own
+ * headless Chrome + SwiftShader; 2 suits a 2-core box. Wall-clock for
+ * 200 fixtures: ~45min serial -> ~22min at --jobs 2.
  *
  * tilesets.txt format (one per line):
  *   <name> <tileset.json path>
@@ -35,7 +39,7 @@ function parseArgs() {
   return out;
 }
 
-async function runCapture(name, tilesetPath, outDir, width, height) {
+async function runCapture(name, tilesetPath, outDir, width, height, port) {
   const benchDir = path.join(outDir, name);
   fs.mkdirSync(benchDir, { recursive: true });
   
@@ -54,6 +58,7 @@ async function runCapture(name, tilesetPath, outDir, width, height) {
     '--background', '0.1,0.1,0.1,1',
     '--width', String(width),
     '--height', String(height),
+    '--port', String(port),
   ];
   
   const env = { ...process.env, CAPTURE_PARAMS: paramsJson };
@@ -83,23 +88,32 @@ async function main() {
   const outDir = args.out;
   const width = parseInt(args.width || '400');
   const height = parseInt(args.height || '300');
-  
+  const jobs = Math.max(1, parseInt(args.jobs || '2'));
+
   if (!listFile || !outDir) {
-    console.error('Usage: node batch_capture.js --list <tilesets.txt> --out <dir> [--width 400 --height 300]');
+    console.error('Usage: node batch_capture.js --list <tilesets.txt> --out <dir> [--width 400 --height 300] [--jobs 2]');
     process.exit(1);
   }
-  
+
   const lines = fs.readFileSync(listFile, 'utf-8').split('\n').filter(l => l.trim() && !l.startsWith('#'));
-  console.log(`Batch capture: ${lines.length} tilesets -> ${outDir}`);
-  
-  let ok = 0, fail = 0;
-  for (const line of lines) {
-    const [name, ...rest] = line.trim().split(/\s+/);
-    const tilesetPath = rest.join(' ');
-    const success = await runCapture(name, tilesetPath, outDir, width, height);
-    if (success) ok++; else fail++;
+  console.log(`Batch capture: ${lines.length} tilesets -> ${outDir} (jobs=${jobs})`);
+
+  // Promise pool: up to `jobs` captures concurrently. A failed item is
+  // counted and the pool continues with the rest.
+  let ok = 0, fail = 0, next = 0;
+  async function worker(workerId) {
+    // Distinct port pair per worker so parallel captures don't collide.
+    const port = 18777 + workerId * 2;
+    while (next < lines.length) {
+      const line = lines[next++];
+      const [name, ...rest] = line.trim().split(/\s+/);
+      const tilesetPath = rest.join(' ');
+      const success = await runCapture(name, tilesetPath, outDir, width, height, port);
+      if (success) ok++; else fail++;
+    }
   }
-  
+  await Promise.all(Array.from({ length: Math.min(jobs, lines.length) }, (_, i) => worker(i)));
+
   console.log(`\nDone: ${ok} ok, ${fail} failed`);
   process.exit(fail > 0 ? 1 : 0);
 }
