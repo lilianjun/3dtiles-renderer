@@ -8,6 +8,7 @@
 #include "unlit_color_filamat.h"
 #include "unlit_color_transparent_filamat.h"
 #include "unlit_textured_filamat.h"
+#include "unlit_textured_transparent_filamat.h"
 #include "unlit_vertex_color_filamat.h"
 
 #include <filament/IndexBuffer.h>
@@ -60,6 +61,12 @@ FilamentTileResources FilamentBackend::createTile(
         _texturedMaterial = filament::Material::Builder()
                                 .package(unlit_textured_filamat,
                                          unlit_textured_filamat_len)
+                                .build(*engine);
+    }
+    if (!_texturedTransparentMaterial) {
+        _texturedTransparentMaterial = filament::Material::Builder()
+                                .package(unlit_textured_transparent_filamat,
+                                         unlit_textured_transparent_filamat_len)
                                 .build(*engine);
     }
     // Create the shared PBR material on first use (for primitives with normals).
@@ -285,7 +292,9 @@ FilamentTileResources FilamentBackend::createTile(
             tex->setImage(*engine, 0, std::move(desc));
             res.textures.push_back(tex);
 
-            mi = _texturedMaterial->createInstance();
+            // P37: Use transparent textured material for alphaMode=BLEND
+            auto* texMat = (prim.alphaMode == 2) ? _texturedTransparentMaterial : _texturedMaterial;
+            mi = texMat->createInstance();
             mi->setParameter(
                 "color",
                 filament::math::float3(
@@ -405,6 +414,10 @@ void FilamentBackend::destroyMaterial(filament::Engine* engine) {
     if (_texturedMaterial) {
         engine->destroy(_texturedMaterial);
         _texturedMaterial = nullptr;
+    }
+    if (_texturedTransparentMaterial) {
+        engine->destroy(_texturedTransparentMaterial);
+        _texturedTransparentMaterial = nullptr;
     }
     if (_pbrMaterial) {
         engine->destroy(_pbrMaterial);

@@ -430,6 +430,24 @@ TileRenderData convertModel(
                             }
                         }
                     }
+                } else {
+                    // P37: Fallback for materials without PBR (e.g., i3dm
+                    // billboards): use the first texture in the model if any.
+                    // Billboards need alpha blending for transparent background.
+                    if (!model.textures.empty() && !model.images.empty()) {
+                        const auto& tex = model.textures[0];
+                        if (tex.source >= 0 &&
+                            static_cast<size_t>(tex.source) < model.images.size()) {
+                            const auto& img = model.images[static_cast<size_t>(tex.source)];
+                            if (img.pAsset && img.pAsset->width > 0 &&
+                                img.pAsset->height > 0 && !img.pAsset->pixelData.empty()) {
+                                pd.texWidth = img.pAsset->width;
+                                pd.texHeight = img.pAsset->height;
+                                pd.texPixels = img.pAsset->pixelData;
+                                pd.alphaMode = 2; // BLEND for transparent billboard bg
+                            }
+                        }
+                    }
                 }
             }
 

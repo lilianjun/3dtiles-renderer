@@ -1,0 +1,25 @@
+material {
+    name : unlit_textured_transparent,
+    blending : transparent,
+    shadingModel : unlit,
+    parameters : [
+        { type : float3, name : color },
+        { type : sampler2d, name : baseColorMap }
+    ],
+    requires : [
+        uv0
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 tex = texture(materialParams_baseColorMap, getUV0());
+        // P37: Texture is SRGB8_A8, HW decodes sRGB->linear.
+        // Output linear directly (Filament framebuffer is linear;
+        // readPixels gets raw values). Do NOT sRGB-encode here.
+        // (2026-10-08: pow(1/2.2) made p25 worse 6.6%->10.6%)
+        material.baseColor.rgb = tex.rgb * materialParams.color;
+        material.baseColor.a = tex.a * materialParams.color.b;
+    }
+}

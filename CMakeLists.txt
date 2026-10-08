@@ -525,6 +525,24 @@ if(TILES_WITH_FILAMENT)
       DEPENDS "${TILES_TEX_FILAMAT}"
               "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
       COMMENT "Embedding unlit_textured.filamat as C++ header")
+    # P37: Textured transparent material for billboards.
+    set(TILES_TEX_TRANS_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/unlit_textured_transparent.mat")
+    set(TILES_TEX_TRANS_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_textured_transparent.filamat")
+    set(TILES_TEX_TRANS_FILAMAT_H
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_textured_transparent_filamat.h")
+    add_custom_command(
+      OUTPUT "${TILES_TEX_TRANS_FILAMAT}"
+      COMMAND "${TILES_MATC}" -a all -o "${TILES_TEX_TRANS_FILAMAT}" "${TILES_TEX_TRANS_MAT_SRC}"
+      DEPENDS "${TILES_TEX_TRANS_MAT_SRC}"
+      COMMENT "matc: compiling unlit_textured_transparent.mat (all backends)")
+    add_custom_command(
+      OUTPUT "${TILES_TEX_TRANS_FILAMAT_H}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+              "${TILES_TEX_TRANS_FILAMAT}" "${TILES_TEX_TRANS_FILAMAT_H}" unlit_textured_transparent_filamat
+      DEPENDS "${TILES_TEX_TRANS_FILAMAT}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+      COMMENT "Embedding unlit_textured_transparent.filamat as C++ header")
     # P37: PBR lit material for tilesetio (Cesium.js conformance).
     set(TILES_PBR_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/pbr_color.mat")
     set(TILES_PBR_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/pbr_color.filamat")
@@ -579,7 +597,7 @@ if(TILES_WITH_FILAMENT)
       DEPENDS "${TILES_TC_FILAMAT}"
               "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
       COMMENT "Embedding unlit_color_transparent.filamat as C++ header")
-    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}" "${TILES_TEX_FILAMAT_H}" "${TILES_PBR_FILAMAT_H}" "${TILES_VC_FILAMAT_H}" "${TILES_TC_FILAMAT_H}")
+    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}" "${TILES_TEX_FILAMAT_H}" "${TILES_TEX_TRANS_FILAMAT_H}" "${TILES_PBR_FILAMAT_H}" "${TILES_VC_FILAMAT_H}" "${TILES_TC_FILAMAT_H}")
 
     # P36-B pivot: the Filament ImGui backend was abandoned (see ADR-0035);
     # the UI material is no longer needed. The Inspector uses a separate

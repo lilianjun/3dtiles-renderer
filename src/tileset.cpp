@@ -1075,6 +1075,7 @@ public:
         if (auto* pModel =
                 std::get_if<CesiumGltf::Model>(&result.contentKind);
             pModel != nullptr) {
+
             pData = new LoadThreadData();
             pData->model = std::move(*pModel);
             // T1: extract RTC_CENTER from CESIUM_RTC extension (b3dm/i3dm).
