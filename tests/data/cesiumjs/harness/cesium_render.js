@@ -235,16 +235,23 @@ run().catch(e => { window.__error = String(e); window.__done = true; });
     const tilesLoaded = await page.evaluate('window.__tilesLoaded');
     console.log(`tilesLoaded=${tilesLoaded}`);
 
-    // Extract ACTUAL camera params from Cesium (must be extracted after render, per rule)
+    // Extract ACTUAL camera params from Cesium (must be extracted after render, per rule).
+    // IMPORTANT: use the *WC (world-coordinate) variants. viewBoundingSphere
+    // calls camera.lookAt, which sets camera.transform to the ENU frame at the
+    // bounding-sphere center -- after that, camera.position/direction/up are
+    // expressed in that LOCAL frame, not in world coordinates. positionWC /
+    // directionWC / upWC account for the transform. (Found 2026-10-08: the
+    // non-WC extraction produced a camera near the origin for an ECEF
+    // tileset, while the real camera was 6.37e6 m away.)
     const extracted = await page.evaluate(() => {
         const viewer = window.__viewer;
         if (!viewer) return null;
         const cam = viewer.camera;
         const frustum = cam.frustum;
         return {
-            position: [cam.position.x, cam.position.y, cam.position.z],
-            direction: [cam.direction.x, cam.direction.y, cam.direction.z],
-            up: [cam.up.x, cam.up.y, cam.up.z],
+            position: [cam.positionWC.x, cam.positionWC.y, cam.positionWC.z],
+            direction: [cam.directionWC.x, cam.directionWC.y, cam.directionWC.z],
+            up: [cam.upWC.x, cam.upWC.y, cam.upWC.z],
             fov: Cesium.Math.toDegrees(frustum.fov),
             aspectRatio: frustum.aspectRatio,
             near: frustum.near,

@@ -33,6 +33,14 @@ viewer.camera.viewBoundingSphere(tileset.boundingSphere);
 `position/direction/up`、`frustum.fov`（转回度数）、`aspectRatio`、`near`、
 `far`，环境变量 `CAPTURE_PARAMS` 指向输出路径时写 JSON：
 
+**必须用 `positionWC/directionWC/upWC`（世界坐标），不能用
+`position/direction/up`。** `viewBoundingSphere` 内部调 `camera.lookAt`，
+会把 `camera.transform` 设为包围球中心处的 ENU 坐标系——此后
+`camera.position` 等是该**局部系**下的值。实测教训（2026-10-08）：
+对 ECEF tileset 用非 WC 版提取，得到的是原点附近的相机（局部系），
+而真实相机在 637 万米外；C++ 端按此渲染出一张全黑图，
+SSIM 却仍有 0.8184（背景像素掩盖）——典型的"背景掩盖差异"陷阱。
+
 ```json
 { "width": 400, "height": 300, "autoFramed": true,
   "camera": { "position": [...], "direction": [...], "up": [...],
