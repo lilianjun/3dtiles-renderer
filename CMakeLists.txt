@@ -86,6 +86,7 @@ endif()
 # ---------------------------------------------------------------------------
 option(TILES_WITH_CESIUM_NATIVE "Fetch and build cesium-native (3D Tiles loading/scheduling)" OFF)
 option(TILES_WITH_FILAMENT      "Fetch Filament (rendering, prebuilt binaries)" OFF)
+option(TILES_WITH_BGFX          "Fetch bgfx (rendering, replaces Filament)" OFF)
 option(TILES_WITH_SDL3          "Fetch and build SDL3 (demo + tests only; never the SDK)" OFF)
 
 # ---------------------------------------------------------------------------
@@ -282,6 +283,8 @@ endif()
 # P4 wires linux / android / windows / ios (no Web target — the Emscripten
 # stub was removed 2026-09-30; a future web renderer will be a separate JS
 # project on filament.js, see ADR-0023 G9).
+# bgfx backend (replaces Filament, 2026-10-09 decision).
+include(cmake/bgfx.cmake)
 if(TILES_WITH_FILAMENT)
   set(TILES_FILAMENT_VERSION "1.77.0")
   set(_filament_base_url
