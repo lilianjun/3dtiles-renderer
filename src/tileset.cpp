@@ -733,6 +733,9 @@ bool preflightTilesetRoot(
 // ---------------------------------------------------------------------------
 struct TileRenderData {
     tilesetio::FilamentTileResources filamentResources;
+#ifdef TILES_WITH_BGFX
+    tilesetio::BgfxTileResources bgfxResources;
+#endif
     bool inScene = false;
     // T1 (tilesetio): tile-level transform (double[16], column-major).
     // Applied to the asset root when adding to scene.
@@ -2082,9 +2085,12 @@ public:
         }
 
         // Create bgfx resources via backend
-        auto* pRes = new tilesetio::BgfxTileResources(
-            _backend->createTile(renderData));
-        return pRes;
+        auto* pData = new TileRenderData();
+        std::memcpy(pData->tileTransform, tileTransform, 16 * sizeof(double));
+#ifdef TILES_WITH_BGFX
+        pData->bgfxResources = _backend->createTile(renderData);
+#endif
+        return pData;
     }
 
     void free(
@@ -2092,9 +2098,11 @@ public:
         void*& pRenderResources) override {
         // Free bgfx resources
         if (pRenderResources) {
-            auto* pRes = static_cast<tilesetio::BgfxTileResources*>(pRenderResources);
-            _backend->destroyTile(*pRes);
-            delete pRes;
+            auto* pData = static_cast<TileRenderData*>(pRenderResources);
+#ifdef TILES_WITH_BGFX
+            _backend->destroyTile(pData->bgfxResources);
+#endif
+            delete pData;
             pRenderResources = nullptr;
         }
         if (pLoadThreadResult) {
