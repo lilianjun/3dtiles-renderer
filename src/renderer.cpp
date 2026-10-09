@@ -814,15 +814,21 @@ bool Renderer::renderFrame() {
             1.0f, 0);
         bgfx::setViewRect(bs.viewId, 0, 0, bs.width, bs.height);
         
+        // Camera matrices (from orbit or explicit camera)
+        float view[16], proj[16];
+        // TODO: Compute from bs.orbit / bs.explicitCam
+        // For now, identity (to be implemented)
+        for (int i = 0; i < 16; ++i) {
+            view[i] = (i % 5 == 0) ? 1.0f : 0.0f;
+            proj[i] = (i % 5 == 0) ? 1.0f : 0.0f;
+        }
+        bgfx::setViewTransform(bs.viewId, view, proj);
+        
         // Update tileset (LOD selection)
         const bool useTileset = bs.tileset != nullptr && bs.tileset->isLoaded();
         if (useTileset) {
-            // TODO: Compute camera matrices and update tiles
-            // bs.tileset->update(...);
-            
-            // TODO: Submit visible tiles
-            // For each tile in render list:
-            //   bs.backend.submitTile(bs.viewId, tileResources, modelMatrix);
+            // TODO: bs.tileset->update with camera
+            // TODO: Submit visible tiles via bs.backend.submitTile
         }
         
         bgfx::touch(bs.viewId);
