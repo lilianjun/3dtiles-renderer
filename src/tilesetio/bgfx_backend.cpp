@@ -6,6 +6,19 @@
 
 namespace tilesetio {
 
+// Helper: load a compiled shader binary from file
+static bgfx::ShaderHandle loadShader(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return BGFX_INVALID_HANDLE;
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    const bgfx::Memory* mem = bgfx::alloc(uint32_t(size));
+    fread(mem->data, 1, size, f);
+    fclose(f);
+    return bgfx::createShader(mem);
+}
+
 BgfxBackend::~BgfxBackend() {
     shutdown();
 }
@@ -19,8 +32,25 @@ bool BgfxBackend::init() {
     _u_modelViewProj = bgfx::createUniform("u_modelViewProj", bgfx::UniformType::Mat4);
     _s_texColor = bgfx::createUniform("s_texColor", bgfx::UniformType::Sampler);
 
-    // TODO: Load compiled shaders (via shaderc)
-    // For now, shaders will be loaded from files
+    // Load compiled shaders (via shaderc output)
+    // Shaders are compiled at build time to build/shaders/
+    // For now, try loading from standard locations
+    const char* shaderPaths[] = {
+        "./shaders/", "./build/shaders/", "/tmp/shaders/",
+    };
+    bgfx::ShaderHandle vsColor = BGFX_INVALID_HANDLE;
+    bgfx::ShaderHandle fsColor = BGFX_INVALID_HANDLE;
+    bgfx::ShaderHandle vsTex = BGFX_INVALID_HANDLE;
+    bgfx::ShaderHandle fsTex = BGFX_INVALID_HANDLE;
+    
+    for (const char* base : shaderPaths) {
+        char path[512];
+        snprintf(path, sizeof(path), "%sunlit_color_vs.bin", base);
+        vsColor = loadShader(path);
+        if (bgfx::isValid(vsColor)) break;
+    }
+    // Note: Full shader loading to be completed when shaderc is integrated
+    // For now, programs remain invalid (rendering will be skipped)
 
     _initialized = true;
     return true;
