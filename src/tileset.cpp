@@ -2010,6 +2010,80 @@ public:
 
 } // namespace
 
+#ifdef TILES_WITH_BGFX
+// ---------------------------------------------------------------------------
+// BgfxPrepareResources: bgfx implementation of IPrepareRendererResources.
+// Replaces FilamentPrepareResources (2026-10-09 migration).
+// ---------------------------------------------------------------------------
+class BgfxPrepareResources
+    : public Cesium3DTilesSelection::IPrepareRendererResources {
+public:
+    BgfxPrepareResources(tilesetio::BgfxBackend* backend)
+        : _backend(backend) {}
+
+    CesiumAsync::Future<
+        Cesium3DTilesSelection::TileLoadResultAndRenderResources>
+    prepareInLoadThread(
+        const CesiumAsync::AsyncSystem& asyncSystem,
+        Cesium3DTilesSelection::TileLoadResult&& tileLoadResult,
+        const glm::dmat4& /*transform*/,
+        const std::any& /*rendererOptions*/) override {
+        // Same as Filament: move Model to LoadThreadData
+        // (Implementation mirrors FilamentPrepareResources::prepareInLoadThread)
+        // For now, placeholder - full implementation to follow
+        Cesium3DTilesSelection::TileLoadResultAndRenderResources result;
+        result.pTileLoadResult = std::make_unique<Cesium3DTilesSelection::TileLoadResult>(
+            std::move(tileLoadResult));
+        return asyncSystem.createResolvedFuture(std::move(result));
+    }
+
+    void* prepareInMainThread(
+        Cesium3DTilesSelection::Tile& tile, void* pLoadThreadResult) override {
+        // Convert Model -> TileRenderData -> bgfx resources
+        // (Implementation mirrors FilamentPrepareResources::prepareInMainThread)
+        // For now, placeholder
+        return nullptr;
+    }
+
+    void free(
+        Cesium3DTilesSelection::Tile& tile, void* pLoadThreadResult,
+        void*& pRenderResources) override {
+        // Free bgfx resources
+        if (pRenderResources) {
+            auto* pRes = static_cast<tilesetio::BgfxTileResources*>(pRenderResources);
+            _backend->destroyTile(*pRes);
+            delete pRes;
+            pRenderResources = nullptr;
+        }
+        if (pLoadThreadResult) {
+            delete static_cast<LoadThreadData*>(pLoadThreadResult);
+        }
+    }
+
+    void attachRasterInMainThread(
+        const Cesium3DTilesSelection::Tile& /*tile*/,
+        std::int32_t /*moreDetailAvailable*/,
+        const Cesium3DTilesSelection::RasterOverlayDetails& /*rasterOverlayDetails*/,
+        void* /*pLoadThreadResult*/,
+        void*& /*pRenderResources*/,
+        const std::any& /*rendererOptions*/) override {
+        // Raster overlays not yet supported in bgfx backend
+    }
+
+    void detachRasterInMainThread(
+        const Cesium3DTilesSelection::Tile& /*tile*/,
+        std::int32_t /*moreDetailAvailable*/,
+        const std::vector<Cesium3DTilesSelection::Tile::Pointer>& /*tiles*/,
+        void* /*pLoadThreadResult*/,
+        void* /*pRenderResources*/) override {
+        // Raster overlays not yet supported in bgfx backend
+    }
+
+private:
+    tilesetio::BgfxBackend* _backend;
+};
+#endif
+
 // ---------------------------------------------------------------------------
 // TilesetRenderer::Impl
 // ---------------------------------------------------------------------------
@@ -3036,6 +3110,9 @@ struct TilesetRenderer::Impl {
     std::shared_ptr<SimpleTaskProcessor> taskProcessor;
     std::optional<CesiumAsync::AsyncSystem> asyncSystem;
     std::shared_ptr<FilamentPrepareResources> prepareResources;
+#ifdef TILES_WITH_BGFX
+    std::shared_ptr<class BgfxPrepareResources> bgfxPrepareResources;
+#endif
     std::unique_ptr<Cesium3DTilesSelection::Tileset> tileset;
     bool loaded = false;
     int renderedCount = -1;
