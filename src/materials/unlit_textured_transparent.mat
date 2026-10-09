@@ -15,11 +15,10 @@ fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         vec4 tex = texture(materialParams_baseColorMap, getUV0());
-        // P37: Texture is SRGB8_A8, HW decodes sRGB->linear.
-        // Output linear directly (Filament framebuffer is linear;
-        // readPixels gets raw values). Do NOT sRGB-encode here.
-        // (2026-10-08: pow(1/2.2) made p25 worse 6.6%->10.6%)
+        // P37: For billboards, texture is uploaded as RGBA8 (no sRGB decode,
+        // texSrgbDecode=false). Output directly.
+        // Alpha: use tex.a directly (color is float3 tint, no alpha).
         material.baseColor.rgb = tex.rgb * materialParams.color;
-        material.baseColor.a = tex.a * materialParams.color.b;
+        material.baseColor.a = tex.a;
     }
 }
