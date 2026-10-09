@@ -35,6 +35,7 @@
 #include <CesiumGltf/ExtensionExtMeshGpuInstancing.h>
 #include <CesiumGltf/AccessorView.h>
 #include <CesiumGltfWriter/GltfWriter.h>
+#include <CesiumGltfReader/GltfReader.h>
 #include <CesiumUtility/CreditSystem.h>
 #include <rapidjson/document.h> // P23: pre-flight tileset.json validation
 #include <rapidjson/writer.h>     // P37-B: GLB JSON re-serialization
@@ -649,7 +650,8 @@ bool preflightTilesetRoot(
     const std::string& localPath,
     RoutingAssetAccessor& accessor,
     CesiumAsync::AsyncSystem& asyncSystem,
-    std::string& errorOut) {
+    std::string& errorOut,
+    rapidjson::Document* pDocOut = nullptr) {
     std::vector<std::byte> bytes;
     if (!localPath.empty()) {
         std::ifstream in(localPath, std::ios::binary);
@@ -713,6 +715,9 @@ bool preflightTilesetRoot(
         !doc["root"].IsObject()) {
         errorOut = "tileset.json is not a 3D Tiles tileset (missing \"root\")";
         return false;
+    }
+    if (pDocOut != nullptr) {
+        pDocOut->Swap(doc);
     }
     return true;
 }
@@ -1068,6 +1073,335 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
 // because gltfio does not understand it and float glTF nodes cannot hold
 // ECEF-scale centers. Returns nullptr on failure.
 // ---
+
+// ---------------------------------------------------------------------------
+// 3D Tiles 1.1 `contents` array support.
+//
+// cesium-native v0.64.0 parses `contents` in Tile but the selection runtime
+// never loads them, so such tiles end up with TileEmptyContent. We pre-parse
+// the tileset.json here, building a map from tile tree-path to the list of
+// content URIs. In prepareInMainThread, tiles with empty content are looked
+// up in this map; their contents are fetched, converted to Models, merged
+// into one Model, and fed through the normal convertModel path.
+// ---------------------------------------------------------------------------
+// Forward declaration (defined below).
+CesiumGltf::Model mergeGltfModels(std::vector<CesiumGltf::Model>&& models);
+
+// ---------------------------------------------------------------------------
+// 3D Tiles 1.1 `contents` array preprocessing.
+//
+// cesium-native v0.64.0 parses `contents` but never loads them. We handle it
+// at loadTileset time: for each tile with a `contents` array of .glb URIs,
+// fetch each .glb, parse via GltfReader, merge into one Model, serialize
+// back to glb bytes, write to a temp file next to the tileset.json, and
+// rewrite the tile JSON to use `content.uri` pointing at the merged file.
+// Tiles with non-.glb contents (e.g. external .json) are left as-is.
+//
+// Returns the modified JSON string, or empty if no `contents` were found.
+// ---------------------------------------------------------------------------
+std::string preprocessContentsArrays(
+    rapidjson::Document& doc,
+    const std::string& baseDir,
+    CesiumAsync::IAssetAccessor& accessor,
+    CesiumAsync::AsyncSystem& asyncSystem) {
+    if (!doc.IsObject() || !doc.HasMember("root")) return "";
+
+    // Collect (jsonPath, uris) for all tiles with contents.
+    std::vector<std::pair<std::string, std::vector<std::string>>> work;
+    std::function<void(rapidjson::Value&, const std::string&)> walk =
+        [&](rapidjson::Value& tileJson, const std::string& path) {
+            if (tileJson.IsObject() && tileJson.HasMember("contents") &&
+                tileJson["contents"].IsArray()) {
+                std::vector<std::string> uris;
+                for (const auto& c : tileJson["contents"].GetArray()) {
+                    if (c.IsObject() && c.HasMember("uri") &&
+                        c["uri"].IsString()) {
+                        uris.emplace_back(c["uri"].GetString());
+                    }
+                }
+                // Only handle all-.glb contents for now.
+                bool allGlb = !uris.empty();
+                for (const auto& u : uris) {
+                    std::string l = u;
+                    std::transform(
+                        l.begin(), l.end(), l.begin(), ::tolower);
+                    if (l.size() < 4 ||
+                        l.compare(l.size() - 4, 4, ".glb") != 0) {
+                        allGlb = false;
+                        break;
+                    }
+                }
+                if (allGlb) {
+                    work.emplace_back(path, std::move(uris));
+                }
+            }
+            if (tileJson.IsObject() && tileJson.HasMember("children") &&
+                tileJson["children"].IsArray()) {
+                int idx = 0;
+                for (auto& child : tileJson["children"].GetArray()) {
+                    std::string cp = path.empty()
+                                         ? std::to_string(idx)
+                                         : path + "/" + std::to_string(idx);
+                    walk(child, cp);
+                    ++idx;
+                }
+            }
+        };
+    walk(doc["root"], "");
+
+    if (work.empty()) return "";
+
+    CesiumGltfReader::GltfReader reader;
+    int fileIdx = 0;
+    for (const auto& [path, uris] : work) {
+        std::vector<CesiumGltf::Model> models;
+        for (const auto& uri : uris) {
+            std::string url = baseDir.empty() ? uri : baseDir + "/" + uri;
+            std::shared_ptr<CesiumAsync::IAssetRequest> pRequest;
+            try {
+                pRequest = accessor.get(asyncSystem, url, {}).wait();
+            } catch (...) {
+                continue;
+            }
+            const auto* pResp = pRequest ? pRequest->response() : nullptr;
+            if (!pResp || pResp->statusCode() < 200 ||
+                pResp->statusCode() >= 300) {
+                continue;
+            }
+            const auto data = pResp->data();
+            std::vector<std::byte> bytes(data.begin(), data.end());
+            auto result = reader.readGltf(
+                std::span<const std::byte>(bytes.data(), bytes.size()));
+            if (result.model.has_value()) {
+                models.push_back(std::move(result.model.value()));
+            }
+        }
+        if (models.empty()) continue;
+
+        CesiumGltf::Model merged;
+        if (models.size() == 1) {
+            merged = std::move(models[0]);
+        } else {
+            merged = mergeGltfModels(std::move(models));
+        }
+
+        // Flatten to a single buffer for writeGlb.
+        std::vector<std::byte> allBufferData;
+        std::vector<size_t> bufferOffsets;
+        for (const auto& buf : merged.buffers) {
+            bufferOffsets.push_back(allBufferData.size());
+            const auto& d = buf.cesium.data;
+            allBufferData.insert(allBufferData.end(), d.begin(), d.end());
+        }
+        // Update bufferViews to point to buffer 0 with adjusted offsets.
+        for (auto& bv : merged.bufferViews) {
+            if (bv.buffer >= 0 &&
+                bv.buffer < static_cast<int32_t>(bufferOffsets.size())) {
+                bv.byteOffset +=
+                    static_cast<int64_t>(bufferOffsets[bv.buffer]);
+                bv.buffer = 0;
+            }
+        }
+        // Keep only the first buffer, update its byteLength.
+        if (!merged.buffers.empty()) {
+            merged.buffers[0].byteLength =
+                static_cast<int64_t>(allBufferData.size());
+            merged.buffers.resize(1);
+        }
+
+        // Serialize to glb bytes.
+        CesiumGltfWriter::GltfWriter writer;
+        auto writeResult = writer.writeGlb(
+            merged,
+            std::span<const std::byte>(
+                allBufferData.data(), allBufferData.size()));
+        if (!writeResult.gltfBytes.empty()) {
+            const auto& glbBytes = writeResult.gltfBytes;
+        std::string outName =
+            "__merged_contents_" + std::to_string(fileIdx++) + ".glb";
+        std::string outPath =
+            baseDir.empty() ? outName : baseDir + "/" + outName;
+        {
+            std::ofstream out(outPath, std::ios::binary);
+            if (!out) continue;
+            out.write(
+                reinterpret_cast<const char*>(glbBytes.data()),
+                static_cast<std::streamsize>(glbBytes.size()));
+        }
+        std::cerr << "[tiles_renderer] contents: merged " << uris.size()
+                  << " glbs -> " << outPath << std::endl;
+
+        // Rewrite the tile JSON: replace `contents` with `content.uri`.
+        std::function<rapidjson::Value*(rapidjson::Value&, const std::string&)>
+            findTile = [&](rapidjson::Value& node,
+                           const std::string& p) -> rapidjson::Value* {
+            if (p.empty()) return &node;
+            size_t slash = p.find('/');
+            std::string head =
+                (slash == std::string::npos) ? p : p.substr(0, slash);
+            std::string tail =
+                (slash == std::string::npos) ? "" : p.substr(slash + 1);
+            int idx = std::stoi(head);
+            if (!node.IsObject() || !node.HasMember("children") ||
+                !node["children"].IsArray() ||
+                idx >= static_cast<int>(node["children"].Size())) {
+                return nullptr;
+            }
+            return findTile(node["children"][idx], tail);
+        };
+        rapidjson::Value* pTile = findTile(doc["root"], path);
+        if (pTile && pTile->IsObject()) {
+            pTile->RemoveMember("contents");
+            rapidjson::Value content(rapidjson::kObjectType);
+            rapidjson::Value uriVal;
+            uriVal.SetString(
+                outName.c_str(),
+                static_cast<rapidjson::SizeType>(outName.size()),
+                doc.GetAllocator());
+            content.AddMember("uri", uriVal, doc.GetAllocator());
+            pTile->AddMember("content", content, doc.GetAllocator());
+        }
+        } // if (!writeResult.gltfBytes.empty())
+    }
+
+    // Serialize modified JSON.
+    rapidjson::StringBuffer sb;
+    rapidjson::Writer<rapidjson::StringBuffer> jsonWriter(sb);
+    doc.Accept(jsonWriter);
+    return sb.GetString();
+}
+
+// Merge multiple glTF Models into one by appending all elements with index
+// remapping. Used for 3D Tiles 1.1 `contents` arrays. Handles the core
+// arrays: buffers/bufferViews/accessors, images/samplers/textures/materials,
+// meshes, nodes, scenes. Skins/animations/extensions are not merged (not
+// needed for the conformance fixtures).
+CesiumGltf::Model mergeGltfModels(std::vector<CesiumGltf::Model>&& models) {
+    using namespace CesiumGltf;
+    Model out;
+
+    // Track index offsets for each input model.
+    struct Offsets {
+        int32_t buffer = 0;
+        int32_t bufferView = 0;
+        int32_t accessor = 0;
+        int32_t image = 0;
+        int32_t sampler = 0;
+        int32_t texture = 0;
+        int32_t material = 0;
+        int32_t mesh = 0;
+        int32_t node = 0;
+    };
+
+    // First pass: merge buffers (concatenate bytes).
+    // We keep each model's buffer as a separate buffer in the output to
+    // avoid byteOffset recomputation complexities — simpler and correct.
+    for (auto& m : models) {
+        for (auto& buf : m.buffers) {
+            out.buffers.push_back(std::move(buf));
+        }
+    }
+
+    Offsets off;
+    for (auto& m : models) {
+        Offsets cur = off;
+
+        // bufferViews: adjust buffer index.
+        for (auto& bv : m.bufferViews) {
+            if (bv.buffer >= 0) bv.buffer += cur.buffer;
+            out.bufferViews.push_back(std::move(bv));
+        }
+        // accessors: adjust bufferView index.
+        for (auto& acc : m.accessors) {
+            if (acc.bufferView >= 0) acc.bufferView += cur.bufferView;
+            out.accessors.push_back(std::move(acc));
+        }
+        // images, samplers, textures, materials.
+        for (auto& img : m.images) {
+            if (img.bufferView >= 0) img.bufferView += cur.bufferView;
+            out.images.push_back(std::move(img));
+        }
+        for (auto& s : m.samplers) {
+            out.samplers.push_back(std::move(s));
+        }
+        for (auto& tex : m.textures) {
+            if (tex.sampler >= 0) tex.sampler += cur.sampler;
+            if (tex.source >= 0) tex.source += cur.image;
+            out.textures.push_back(std::move(tex));
+        }
+        for (auto& mat : m.materials) {
+            // Adjust texture indices in pbrMetallicRoughness etc.
+            auto fixTex = [&](auto& optTi) {
+                if (optTi.has_value() && optTi->index >= 0)
+                    optTi->index += cur.texture;
+            };
+            if (mat.pbrMetallicRoughness) {
+                fixTex(mat.pbrMetallicRoughness->baseColorTexture);
+                fixTex(mat.pbrMetallicRoughness->metallicRoughnessTexture);
+            }
+            fixTex(mat.normalTexture);
+            fixTex(mat.occlusionTexture);
+            fixTex(mat.emissiveTexture);
+            out.materials.push_back(std::move(mat));
+        }
+        // meshes: adjust accessor and material indices.
+        for (auto& mesh : m.meshes) {
+            for (auto& prim : mesh.primitives) {
+                if (prim.indices >= 0) prim.indices += cur.accessor;
+                for (auto& attr : prim.attributes) {
+                    if (attr.second >= 0) attr.second += cur.accessor;
+                }
+                if (prim.material >= 0) prim.material += cur.material;
+            }
+            out.meshes.push_back(std::move(mesh));
+        }
+        // nodes: adjust mesh and children indices.
+        for (auto& node : m.nodes) {
+            if (node.mesh >= 0) node.mesh += cur.mesh;
+            for (auto& child : node.children) {
+                if (child >= 0) child += cur.node;
+            }
+            // Note: skins not handled (not in fixtures).
+            out.nodes.push_back(std::move(node));
+        }
+        // scenes: adjust node indices. Merge all scenes' nodes into the
+        // output's default scene (create one if needed).
+        if (out.scenes.empty()) {
+            out.scenes.emplace_back();
+        }
+        for (auto& scene : m.scenes) {
+            for (auto& n : scene.nodes) {
+                if (n >= 0) out.scenes[0].nodes.push_back(n + cur.node);
+            }
+        }
+        // extensionsUsed/Required: union.
+        for (const auto& e : m.extensionsUsed) {
+            if (std::find(out.extensionsUsed.begin(), out.extensionsUsed.end(), e) ==
+                out.extensionsUsed.end()) {
+                out.extensionsUsed.push_back(e);
+            }
+        }
+        for (const auto& e : m.extensionsRequired) {
+            if (std::find(out.extensionsRequired.begin(), out.extensionsRequired.end(), e) ==
+                out.extensionsRequired.end()) {
+                out.extensionsRequired.push_back(e);
+            }
+        }
+
+        // Update offsets for next model.
+        off.buffer += static_cast<int32_t>(m.buffers.size());
+        off.bufferView += static_cast<int32_t>(m.bufferViews.size());
+        off.accessor += static_cast<int32_t>(m.accessors.size());
+        off.image += static_cast<int32_t>(m.images.size());
+        off.sampler += static_cast<int32_t>(m.samplers.size());
+        off.texture += static_cast<int32_t>(m.textures.size());
+        off.material += static_cast<int32_t>(m.materials.size());
+        off.mesh += static_cast<int32_t>(m.meshes.size());
+        off.node += static_cast<int32_t>(m.nodes.size());
+    }
+
+    return out;
+}
 
 // FilamentPrepareResources: IPrepareRendererResources implementation that
 // converts each tile's glb content into a gltfio FilamentAsset.
@@ -1808,14 +2142,45 @@ struct TilesetRenderer::Impl {
         // failed pre-flight changes nothing: the live tileset (if any) is
         // untouched, exactly like any other failed load (P22).
         std::string preflightError;
+        rapidjson::Document preflightDoc;
         if (!preflightTilesetRoot(
-                url, localPath, *pAccessor, *newAsyncSystem, preflightError)) {
+                url, localPath, *pAccessor, *newAsyncSystem, preflightError,
+                &preflightDoc)) {
             // No "loadTileset: " prefix here: Renderer::loadTileset adds it
             // (same convention as the "file not found" probe above).
             lastError = preflightError;
             std::cerr << "[tiles_renderer] loadTileset: " << lastError
                       << std::endl;
             return false;
+        }
+        // 3D Tiles 1.1 `contents`: preprocess the JSON — merge .glb contents
+        // into temp files and rewrite tiles to use `content.uri`. If the
+        // tileset has no `contents`, this is a no-op.
+        std::string effectiveUrl = url;
+        std::string effectiveLocalPath = localPath;
+        // Only for local files for now.
+        if (!localPath.empty()) {
+            auto pos = localPath.find_last_of("/\\");
+            std::string baseDir = (pos == std::string::npos)
+                                      ? "."
+                                      : localPath.substr(0, pos);
+            std::string modified =
+                preprocessContentsArrays(preflightDoc, baseDir, *pAccessor,
+                                         *newAsyncSystem);
+            if (!modified.empty()) {
+                // Write modified JSON to temp file next to original.
+                std::string tmpPath = baseDir + "/__tileset_contents.json";
+                {
+                    std::ofstream out(tmpPath, std::ios::binary);
+                    out.write(modified.data(),
+                              static_cast<std::streamsize>(modified.size()));
+                }
+                std::cerr << "[tiles_renderer] contents: using preprocessed "
+                             "tileset "
+                          << tmpPath << std::endl;
+                effectiveLocalPath = tmpPath;
+                effectiveUrl = tmpPath;
+            }
         }
         Cesium3DTilesSelection::TilesetExternals externals{
             pAccessor, pPrepare, *newAsyncSystem,
@@ -1870,7 +2235,7 @@ struct TilesetRenderer::Impl {
             options.maximumCachedBytes = maxCachedBytes;
         }
         auto newTileset = std::make_unique<Cesium3DTilesSelection::Tileset>(
-            externals, url, options);
+            externals, effectiveUrl, options);
         // Wait (bounded) for the root tile metadata so load() can report
         // success/failure honestly instead of always succeeding.
         const auto deadline =
