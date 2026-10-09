@@ -799,6 +799,24 @@ bool Renderer::renderFrame() {
         return true;
     }
     return false; // swap chain not ready (e.g. resized); caller may retry
+    #elif defined(TILES_WITH_BGFX)
+        // ---- bgfx backend render path ----
+        BgfxState& bs = g_bgfxState;
+        if (!bs.initialized) {
+            return false;
+        }
+        // Set view clear state
+        bgfx::setViewClear(bs.viewId, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH,
+            (uint32_t)(bs.clearColor[0]*255) << 24 |
+            (uint32_t)(bs.clearColor[1]*255) << 16 |
+            (uint32_t)(bs.clearColor[2]*255) << 8 |
+            (uint32_t)(bs.clearColor[3]*255),
+            1.0f, 0);
+        bgfx::setViewRect(bs.viewId, 0, 0, bs.width, bs.height);
+        // TODO: Update tileset and submit tiles
+        bgfx::touch(bs.viewId);
+        bgfx::frame();
+        return true;
 #else
     return true; // stub path
 #endif
