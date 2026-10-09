@@ -402,12 +402,19 @@ TileRenderData convertModel(
                 const auto& pbr = mat.pbrMetallicRoughness;
                 if (pbr) {
                     if (pbr->baseColorFactor.size() == 4) {
-                        pd.color[0] =
-                            static_cast<float>(pbr->baseColorFactor[0]);
-                        pd.color[1] =
-                            static_cast<float>(pbr->baseColorFactor[1]);
-                        pd.color[2] =
-                            static_cast<float>(pbr->baseColorFactor[2]);
+                        // P37: baseColorFactor is sRGB per glTF spec.
+                        // Convert to linear for Filament UNLIT (which outputs
+                        // linear and converts to sRGB for display).
+                        // This matches Cesium UNLIT direct sRGB output.
+                        auto srgbToLinear = [](double c) {
+                            return std::pow(c, 2.2);
+                        };
+                        pd.color[0] = static_cast<float>(srgbToLinear(
+                            pbr->baseColorFactor[0]));
+                        pd.color[1] = static_cast<float>(srgbToLinear(
+                            pbr->baseColorFactor[1]));
+                        pd.color[2] = static_cast<float>(srgbToLinear(
+                            pbr->baseColorFactor[2]));
                         pd.color[3] =
                             static_cast<float>(pbr->baseColorFactor[3]);
                     }
