@@ -2607,6 +2607,12 @@ struct TilesetRenderer::Impl {
         if (tileset == nullptr) {
             return;
         }
+        // P36: debugFreezeFrame — skip traversal update, reuse last frame's
+        // tiles. Still pump async so in-flight loads can complete.
+        if (debugFreezeFrame) {
+            asyncSystem->dispatchMainThreadTasks();
+            return;
+        }
         // Pump async work (tileset.json fetch, tile content loads).
         asyncSystem->dispatchMainThreadTasks();
 
