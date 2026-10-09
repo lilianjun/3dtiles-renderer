@@ -1,6 +1,8 @@
 // Unified ECEF transform handling implementation.
 
 #include "ecef_transform.h"
+#include <CesiumGeospatial/GlobeTransforms.h>
+#include <CesiumGeospatial/Ellipsoid.h>
 #include <cmath>
 
 namespace tilesetio {
@@ -62,25 +64,13 @@ glm::dmat4 undoEnuConjugation(
 }
 
 glm::dmat4 computeEnuMatrix(const glm::dvec3& ecefPosition) {
-    // Compute the ENU frame at the given ECEF position.
-    // Up = normalize(position)
-    // East = normalize(cross((0,0,1), up))
-    // North = cross(up, east)
-    
-    glm::dvec3 up = glm::normalize(ecefPosition);
-    glm::dvec3 east = glm::normalize(glm::cross(glm::dvec3(0, 0, 1), up));
-    glm::dvec3 north = glm::cross(up, east);
-    
-    // Build 4x4 matrix: columns are east, north, up, position.
-    glm::dmat4 result(1.0);
-    result[0][0] = east.x;  result[0][1] = east.y;  result[0][2] = east.z;
-    result[1][0] = north.x; result[1][1] = north.y; result[1][2] = north.z;
-    result[2][0] = up.x;    result[2][1] = up.y;    result[2][2] = up.z;
-    result[3][0] = ecefPosition.x;
-    result[3][1] = ecefPosition.y;
-    result[3][2] = ecefPosition.z;
-    
-    return result;
+    // P37: Use cesium-native's GlobeTransforms::eastNorthUpToFixedFrame.
+    // This correctly uses the WGS84 ellipsoid's geodetic surface normal,
+    // not the spherical approximation (normalize(position)).
+    // Matches CesiumJS I3dmLoader.js which uses
+    // FixedFrameTransforms.eastNorthUpToFixedFrame(position, Ellipsoid.WGS84).
+    return CesiumGeospatial::GlobeTransforms::eastNorthUpToFixedFrame(
+        ecefPosition, CesiumGeospatial::Ellipsoid::WGS84);
 }
 
 } // namespace tilesetio
