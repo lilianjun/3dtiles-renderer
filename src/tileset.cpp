@@ -2019,7 +2019,14 @@ class BgfxPrepareResources
     : public Cesium3DTilesSelection::IPrepareRendererResources {
 public:
     BgfxPrepareResources(tilesetio::BgfxBackend* backend)
-        : _backend(backend) {}
+        : _backend(backend) {
+        // Initialize to identity
+        _modelMatrix = glm::dmat4(1.0);
+        _localOrigin = glm::dvec3(0.0);
+    }
+    
+    void setModelMatrix(const glm::dmat4& m) { _modelMatrix = m; }
+    void setLocalOrigin(const glm::dvec3& o) { _localOrigin = o; }
 
     CesiumAsync::Future<
         Cesium3DTilesSelection::TileLoadResultAndRenderResources>
@@ -2046,15 +2053,28 @@ public:
         }
 
         // Convert Model -> TileRenderData (mirrors Filament path)
-        // Note: Uses simplified transform for now; full ECEF logic to follow
-        double tileTransform[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
-        double localOriginArr[3] = {0, 0, 0};
+        const glm::dvec3 rtcCenter = pLoad->rtcCenter;
+        const glm::dmat4 upAxisFix = pLoad->upAxisFix;
+
+        tilesetio::EcefTransformResult ecefResult =
+            tilesetio::computeEcefTransform(
+                tile.getTransform(), rtcCenter, upAxisFix, _modelMatrix,
+                _localOrigin);
+        glm::dmat4 worldT = ecefResult.worldTransform;
+
+        double tileTransform[16];
+        for (int c = 0; c < 4; ++c)
+            for (int r = 0; r < 4; ++r)
+                tileTransform[c * 4 + r] = worldT[c][r];
+
+        double localOriginArr[3] = {_localOrigin.x, _localOrigin.y, _localOrigin.z};
         std::string tid = Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
             tile.getTileID());
+        bool isChild = (tid.find("child_") != std::string::npos);
         
         tilesetio::TileRenderData renderData = tilesetio::convertModel(
             pLoad->model.value(), tileTransform, tid, localOriginArr,
-            false, true, nullptr);
+            isChild, true, nullptr);
         delete pLoad;
 
         if (renderData.primitives.empty()) {
@@ -2103,6 +2123,8 @@ public:
 
 private:
     tilesetio::BgfxBackend* _backend;
+    glm::dmat4 _modelMatrix;
+    glm::dvec3 _localOrigin;
 };
 #endif
 
