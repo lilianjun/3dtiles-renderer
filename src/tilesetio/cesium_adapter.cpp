@@ -450,6 +450,8 @@ TileRenderData convertModel(
                                 pd.texHeight = img.pAsset->height;
                                 pd.texPixels = img.pAsset->pixelData;
                                 pd.alphaMode = 2; // BLEND for transparent billboard bg
+                                pd.texSrgbDecode = false; // P37: billboard texture is linear, not sRGB
+                                
                             }
                         }
                     }
