@@ -96,6 +96,10 @@ Renderer::TilesetEventCallbacks g_eventCallbacks;
 // loadTileset() calls; forwarded to each new TilesetRenderer at load.
 // The matrix is stored column-major (matches the public API).
 bool g_show = true;
+// CESIUM_primitive_outline stashed switches (pre-load).
+bool g_enableShowOutline = true;
+bool g_showOutline = true;
+float g_outlineColor[3] = {0.0f, 0.0f, 0.0f};
 bool g_preloadWhenHidden = false;
 double g_modelMatrix[16] = {1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
                             0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0};
@@ -857,6 +861,10 @@ bool Renderer::loadTileset(const std::string& tilesetUrl,
     tileset->setShow(g_show);
     tileset->setPreloadWhenHidden(g_preloadWhenHidden);
     tileset->setModelMatrix(g_modelMatrix);
+    tileset->setEnableShowOutline(g_enableShowOutline);
+    tileset->setShowOutline(g_showOutline);
+    tileset->setOutlineColor(
+        g_outlineColor[0], g_outlineColor[1], g_outlineColor[2]);
     tileset->setDebugShowBoundingVolume(g_debugShowBoundingVolume);
     tileset->setDebugShowContentBoundingVolume(
         g_debugShowContentBoundingVolume);
@@ -1183,6 +1191,84 @@ bool Renderer::isShow() {
     }
 #endif
     return g_show;
+}
+
+void Renderer::setEnableShowOutline(bool enable) {
+    if (!g_initialized) {
+        return;
+    }
+    g_enableShowOutline = enable;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setEnableShowOutline(enable);
+    }
+#endif
+}
+
+bool Renderer::isEnableShowOutline() {
+    if (!g_initialized) {
+        return true;
+    }
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        return g_state.tileset->isEnableShowOutline();
+    }
+#endif
+    return g_enableShowOutline;
+}
+
+void Renderer::setShowOutline(bool show) {
+    if (!g_initialized) {
+        return;
+    }
+    g_showOutline = show;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setShowOutline(show);
+    }
+#endif
+}
+
+bool Renderer::isShowOutline() {
+    if (!g_initialized) {
+        return true;
+    }
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        return g_state.tileset->isShowOutline();
+    }
+#endif
+    return g_showOutline;
+}
+
+void Renderer::setOutlineColor(float r, float g, float b) {
+    if (!g_initialized) {
+        return;
+    }
+    g_outlineColor[0] = r;
+    g_outlineColor[1] = g;
+    g_outlineColor[2] = b;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setOutlineColor(r, g, b);
+    }
+#endif
+}
+
+void Renderer::outlineColor(float out[3]) {
+    if (!g_initialized) {
+        out[0] = out[1] = out[2] = 0.0f;
+        return;
+    }
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->outlineColor(out);
+        return;
+    }
+#endif
+    out[0] = g_outlineColor[0];
+    out[1] = g_outlineColor[1];
+    out[2] = g_outlineColor[2];
 }
 
 void Renderer::setPreloadWhenHidden(bool preload) {

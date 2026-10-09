@@ -22,6 +22,8 @@ TileRenderData convertModel(
     const double tileTransform[16],
     const std::string& tileId,
     const double localOrigin[3] = nullptr,
-    bool isChildTile = false);
+    bool isChildTile = false,
+    bool enableShowOutline = true,
+    const float outlineColor[3] = nullptr);
 
 } // namespace tilesetio

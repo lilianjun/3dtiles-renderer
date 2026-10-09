@@ -100,6 +100,13 @@ public:
         // lodTransitionLength seconds). Off by default.
         bool enableLodTransitionPeriod = false;
         float lodTransitionLength = 1.0f;
+        // CESIUM_primitive_outline: enableShowOutline=false skips outline
+        // geometry processing at load time (saves work); showOutline=false
+        // hides outlines at render time; outlineColor is the outline color
+        // (linear RGB, default black). CesiumJS defaults: true/true/black.
+        bool enableShowOutline = true;
+        bool showOutline = true;
+        float outlineColor[3] = {0.0f, 0.0f, 0.0f};
         // Reference ellipsoid radii in meters (WGS84 default). Only used for
         // geospatial tilesets.
         double ellipsoidRadii[3] = {6378137.0, 6378137.0, 6356752.3142451793};
@@ -225,6 +232,16 @@ public:
     //   internal empty-ID wrapper tile is unwrapped); "" when none.
     static void setShow(bool show);
     static bool isShow();
+    // CESIUM_primitive_outline switches. enableShowOutline=false skips
+    // outline geometry processing at load time; showOutline=false hides
+    // outlines at render time; outlineColor sets the outline color
+    // (linear RGB). Defaults: true/true/black (CesiumJS).
+    static void setEnableShowOutline(bool enable);
+    static bool isEnableShowOutline();
+    static void setShowOutline(bool show);
+    static bool isShowOutline();
+    static void setOutlineColor(float r, float g, float b);
+    static void outlineColor(float out[3]);
     static void setPreloadWhenHidden(bool preload);
     static bool isPreloadWhenHidden();
     static void setModelMatrix(const double matrix[16]);

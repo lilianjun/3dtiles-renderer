@@ -147,7 +147,9 @@ TileRenderData convertModel(
     const double tileTransform[16],
     const std::string& tileId,
     const double localOrigin[3],
-    bool isChildTile) {
+    bool isChildTile,
+    bool enableShowOutline,
+    const float outlineColor[3]) {
     TileRenderData out;
     out.tileId = tileId;
     std::memcpy(out.tileTransform, tileTransform, 16 * sizeof(double));
@@ -511,6 +513,8 @@ TileRenderData convertModel(
             }
             // P37: CESIUM_primitive_outline extension - also render outlines as LINES.
             // The extension provides indices for the outline edges.
+            // Skip if enableShowOutline=false (saves geometry processing).
+            if (enableShowOutline) {
             if (const auto* pOutline =
                     prim.getExtension<CesiumGltf::ExtensionCesiumPrimitiveOutline>();
                 pOutline != nullptr && pOutline->indices >= 0) {
@@ -544,15 +548,22 @@ TileRenderData convertModel(
                     outlinePd.bboxMax[i] = pd.bboxMax[i];
                 }
                 // Outlines are typically rendered in a contrasting color (black).
-                // Use dark color for visibility.
-                outlinePd.color[0] = 0.0f;
-                outlinePd.color[1] = 0.0f;
-                outlinePd.color[2] = 0.0f;
+                // Use the configured outlineColor (default black).
+                if (outlineColor) {
+                    outlinePd.color[0] = outlineColor[0];
+                    outlinePd.color[1] = outlineColor[1];
+                    outlinePd.color[2] = outlineColor[2];
+                } else {
+                    outlinePd.color[0] = 0.0f;
+                    outlinePd.color[1] = 0.0f;
+                    outlinePd.color[2] = 0.0f;
+                }
                 outlinePd.color[3] = 1.0f;
                 if (!outlinePd.indices.empty()) {
                     out.primitives.push_back(std::move(outlinePd));
                 }
-            }
+            } // if (pOutline)
+            } // if (enableShowOutline)
 
             // P37: Cesium.js renders point clouds without colors as DARKGRAY
             // (#A9A9A9). See PntsLoader.js: "By default, point clouds are

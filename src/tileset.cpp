@@ -11,6 +11,7 @@
 #include "tilesetio/filament_backend.h"
 
 #include <mutex> // P32: loadErrorCallback queue (may arrive off-thread)
+#include <algorithm> // std::remove_if for outline filtering
 #include <unordered_map> // P32: per-tile last-state tracking for events
 #include <unordered_set>
 
@@ -1784,8 +1785,20 @@ public:
             pLoad->model.value(), tileTransform,
             Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
                 tile.getTileID()),
-            localOriginArr, isChild);
+            localOriginArr, isChild,
+            _enableShowOutline, _outlineColor);
         delete pLoad;
+
+        // showOutline=false: drop LINES (outline) primitives at render time.
+        if (!_showOutline) {
+            auto& prims = renderData.primitives;
+            prims.erase(
+                std::remove_if(prims.begin(), prims.end(),
+                    [](const tilesetio::PrimitiveData& p) {
+                        return p.primType == 1; // LINES = outline
+                    }),
+                prims.end());
+        }
 
         if (renderData.primitives.empty()) {
             std::cerr << "[tiles_renderer] prepareInMainThread: tilesetio "
@@ -1953,6 +1966,19 @@ private:
     // P33: whole-tileset model matrix (world space, double); identity =
     // no user transform.
     glm::dmat4 _modelMatrix{1.0};
+    // CESIUM_primitive_outline switches.
+    bool _enableShowOutline = true;
+    bool _showOutline = true;
+    float _outlineColor[3] = {0.0f, 0.0f, 0.0f};
+
+public:
+    void setOutlineOptions(bool enable, bool show, const float color[3]) {
+        _enableShowOutline = enable;
+        _showOutline = show;
+        _outlineColor[0] = color[0];
+        _outlineColor[1] = color[1];
+        _outlineColor[2] = color[2];
+    }
 };
 
 #endif // TILES_WITH_CESIUM_NATIVE && TILES_WITH_FILAMENT
@@ -3006,6 +3032,10 @@ struct TilesetRenderer::Impl {
     bool show = true;
     bool preloadWhenHidden = false;
     glm::dmat4 modelMatrix{1.0};
+    // CESIUM_primitive_outline switches (see renderer.h).
+    bool enableShowOutline = true;
+    bool showOutline = true;
+    float outlineColor[3] = {0.0f, 0.0f, 0.0f};
     // P35: debug switches (see renderer.h).
     bool debugShowBoundingVolume = false;
     bool debugShowUrl = false;
@@ -3328,6 +3358,75 @@ bool TilesetRenderer::isShow() const {
     return _impl->show;
 #else
     return true;
+#endif
+}
+
+void TilesetRenderer::setEnableShowOutline(bool enable) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->enableShowOutline = enable;
+    if (_impl->prepareResources) {
+        float c[3] = {_impl->outlineColor[0], _impl->outlineColor[1],
+                      _impl->outlineColor[2]};
+        _impl->prepareResources->setOutlineOptions(
+            enable, _impl->showOutline, c);
+    }
+#else
+    (void)enable;
+#endif
+}
+
+bool TilesetRenderer::isEnableShowOutline() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->enableShowOutline;
+#else
+    return true;
+#endif
+}
+
+void TilesetRenderer::setShowOutline(bool show) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->showOutline = show;
+    if (_impl->prepareResources) {
+        float c[3] = {_impl->outlineColor[0], _impl->outlineColor[1],
+                      _impl->outlineColor[2]};
+        _impl->prepareResources->setOutlineOptions(
+            _impl->enableShowOutline, show, c);
+    }
+#else
+    (void)show;
+#endif
+}
+
+bool TilesetRenderer::isShowOutline() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->showOutline;
+#else
+    return true;
+#endif
+}
+
+void TilesetRenderer::setOutlineColor(float r, float g, float b) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->outlineColor[0] = r;
+    _impl->outlineColor[1] = g;
+    _impl->outlineColor[2] = b;
+    if (_impl->prepareResources) {
+        float c[3] = {r, g, b};
+        _impl->prepareResources->setOutlineOptions(
+            _impl->enableShowOutline, _impl->showOutline, c);
+    }
+#else
+    (void)r; (void)g; (void)b;
+#endif
+}
+
+void TilesetRenderer::outlineColor(float out[3]) const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    out[0] = _impl->outlineColor[0];
+    out[1] = _impl->outlineColor[1];
+    out[2] = _impl->outlineColor[2];
+#else
+    out[0] = out[1] = out[2] = 0.0f;
 #endif
 }
 

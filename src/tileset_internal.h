@@ -137,6 +137,13 @@ public:
     // immediately. Must be called on the render thread.
     void setShow(bool show);
     bool isShow() const;
+    // CESIUM_primitive_outline switches (see renderer.h).
+    void setEnableShowOutline(bool enable);
+    bool isEnableShowOutline() const;
+    void setShowOutline(bool show);
+    bool isShowOutline() const;
+    void setOutlineColor(float r, float g, float b);
+    void outlineColor(float out[3]) const;
     void setPreloadWhenHidden(bool preload);
     bool isPreloadWhenHidden() const;
     void setModelMatrix(const double matrix[16]);
