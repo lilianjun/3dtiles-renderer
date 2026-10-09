@@ -2045,20 +2045,25 @@ public:
             return nullptr;
         }
 
-        // Convert Model -> TileRenderData (same as Filament path)
-        const glm::dvec3 rtcCenter = pLoad->rtcCenter;
-        const glm::dmat4 upAxisFix = pLoad->upAxisFix;
+        // Convert Model -> TileRenderData (mirrors Filament path)
+        // Note: Uses simplified transform for now; full ECEF logic to follow
+        double tileTransform[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        double localOriginArr[3] = {0, 0, 0};
+        std::string tid = Cesium3DTilesSelection::TileIdUtilities::createTileIdString(
+            tile.getTileID());
         
-        // Note: Simplified - full ECEF transform logic mirrors Filament version
-        // For now, use identity transform (to be completed)
-        tilesetio::TileRenderData renderData;
-        // TODO: Call tilesetio::convertModel with proper transforms
-        
+        tilesetio::TileRenderData renderData = tilesetio::convertModel(
+            pLoad->model.value(), tileTransform, tid, localOriginArr,
+            false, true, nullptr);
+        delete pLoad;
+
+        if (renderData.primitives.empty()) {
+            return nullptr;
+        }
+
         // Create bgfx resources via backend
         auto* pRes = new tilesetio::BgfxTileResources(
             _backend->createTile(renderData));
-        
-        delete pLoad;
         return pRes;
     }
 
