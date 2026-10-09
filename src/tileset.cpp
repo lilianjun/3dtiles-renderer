@@ -908,18 +908,11 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
             glm::dvec3 sz(s);
             bool isAbsolute = glm::length(glm::dvec3(t.x, t.y, t.z)) > 1000.0;
             if (isAbsolute) {
-                // Compute ENU-to-ECEF rotation at position tz.
-                // up = normalize(position), east = normalize(cross(Z, up)),
-                // north = cross(up, east). Rotation columns: [east, north, up].
-                glm::dvec3 up = glm::normalize(tz);
-                glm::dvec3 east = glm::normalize(glm::cross(glm::dvec3(0,0,1), up));
-                glm::dvec3 north = glm::cross(up, east);
-                glm::dmat3 enuRot(east, north, up);
-                // Combine with instance rotation (if any): enu * instanceRot
-                glm::dmat3 instRot(rq);
-                glm::dmat3 combined = enuRot * instRot;
-                rq = glm::quat_cast(combined);
-                // tz stays as absolute ECEF; do NOT apply Y-up conversion.
+                // P37: Absolute ECEF position (EAST_NORTH_UP). The converter
+                // already computed the correct ENU orientation and baked it
+                // into the instance rotation. Do NOT recompute ENU here
+                // (would double-rotate). Use transform as-is.
+                // tz stays as absolute ECEF; rq stays as converter output.
             } else if (convertInstanceYUpToZUp) {
                 // P37: For cmpt merges, keep instances Y-up (do NOT convert).
                 // convertModel converts the full worldMat Y-up->Z-up.
