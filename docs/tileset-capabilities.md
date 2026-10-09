@@ -320,7 +320,7 @@
 | 内存自适应 SSE | `memoryAdjustedScreenSpaceError` | `totalMemoryUsageInBytes > cacheBytes + maximumCacheOverflowBytes` 时 SSE ×1.02 逐帧放宽，低于 cacheBytes 时 /1.02 回落 | 🟡（有 `maximumCachedBytes` 硬上限；无自适应 SSE；`maximumCacheOverflowBytes` 语义不同，已决策不硬套） | P1 |
 | `forbidHoles` / `preloadAncestors` / `preloadSiblings` | cesium-native `TilesetOptions` | 细化时不留空洞；预加载祖先/兄弟 | ✅（已暴露为构造选项） | P0 |
 | `preloadWhenHidden` / `preloadFlightDestinations` | 构造选项 | 隐藏时是否继续遍历；飞行目的地预加载 | 🟡（`preloadWhenHidden` 在 `setShow(false)` 路径已处理；flight 目的地无） | P1 |
-| `debugFreezeFrame` | debug 选项 | 只用上一帧 tile 渲染，不做新遍历/请求 | ❌ | P2 |
+| `debugFreezeFrame` | debug 选项 | 只用上一帧 tile 渲染，不做新遍历/请求 | ✅ | P2 |
 | `classificationType` 禁用 skipLOD | 构造选项 | 设置 classification 后 `isSkippingLevelOfDetail` 为 false | ❌（classification 本身缺失） | P2 |
 
 > 注：`skipLevelOfDetail` 系 5 参数、`dynamicScreenSpaceError` 系 3 参数、`foveatedScreenSpaceError` 系 4 参数、
