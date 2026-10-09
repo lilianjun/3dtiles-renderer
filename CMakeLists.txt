@@ -192,7 +192,7 @@ else()
     list(APPEND TILES_BACKEND_SOURCES src/tilesetio/filament_backend.cpp)
 endif()
 add_library(tiles_renderer STATIC src/renderer.cpp src/tileset.cpp
-            src/converter_guard.cpp src/text_renderer.cpp
+            src/converter_guard.cpp src/text_renderer.cpp src/text_renderer_stb.cpp
             ${TILES_BACKEND_SOURCES})
 tiles_apply_sanitizers(tiles_renderer)
 if(DEFINED TILES_WINDOWS_DEFS)
@@ -202,6 +202,12 @@ target_include_directories(tiles_renderer PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
+# stb_truetype for text rendering (via bgfx.cmake's bundled stb, or system)
+if(TILES_WITH_BGFX)
+    # bgfx.cmake vendors stb; use its include path
+    target_include_directories(tiles_renderer PRIVATE
+        "${bgfx_cmake_SOURCE_DIR}/bgfx/3rdparty/stb")
+endif()
 target_compile_features(tiles_renderer PUBLIC cxx_std_20)
 # P4: the SDK source selects its Filament backend + native-handle
 # interpretation from the *target* platform (see src/renderer.cpp).
