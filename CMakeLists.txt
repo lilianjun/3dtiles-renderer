@@ -185,6 +185,7 @@ configure_file(
 add_library(tiles_renderer STATIC src/renderer.cpp src/tileset.cpp
             src/converter_guard.cpp
             src/tilesetio/cesium_adapter.cpp
+            src/tilesetio/ecef_transform.cpp
             src/tilesetio/filament_backend.cpp)
 tiles_apply_sanitizers(tiles_renderer)
 if(DEFINED TILES_WINDOWS_DEFS)

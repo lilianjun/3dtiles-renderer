@@ -5,6 +5,7 @@
 // renderables with gltfio (+ ubershader materials).
 
 #include "tileset_internal.h"
+#include "tilesetio/ecef_transform.h"
 #include "converter_guard.h" // P28: empty-model guard for content converters
 #include "tilesetio/cesium_adapter.h"
 #include "tilesetio/filament_backend.h"
@@ -1424,22 +1425,13 @@ public:
         const glm::dvec3 rtcCenter = pLoad->rtcCenter;
         const glm::dmat4 upAxisFix = pLoad->upAxisFix;
 
-        // Compute tile transform (double precision): 
-        //   worldT = tile.getTransform() * translate(rtcCenter) * upAxisFix
-        //   then apply modelMatrix and subtract localOrigin (P5 rebase).
-        glm::dmat4 worldT = tile.getTransform();
-        if (rtcCenter != glm::dvec3(0.0)) {
-            glm::dmat4 rtcT(1.0);
-            rtcT[3][0] = rtcCenter.x;
-            rtcT[3][1] = rtcCenter.y;
-            rtcT[3][2] = rtcCenter.z;
-            worldT = worldT * rtcT;
-        }
-        worldT = worldT * upAxisFix;
-        worldT = _modelMatrix * worldT;
-        worldT[3][0] -= _localOrigin.x;
-        worldT[3][1] -= _localOrigin.y;
-        worldT[3][2] -= _localOrigin.z;
+        // P37: Unified ECEF transform via ecef_transform module.
+        // Handles RTC, WGS84, ENU consistently in double precision.
+        tilesetio::EcefTransformResult ecefResult =
+            tilesetio::computeEcefTransform(
+                tile.getTransform(), rtcCenter, upAxisFix, _modelMatrix,
+                _localOrigin);
+        glm::dmat4 worldT = ecefResult.worldTransform;
 
         double tileTransform[16];
         for (int c = 0; c < 4; ++c)
