@@ -626,6 +626,40 @@ bool Renderer::initialize(const RendererConfig& config) {
               << TILES_PLATFORM_NAME << ")" << std::endl;
     g_initialized = true;
     return true;
+#elif defined(TILES_WITH_BGFX)
+    // ---- bgfx backend (2026-10-09 migration) ----
+    BgfxState& bs = g_bgfxState;
+    bs.width = config.width;
+    bs.height = config.height;
+    bs.nativeWindow = config.window;
+
+    // Initialize bgfx
+    bgfx::Init init;
+    init.type = bgfx::RendererType::Count; // auto-select
+    init.resolution.width = config.width;
+    init.resolution.height = config.height;
+    init.resolution.reset = BGFX_RESET_VSYNC;
+    // Platform-specific window handle setup
+    // TODO: Set init.platformData based on TILES_PLATFORM_*
+    
+    if (!bgfx::init(init)) {
+        setLastError('initialize: bgfx::init() failed');
+        return false;
+    }
+
+    // Initialize backend
+    if (!bs.backend.init()) {
+        setLastError('initialize: BgfxBackend::init() failed');
+        bgfx::shutdown();
+        return false;
+    }
+
+    bs.initialized = true;
+    std::cout << '[tiles_renderer] initialized ' << config.width << 'x'
+              << config.height << ' (SDK v' << TILES_RENDERER_VERSION
+              << ', bgfx backend)' << std::endl;
+    g_initialized = true;
+    return true;
 #else
     // P1 stub path (built without Filament): config validation only.
     std::cout << "[tiles_renderer] initialized " << config.width << "x"
