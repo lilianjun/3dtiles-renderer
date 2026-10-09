@@ -298,7 +298,7 @@
 | boundingVolume 类型 | `Cesium3DTile.createBoundingVolume` | box（center+3x3 halfAxes→`TileOrientedBoundingBox`）、region（EPSG:4979 六元组→`TileBoundingRegion`，**不受** tileset transform 变换）、sphere；`3DTILES_bounding_volume_S2`→`TileBoundingS2Cell`；未定义直接抛错 | 🟡（box/region/sphere 经 cesium-native；S2 缺失） | P0（S2 为 P2） |
 | viewerRequestVolume | `Cesium3DTile.insideViewerRequestVolume` | 相机进入该体积（distanceToCamera==0）才允许请求/渲染该 tile 内容 | 🟡（cesium-native 有支持；我方未专项验证） | P0 |
 | content.uri / content.url | `Cesium3DTile` | 1.0 用 `content.uri`；旧 `content.url` 仍读但记 deprecation；`uri === ""` 视为无内容（Empty） | ✅（cesium-native） | P0 |
-| content.boundingVolume | `Cesium3DTile` | content 自带包围体（只包要素，children 可能超出），`tile.contentBoundingVolume` 无则回退 tile 包围体 | 🟡（未专项验证） | P1 |
+| content.boundingVolume | `Cesium3DTile` | content 自带包围体（只包要素，children 可能超出），`tile.contentBoundingVolume` 无则回退 tile 包围体 | ✅（cesium-native；P36 debug 可视化已验证） | P1 |
 | 外部 tileset.json | `Tileset3DTileContent.fromJson` | tile content 指向另一 tileset.json，`loadTileset(resource, json, parentTile)` 并入本树；该 content 无 feature（`getFeature`→undefined，`applyStyle` 空操作） | 🟡（可加载；**traversal 未选中外部 tile**，已知 3.2% 差异） | **P0** |
 | 空 tile | `Empty3DTileContent` | 无 content 的层级占位 tile；ready 恒 true；全部操作空实现 | ✅ | P0 |
 | 3D Tiles 1.1 `contents` 数组 | `Multiple3DTileContent` | 多个内层 content 独立请求、独立 resource；**全部请求可一次性调度才发送**（防部分泄漏）；全为外部 tileset 时 `hasRenderableContent=false`；metadata/group 传播给子 content | ❌（用户已搁置；4 个 fixture 受影响） | **P0** |
