@@ -356,6 +356,40 @@ struct FilamentState {
 
 FilamentState g_state;
 
+#ifdef TILES_WITH_BGFX
+// bgfx backend state (replaces FilamentState, 2026-10-09 migration).
+struct BgfxState {
+    bool initialized = false;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    void* nativeWindow = nullptr;
+    // bgfx view id for main rendering
+    uint8_t viewId = 0;
+    // Backend for tile resource management
+    tilesetio::BgfxBackend backend;
+    // P3: optional tileset integration (null when no tileset loaded).
+    std::unique_ptr<TilesetRenderer> tileset;
+    OrbitCamera orbit;
+    ExplicitCamera explicitCam;
+    float clearColor[4] = {0.1f, 0.2f, 0.45f, 1.0f};
+    float fovDegrees = 45.0f;
+    double nearPlane = 0.1;
+    double farPlane = 100.0;
+};
+
+BgfxState g_bgfxState;
+
+void destroyBgfxState() {
+    BgfxState& s = g_bgfxState;
+    if (s.initialized) {
+        s.backend.shutdown();
+        bgfx::shutdown();
+        s.initialized = false;
+    }
+    s.tileset.reset();
+}
+#endif
+
 void destroyFilamentState() {
     FilamentState& s = g_state;
     if (s.engine == nullptr) {
