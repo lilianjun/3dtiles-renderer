@@ -1973,6 +1973,9 @@ private:
     // The gltfio AssetLoader/ResourceLoader above are legacy and will be
     // removed in T5 once tilesetio is fully validated.
     tilesetio::FilamentBackend _filamentBackend;
+#ifdef TILES_WITH_BGFX
+    tilesetio::BgfxBackend _bgfxBackend;
+#endif
 #ifdef TILES_WITH_STB_PROVIDER
     // P15: stb image decoder feeding gltfio's ResourceLoader (PNG/JPEG).
     // Must outlive _resourceLoader; destroyed after it above.
