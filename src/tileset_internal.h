@@ -123,6 +123,13 @@ public:
     // TilesetRenderer. Must be called on the render thread.
     void fireTileUnloadEvents();
 
+    // P37-FLOAT: Set the double-precision view matrix for the current frame.
+    // Used for floating-origin rendering: modelView = view * model is computed
+    // in double on CPU (small result), uploaded to GPU. The shader never sees
+    // large world/view matrices, only the small view-space modelView.
+    // Must be called on the render thread before update().
+    void setViewMatrix(const double viewMatrix[16]);
+
     // P33: show / preloadWhenHidden / modelMatrix (see renderer.h). The
     // show/preload flags and the matrix are stashed per TilesetRenderer;
     // Renderer::set* forwards to the live one (or stashes pre-load).

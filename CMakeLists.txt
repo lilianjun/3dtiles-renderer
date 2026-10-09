@@ -183,7 +183,10 @@ configure_file(
 # window handle + size from the host app. The SDK NEVER depends on SDL3.
 # ---------------------------------------------------------------------------
 add_library(tiles_renderer STATIC src/renderer.cpp src/tileset.cpp
-            src/converter_guard.cpp)
+            src/converter_guard.cpp
+            src/tilesetio/cesium_adapter.cpp
+            src/tilesetio/ecef_transform.cpp
+            src/tilesetio/filament_backend.cpp)
 tiles_apply_sanitizers(tiles_renderer)
 if(DEFINED TILES_WINDOWS_DEFS)
   target_compile_definitions(tiles_renderer PRIVATE ${TILES_WINDOWS_DEFS})
@@ -505,8 +508,97 @@ if(TILES_WITH_FILAMENT)
       DEPENDS "${TILES_FILAMAT}"
               "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
       COMMENT "Embedding unlit_color.filamat as C++ header")
-    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}")
-    add_dependencies(tiles_renderer tiles_materials)
+    # T3 (tilesetio): textured unlit material.
+    set(TILES_TEX_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/unlit_textured.mat")
+    set(TILES_TEX_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_textured.filamat")
+    set(TILES_TEX_FILAMAT_H
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_textured_filamat.h")
+    add_custom_command(
+      OUTPUT "${TILES_TEX_FILAMAT}"
+      COMMAND "${TILES_MATC}" -a all -o "${TILES_TEX_FILAMAT}" "${TILES_TEX_MAT_SRC}"
+      DEPENDS "${TILES_TEX_MAT_SRC}"
+      COMMENT "matc: compiling unlit_textured.mat (all backends)")
+    add_custom_command(
+      OUTPUT "${TILES_TEX_FILAMAT_H}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+              "${TILES_TEX_FILAMAT}" "${TILES_TEX_FILAMAT_H}" unlit_textured_filamat
+      DEPENDS "${TILES_TEX_FILAMAT}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+      COMMENT "Embedding unlit_textured.filamat as C++ header")
+    # P37: Textured transparent material for billboards.
+    set(TILES_TEX_TRANS_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/unlit_textured_transparent.mat")
+    set(TILES_TEX_TRANS_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_textured_transparent.filamat")
+    set(TILES_TEX_TRANS_FILAMAT_H
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_textured_transparent_filamat.h")
+    add_custom_command(
+      OUTPUT "${TILES_TEX_TRANS_FILAMAT}"
+      COMMAND "${TILES_MATC}" -a all -o "${TILES_TEX_TRANS_FILAMAT}" "${TILES_TEX_TRANS_MAT_SRC}"
+      DEPENDS "${TILES_TEX_TRANS_MAT_SRC}"
+      COMMENT "matc: compiling unlit_textured_transparent.mat (all backends)")
+    add_custom_command(
+      OUTPUT "${TILES_TEX_TRANS_FILAMAT_H}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+              "${TILES_TEX_TRANS_FILAMAT}" "${TILES_TEX_TRANS_FILAMAT_H}" unlit_textured_transparent_filamat
+      DEPENDS "${TILES_TEX_TRANS_FILAMAT}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+      COMMENT "Embedding unlit_textured_transparent.filamat as C++ header")
+    # P37: PBR lit material for tilesetio (Cesium.js conformance).
+    set(TILES_PBR_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/pbr_color.mat")
+    set(TILES_PBR_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/pbr_color.filamat")
+    set(TILES_PBR_FILAMAT_H
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/pbr_color_filamat.h")
+    add_custom_command(
+      OUTPUT "${TILES_PBR_FILAMAT}"
+      COMMAND "${TILES_MATC}" -a all -o "${TILES_PBR_FILAMAT}" "${TILES_PBR_MAT_SRC}"
+      DEPENDS "${TILES_PBR_MAT_SRC}"
+      COMMENT "matc: compiling pbr_color.mat (all backends)")
+    add_custom_command(
+      OUTPUT "${TILES_PBR_FILAMAT_H}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+              "${TILES_PBR_FILAMAT}" "${TILES_PBR_FILAMAT_H}" pbr_color_filamat
+      DEPENDS "${TILES_PBR_FILAMAT}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+      COMMENT "Embedding pbr_color.filamat as C++ header")
+    # P37: vertex color unlit material for pnts point clouds (COLOR_0).
+    set(TILES_VC_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/unlit_vertex_color.mat")
+    set(TILES_VC_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_vertex_color.filamat")
+    set(TILES_VC_FILAMAT_H
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_vertex_color_filamat.h")
+    add_custom_command(
+      OUTPUT "${TILES_VC_FILAMAT}"
+      COMMAND "${TILES_MATC}" -a all -o "${TILES_VC_FILAMAT}" "${TILES_VC_MAT_SRC}"
+      DEPENDS "${TILES_VC_MAT_SRC}"
+      COMMENT "matc: compiling unlit_vertex_color.mat (all backends)")
+    add_custom_command(
+      OUTPUT "${TILES_VC_FILAMAT_H}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+              "${TILES_VC_FILAMAT}" "${TILES_VC_FILAMAT_H}" unlit_vertex_color_filamat
+      DEPENDS "${TILES_VC_FILAMAT}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+      COMMENT "Embedding unlit_vertex_color.filamat as C++ header")
+        # P37: transparent unlit material for alphaMode=BLEND.
+    set(TILES_TC_MAT_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/materials/unlit_color_transparent.mat")
+    set(TILES_TC_FILAMAT "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_color_transparent.filamat")
+    set(TILES_TC_FILAMAT_H
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/unlit_color_transparent_filamat.h")
+    add_custom_command(
+      OUTPUT "${TILES_TC_FILAMAT}"
+      COMMAND "${TILES_MATC}" -a all -o "${TILES_TC_FILAMAT}" "${TILES_TC_MAT_SRC}"
+      DEPENDS "${TILES_TC_MAT_SRC}"
+      COMMENT "matc: compiling unlit_color_transparent.mat (all backends)")
+    add_custom_command(
+      OUTPUT "${TILES_TC_FILAMAT_H}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+              "${TILES_TC_FILAMAT}" "${TILES_TC_FILAMAT_H}" unlit_color_transparent_filamat
+      DEPENDS "${TILES_TC_FILAMAT}"
+              "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_filamat.py"
+      COMMENT "Embedding unlit_color_transparent.filamat as C++ header")
+    add_custom_target(tiles_materials DEPENDS "${TILES_FILAMAT_H}" "${TILES_TEX_FILAMAT_H}" "${TILES_TEX_TRANS_FILAMAT_H}" "${TILES_PBR_FILAMAT_H}" "${TILES_VC_FILAMAT_H}" "${TILES_TC_FILAMAT_H}")
 
     # P36-B pivot: the Filament ImGui backend was abandoned (see ADR-0035);
     # the UI material is no longer needed. The Inspector uses a separate

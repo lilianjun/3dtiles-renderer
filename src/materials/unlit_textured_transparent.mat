@@ -1,0 +1,24 @@
+material {
+    name : unlit_textured_transparent,
+    blending : transparent,
+    shadingModel : unlit,
+    parameters : [
+        { type : float3, name : color },
+        { type : sampler2d, name : baseColorMap }
+    ],
+    requires : [
+        uv0
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 tex = texture(materialParams_baseColorMap, getUV0());
+        // P37: For billboards, texture is uploaded as RGBA8 (no sRGB decode,
+        // texSrgbDecode=false). Output directly.
+        // Alpha: use tex.a directly (color is float3 tint, no alpha).
+        material.baseColor.rgb = tex.rgb * materialParams.color;
+        material.baseColor.a = tex.a;
+    }
+}

@@ -1,0 +1,19 @@
+material {
+    name : unlit_vertex_color,
+    shadingModel : unlit,
+    requires : [ color ],
+    blending : transparent
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        // P37: COLOR_0 from Cesium Native PntsToGltfConverter is already
+        // linear (srgbToLinear applied in converter). Output directly;
+        // Filament does linear->sRGB at output.
+        // P37: RGBA - preserve alpha for point cloud transparency.
+        vec4 c = getColor();
+        material.baseColor.rgb = c.rgb;
+        material.baseColor.a = c.a;
+    }
+}

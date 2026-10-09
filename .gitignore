@@ -38,6 +38,9 @@ DerivedData/
 local.properties
 *.apk
 *.aab
+
+# JS tooling (P37 cesium.js capture harness)
+node_modules/
 *.ap_
 .gradle/
 captures/

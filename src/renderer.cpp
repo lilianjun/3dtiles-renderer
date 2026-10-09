@@ -484,6 +484,10 @@ bool Renderer::initialize(const RendererConfig& config) {
     s.view = s.engine->createView();
     s.view->setScene(s.scene);
     s.view->setPostProcessingEnabled(false); // faster on software GL; P2 demo
+    // P37: No MSAA. Per 2026-10-08 decision, no-AA is the correct comparison
+    // method (MSAA implementations differ between SwiftShader/WebGL and
+    // Filament, contributing ~0.5-0.9% systematic edge differences that mask
+    // real rendering gaps). Both sides render without anti-aliasing.
 
     s.cameraEntity = utils::EntityManager::get().create();
     s.camera = s.engine->createCamera(s.cameraEntity);
@@ -611,19 +615,49 @@ bool Renderer::renderFrame() {
             if (s.tileset) {
                 s.tileset->localOrigin(origin);
             }
-            const filament::math::float3 eye{
-                static_cast<float>(s.explicitCam.eye[0] - origin[0]),
-                static_cast<float>(s.explicitCam.eye[1] - origin[1]),
-                static_cast<float>(s.explicitCam.eye[2] - origin[2])};
-            const filament::math::float3 target{
-                static_cast<float>(s.explicitCam.target[0] - origin[0]),
-                static_cast<float>(s.explicitCam.target[1] - origin[1]),
-                static_cast<float>(s.explicitCam.target[2] - origin[2])};
-            const filament::math::float3 up{
-                static_cast<float>(s.explicitCam.up[0]),
-                static_cast<float>(s.explicitCam.up[1]),
-                static_cast<float>(s.explicitCam.up[2])};
-            s.camera->lookAt(eye, target, up);
+            // P37-FLOAT: Compute view matrix in DOUBLE on CPU.
+            // modelView = view * model will be computed in double per tile,
+            // small result uploaded to GPU. Shader never sees large matrices.
+            double eyeD[3] = {
+                s.explicitCam.eye[0] - origin[0],
+                s.explicitCam.eye[1] - origin[1],
+                s.explicitCam.eye[2] - origin[2]};
+            double targetD[3] = {
+                s.explicitCam.target[0] - origin[0],
+                s.explicitCam.target[1] - origin[1],
+                s.explicitCam.target[2] - origin[2]};
+            double upD[3] = {s.explicitCam.up[0], s.explicitCam.up[1], s.explicitCam.up[2]};
+            // Compute view matrix (lookAt) in double.
+            double zaxis[3] = {eyeD[0]-targetD[0], eyeD[1]-targetD[1], eyeD[2]-targetD[2]};
+            double zlen = std::sqrt(zaxis[0]*zaxis[0] + zaxis[1]*zaxis[1] + zaxis[2]*zaxis[2]);
+            zaxis[0]/=zlen; zaxis[1]/=zlen; zaxis[2]/=zlen;
+            double xaxis[3] = {
+                upD[1]*zaxis[2] - upD[2]*zaxis[1],
+                upD[2]*zaxis[0] - upD[0]*zaxis[2],
+                upD[0]*zaxis[1] - upD[1]*zaxis[0]};
+            double xlen = std::sqrt(xaxis[0]*xaxis[0] + xaxis[1]*xaxis[1] + xaxis[2]*xaxis[2]);
+            xaxis[0]/=xlen; xaxis[1]/=xlen; xaxis[2]/=xlen;
+            double yaxis[3] = {
+                zaxis[1]*xaxis[2] - zaxis[2]*xaxis[1],
+                zaxis[2]*xaxis[0] - zaxis[0]*xaxis[2],
+                zaxis[0]*xaxis[1] - zaxis[1]*xaxis[0]};
+            double viewD[16] = {
+                xaxis[0], yaxis[0], zaxis[0], 0,
+                xaxis[1], yaxis[1], zaxis[1], 0,
+                xaxis[2], yaxis[2], zaxis[2], 0,
+                -(xaxis[0]*eyeD[0] + xaxis[1]*eyeD[1] + xaxis[2]*eyeD[2]),
+                -(yaxis[0]*eyeD[0] + yaxis[1]*eyeD[1] + yaxis[2]*eyeD[2]),
+                -(zaxis[0]*eyeD[0] + zaxis[1]*eyeD[1] + zaxis[2]*eyeD[2]),
+                1};
+            if (s.tileset) {
+                s.tileset->setViewMatrix(viewD);
+            }
+            // P37-FLOAT: Set Filament camera view to identity. The per-tile
+            // modelView (view * model, computed in double) is uploaded as the
+            // "model" matrix. Shader sees P * I * modelView * pos.
+            const filament::math::mat4f identity;
+            s.camera->setModelMatrix(identity);
+            // Note: projection is set separately and remains valid.
         } else {
             constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
             const float yaw = s.orbit.yawDegrees * kDegToRad;
