@@ -185,11 +185,31 @@ TileRenderData convertModel(
                 glm::dvec4(-1.0, 0.0, 0.0, 0.0),
                 glm::dvec4(0.0, 0.0, 0.0, 1.0));
         } else if (axis != 2) { // Y up -> Z up (axis==2 is already Z-up)
-            upAxisFix = glm::dmat4(
-                glm::dvec4(1.0, 0.0, 0.0, 0.0),
-                glm::dvec4(0.0, 0.0, 1.0, 0.0),
-                glm::dvec4(0.0, -1.0, 0.0, 0.0),
-                glm::dvec4(0.0, 0.0, 0.0, 1.0));
+            // P37: Check if vertices are already in ECEF (large coordinates).
+            // b3dm with WGS84 has vertices directly in ECEF (Z-up), not Y-up.
+            // The converter marks it as Y-up, but applying Y->Z would be wrong.
+            // Generic detection: if any POSITION accessor has min/max > 1e6,
+            // it's ECEF, skip the conversion.
+            bool verticesAreEcef = false;
+            for (const auto& acc : model.accessors) {
+                if (acc.min.size() >= 3 && acc.max.size() >= 3) {
+                    for (size_t i = 0; i < 3; ++i) {
+                        if (std::abs(acc.min[i]) > 1e6 || std::abs(acc.max[i]) > 1e6) {
+                            verticesAreEcef = true;
+                            break;
+                        }
+                    }
+                    if (verticesAreEcef) break;
+                }
+            }
+            if (!verticesAreEcef) {
+                upAxisFix = glm::dmat4(
+                    glm::dvec4(1.0, 0.0, 0.0, 0.0),
+                    glm::dvec4(0.0, 0.0, 1.0, 0.0),
+                    glm::dvec4(0.0, -1.0, 0.0, 0.0),
+                    glm::dvec4(0.0, 0.0, 0.0, 1.0));
+            }
+            // else: vertices already in ECEF (Z-up), skip Y->Z conversion
         }
     }
 
