@@ -258,7 +258,7 @@ FilamentTileResources FilamentBackend::createTile(
                     .width(static_cast<uint32_t>(prim.texWidth))
                     .height(static_cast<uint32_t>(prim.texHeight))
                     .levels(1)
-                    .format(filament::Texture::InternalFormat::SRGB8_A8)
+                    .format(prim.texSrgbDecode ? filament::Texture::InternalFormat::SRGB8_A8 : filament::Texture::InternalFormat::RGBA8)
                     .sampler(filament::Texture::Sampler::SAMPLER_2D)
                     .build(*engine);
             // Copy pixels (one necessary copy).

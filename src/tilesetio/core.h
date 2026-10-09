@@ -35,6 +35,8 @@ struct PrimitiveData {
     int primType = 0;
     // P37: alpha mode from glTF material (0=OPAQUE, 1=MASK, 2=BLEND).
     int alphaMode = 0;
+    // P37: true=SRGB8_A8 (sRGB decode), false=RGBA8 (no decode).
+    bool texSrgbDecode = true;
 };
 
 // Complete render data for one tile.

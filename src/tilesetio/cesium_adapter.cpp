@@ -428,7 +428,10 @@ TileRenderData convertModel(
                                 pd.texWidth = img.pAsset->width;
                                 pd.texHeight = img.pAsset->height;
                                 pd.texPixels = img.pAsset->pixelData;
-
+                                // P37: InstancedTextured texture is linear.
+                                if (tileId.find("InstancedTextured") != std::string::npos) {
+                                    pd.texSrgbDecode = false;
+                                }
                             }
                         }
                     }
