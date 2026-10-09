@@ -91,6 +91,13 @@ public:
     // P20: ID strings of tilesToRenderThisFrame from the last update()
     // (diagnostic for frustum/LOD tests). Empty when no tileset is loaded.
     std::vector<std::string> selectedTileIds() const;
+    // Debug labels: per-tile geometric error and center for on-screen labels.
+    struct TileDebugInfo {
+        std::string id;
+        double geometricError = 0.0;
+        double center[3] = {0, 0, 0};
+    };
+    std::vector<TileDebugInfo> tileDebugInfo() const;
 
     // P19: tile cache budget in bytes. Applies to the next loadTileset()
     // (via TilesetOptions) and live to an already-loaded tileset (via

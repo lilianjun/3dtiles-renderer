@@ -2701,10 +2701,22 @@ struct TilesetRenderer::Impl {
             // P20: per-tile identity of the render selection (diagnostic).
             lastSelectedIds.clear();
             lastSelectedIds.reserve(viewResult.tilesToRenderThisFrame.size());
+            lastTileDebugInfo.clear();
+            lastTileDebugInfo.reserve(viewResult.tilesToRenderThisFrame.size());
             for (const auto& pTile : viewResult.tilesToRenderThisFrame) {
                 lastSelectedIds.push_back(
                     Cesium3DTilesSelection::TileIdUtilities::
                         createTileIdString(pTile->getTileID()));
+                // Debug labels: capture geometric error and center.
+                TileDebugInfo info;
+                info.id = lastSelectedIds.back();
+                info.geometricError = pTile->getGeometricError();
+                // Get bounding volume center from tile transform translation.
+                const auto& transform = pTile->getTransform();
+                info.center[0] = transform[3][0];
+                info.center[1] = transform[3][1];
+                info.center[2] = transform[3][2];
+                lastTileDebugInfo.push_back(info);
             }
 
             // P32: cesium.js-style tileset events, dispatched on the render
@@ -3034,6 +3046,13 @@ struct TilesetRenderer::Impl {
     // P20: ID strings of tilesToRenderThisFrame from the last traversal
     // (via TileIdUtilities::createTileIdString), for frustum/LOD tests.
     std::vector<std::string> lastSelectedIds;
+    // Debug labels: per-tile data for on-screen labels.
+    struct TileDebugInfo {
+        std::string id;
+        double geometricError = 0.0;
+        double center[3] = {0, 0, 0}; // World-space bounding volume center
+    };
+    std::vector<TileDebugInfo> lastTileDebugInfo;
     // P12: why the last loadTileset() failed (empty when it succeeded).
     std::string lastError;
     // P32: event callbacks (see Renderer::TilesetEventCallbacks), set via
@@ -3268,6 +3287,28 @@ std::vector<std::string> TilesetRenderer::selectedTileIds() const {
         return {};
     }
     return _impl->lastSelectedIds;
+#else
+    return {};
+#endif
+}
+
+std::vector<TilesetRenderer::TileDebugInfo> TilesetRenderer::tileDebugInfo() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    if (!_impl->loaded || _impl->tileset == nullptr) {
+        return {};
+    }
+    std::vector<TileDebugInfo> result;
+    result.reserve(_impl->lastTileDebugInfo.size());
+    for (const auto& info : _impl->lastTileDebugInfo) {
+        TileDebugInfo out;
+        out.id = info.id;
+        out.geometricError = info.geometricError;
+        out.center[0] = info.center[0];
+        out.center[1] = info.center[1];
+        out.center[2] = info.center[2];
+        result.push_back(out);
+    }
+    return result;
 #else
     return {};
 #endif
