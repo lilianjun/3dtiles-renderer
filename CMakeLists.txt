@@ -183,7 +183,7 @@ configure_file(
 # window handle + size from the host app. The SDK NEVER depends on SDL3.
 # ---------------------------------------------------------------------------
 add_library(tiles_renderer STATIC src/renderer.cpp src/tileset.cpp
-            src/converter_guard.cpp
+            src/converter_guard.cpp src/text_renderer.cpp
             src/tilesetio/cesium_adapter.cpp
             src/tilesetio/ecef_transform.cpp
             src/tilesetio/filament_backend.cpp)

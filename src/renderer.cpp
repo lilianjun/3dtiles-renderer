@@ -1297,6 +1297,52 @@ bool Renderer::isDebugColorizeTiles() {
     return g_debugColorizeTiles;
 }
 
+bool g_debugShowGeometricError = false;
+bool g_debugShowRenderingStatistics = false;
+bool g_debugShowMemoryUsage = false;
+
+void Renderer::setDebugShowGeometricError(bool show) {
+    if (!g_initialized) {
+        return;
+    }
+    g_debugShowGeometricError = show;
+}
+
+bool Renderer::isDebugShowGeometricError() {
+    if (!g_initialized) {
+        return false;
+    }
+    return g_debugShowGeometricError;
+}
+
+void Renderer::setDebugShowRenderingStatistics(bool show) {
+    if (!g_initialized) {
+        return;
+    }
+    g_debugShowRenderingStatistics = show;
+}
+
+bool Renderer::isDebugShowRenderingStatistics() {
+    if (!g_initialized) {
+        return false;
+    }
+    return g_debugShowRenderingStatistics;
+}
+
+void Renderer::setDebugShowMemoryUsage(bool show) {
+    if (!g_initialized) {
+        return;
+    }
+    g_debugShowMemoryUsage = show;
+}
+
+bool Renderer::isDebugShowMemoryUsage() {
+    if (!g_initialized) {
+        return false;
+    }
+    return g_debugShowMemoryUsage;
+}
+
 void Renderer::setPreloadWhenHidden(bool preload) {
     if (!g_initialized) {
         return;

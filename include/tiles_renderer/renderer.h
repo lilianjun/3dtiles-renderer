@@ -247,6 +247,13 @@ public:
     // Debug: assign a random color to each tile (CesiumJS debugColorizeTiles).
     static void setDebugColorizeTiles(bool colorize);
     static bool isDebugColorizeTiles();
+    // Debug labels: show per-tile info as on-screen text.
+    static void setDebugShowGeometricError(bool show);
+    static bool isDebugShowGeometricError();
+    static void setDebugShowRenderingStatistics(bool show);
+    static bool isDebugShowRenderingStatistics();
+    static void setDebugShowMemoryUsage(bool show);
+    static bool isDebugShowMemoryUsage();
     static void setPreloadWhenHidden(bool preload);
     static bool isPreloadWhenHidden();
     static void setModelMatrix(const double matrix[16]);
