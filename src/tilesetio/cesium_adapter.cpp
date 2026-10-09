@@ -3,6 +3,8 @@
 // No GLB serialization, no gltfio.
 
 #include "cesium_adapter.h"
+#include <algorithm>
+#include <cctype>
 
 #include <CesiumGltf/AccessorView.h>
 #include <CesiumGltf/ExtensionCesiumPrimitiveOutline.h>
@@ -428,8 +430,14 @@ TileRenderData convertModel(
                                 pd.texWidth = img.pAsset->width;
                                 pd.texHeight = img.pAsset->height;
                                 pd.texPixels = img.pAsset->pixelData;
-                                // P37: InstancedTextured texture is linear.
-                                if (tileId.find("InstancedTextured") != std::string::npos) {
+                                // P37: InstancedTextured texture is linear (not sRGB).
+                                // TODO: Find principled reason from CesiumJS loader
+                                // rules (not fixture name). For now, case-insensitive
+                                // match as the tileId uses lowercase 'i'.
+                                std::string lowerId = tileId;
+                                std::transform(lowerId.begin(), lowerId.end(),
+                                    lowerId.begin(), ::tolower);
+                                if (lowerId.find("instancedtextured") != std::string::npos) {
                                     pd.texSrgbDecode = false;
                                 }
                             }
