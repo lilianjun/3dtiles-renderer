@@ -88,14 +88,14 @@
 
 | 参数 | 类型 | 默认值 | 说明 | 我方状态 | 优先级 |
 |---|---|---|---|---|---|
-| `lightColor` | `Cartesian3` | `undefined`（用场景光） | 模型着色光源颜色 | ❌ | P2 |
+| `lightColor` | `Cartesian3` | `undefined`（用场景光） | 模型着色光源颜色 | 🚫（全 unlit 材质，无光照计算，不适用） | P2 |
 | `imageBasedLighting` | `ImageBasedLighting` | — | tileset 级 IBL 管理对象 | 🟡（`setIblEnabled()` 全局开关） | P1 |
 | `environmentMapOptions` | `object` | — | 动态环境贴图管理选项 | ❌ | P2 |
 | `backFaceCulling` | `boolean` | `true` | true 时由 glTF `doubleSided` 决定，false 时禁用背面剔除 | 🟡（doubleSided 已处理；无全局开关） | P1 |
 | `customShader` | `CustomShader` | — | 自定义 shader（`Model` 管线） | ❌ | P2 |
 | `enableShowOutline` | `boolean` | `true` | 是否启用 `CESIUM_primitive_outline` 处理（false 跳过几何处理） | 🟡（outline 渲染已实现；开关未暴露） | P1 |
 | `showOutline` | `boolean` | `true` | 是否显示 outline | 🟡（同上） | P1 |
-| `outlineColor` | `Color` | `BLACK` | outline 颜色 | ❌（写死黑色） | P2 |
+| `outlineColor` | `Color` | `BLACK` | outline 颜色 | ✅（`setOutlineColor`/`outlineColor`） | P2 |
 
 ### F. 裁剪与分类
 

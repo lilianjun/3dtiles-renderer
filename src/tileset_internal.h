@@ -144,6 +144,9 @@ public:
     bool isShowOutline() const;
     void setOutlineColor(float r, float g, float b);
     void outlineColor(float out[3]) const;
+    // Debug: colorize tiles (see renderer.h).
+    void setDebugColorizeTiles(bool colorize);
+    bool isDebugColorizeTiles() const;
     void setPreloadWhenHidden(bool preload);
     bool isPreloadWhenHidden() const;
     void setModelMatrix(const double matrix[16]);

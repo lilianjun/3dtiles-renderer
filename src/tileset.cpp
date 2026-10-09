@@ -12,6 +12,7 @@
 
 #include <mutex> // P32: loadErrorCallback queue (may arrive off-thread)
 #include <algorithm> // std::remove_if for outline filtering
+#include <functional> // std::hash for debugColorizeTiles
 #include <unordered_map> // P32: per-tile last-state tracking for events
 #include <unordered_set>
 
@@ -1800,6 +1801,25 @@ public:
                 prims.end());
         }
 
+        // debugColorizeTiles: override with hash-based random color per tile.
+        if (_debugColorizeTiles) {
+            // Simple hash of tile ID to RGB.
+            std::string tid = Cesium3DTilesSelection::TileIdUtilities::createTileIdString(tile.getTileID());
+            std::hash<std::string> hasher;
+            size_t h = hasher(tid);
+            float r = ((h >> 0) & 0xFF) / 255.0f;
+            float g = ((h >> 8) & 0xFF) / 255.0f;
+            float b = ((h >> 16) & 0xFF) / 255.0f;
+            for (auto& prim : renderData.primitives) {
+                prim.color[0] = r;
+                prim.color[1] = g;
+                prim.color[2] = b;
+                prim.color[3] = 1.0f;
+                // Clear texture to show flat color.
+                prim.texPixels.clear();
+            }
+        }
+
         if (renderData.primitives.empty()) {
             std::cerr << "[tiles_renderer] prepareInMainThread: tilesetio "
                          "convertModel produced no primitives"
@@ -1970,6 +1990,8 @@ private:
     bool _enableShowOutline = true;
     bool _showOutline = true;
     float _outlineColor[3] = {0.0f, 0.0f, 0.0f};
+    // Debug: colorize tiles.
+    bool _debugColorizeTiles = false;
 
 public:
     void setOutlineOptions(bool enable, bool show, const float color[3]) {
@@ -1978,6 +2000,9 @@ public:
         _outlineColor[0] = color[0];
         _outlineColor[1] = color[1];
         _outlineColor[2] = color[2];
+    }
+    void setDebugColorizeTiles(bool colorize) {
+        _debugColorizeTiles = colorize;
     }
 };
 
@@ -3036,6 +3061,8 @@ struct TilesetRenderer::Impl {
     bool enableShowOutline = true;
     bool showOutline = true;
     float outlineColor[3] = {0.0f, 0.0f, 0.0f};
+    // Debug: colorize tiles.
+    bool debugColorizeTiles = false;
     // P35: debug switches (see renderer.h).
     bool debugShowBoundingVolume = false;
     bool debugShowUrl = false;
@@ -3430,6 +3457,25 @@ void TilesetRenderer::outlineColor(float out[3]) const {
     out[2] = _impl->outlineColor[2];
 #else
     out[0] = out[1] = out[2] = 0.0f;
+#endif
+}
+
+void TilesetRenderer::setDebugColorizeTiles(bool colorize) {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    _impl->debugColorizeTiles = colorize;
+    if (_impl->prepareResources) {
+        _impl->prepareResources->setDebugColorizeTiles(colorize);
+    }
+#else
+    (void)colorize;
+#endif
+}
+
+bool TilesetRenderer::isDebugColorizeTiles() const {
+#if defined(TILES_WITH_CESIUM_NATIVE) && defined(TILES_WITH_FILAMENT)
+    return _impl->debugColorizeTiles;
+#else
+    return false;
 #endif
 }
 

@@ -107,6 +107,8 @@ public:
         bool enableShowOutline = true;
         bool showOutline = true;
         float outlineColor[3] = {0.0f, 0.0f, 0.0f};
+        // Debug: assign a random color to each tile (visualize tile boundaries).
+        bool debugColorizeTiles = false;
         // Reference ellipsoid radii in meters (WGS84 default). Only used for
         // geospatial tilesets.
         double ellipsoidRadii[3] = {6378137.0, 6378137.0, 6356752.3142451793};
@@ -242,6 +244,9 @@ public:
     static bool isShowOutline();
     static void setOutlineColor(float r, float g, float b);
     static void outlineColor(float out[3]);
+    // Debug: assign a random color to each tile (CesiumJS debugColorizeTiles).
+    static void setDebugColorizeTiles(bool colorize);
+    static bool isDebugColorizeTiles();
     static void setPreloadWhenHidden(bool preload);
     static bool isPreloadWhenHidden();
     static void setModelMatrix(const double matrix[16]);

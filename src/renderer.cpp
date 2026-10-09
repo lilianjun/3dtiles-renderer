@@ -1271,6 +1271,32 @@ void Renderer::outlineColor(float out[3]) {
     out[2] = g_outlineColor[2];
 }
 
+bool g_debugColorizeTiles = false;
+
+void Renderer::setDebugColorizeTiles(bool colorize) {
+    if (!g_initialized) {
+        return;
+    }
+    g_debugColorizeTiles = colorize;
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        g_state.tileset->setDebugColorizeTiles(colorize);
+    }
+#endif
+}
+
+bool Renderer::isDebugColorizeTiles() {
+    if (!g_initialized) {
+        return false;
+    }
+#ifdef TILES_WITH_FILAMENT
+    if (g_state.tileset != nullptr) {
+        return g_state.tileset->isDebugColorizeTiles();
+    }
+#endif
+    return g_debugColorizeTiles;
+}
+
 void Renderer::setPreloadWhenHidden(bool preload) {
     if (!g_initialized) {
         return;
