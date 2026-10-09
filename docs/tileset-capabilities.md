@@ -236,7 +236,7 @@
 | `totalMemoryUsageInBytes` | `number` | content 字节数（非 GPU 估计） | ✅（P34） | P1 |
 | `timeSinceLoad` | `number` | 加载耗时（ms） | ✅（`timeSinceLoadMs()` P33） | P2 |
 | `tilesLoaded` | `boolean` | 是否全部加载完成（只读） | ✅（`tilesLoaded()` P33） | P0 |
-| `hasMixedContent` | `boolean` | 是否含多种 content 类型 | ❌ | P2 |
+| `hasMixedContent` | `boolean` | 是否含多种 content 类型 | 🚫（仅用于 skipLOD 双变量可见性测试，不适用） | P2 |
 | `isSkippingLevelOfDetail` | `boolean` | 当前是否处于 skipLOD 模式 | 🚫（skipLOD 不复刻） | — |
 | `memoryAdjustedScreenSpaceError` | `number` | 内存自适应调整后的 SSE | 🟡（无自适应；硬上限有） | P1 |
 
