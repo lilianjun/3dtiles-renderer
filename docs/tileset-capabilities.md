@@ -155,9 +155,9 @@
 | `debugShowBoundingVolume` | `boolean` | `false` | 渲染每 tile 包围体 | ✅（`setDebugShowBoundingVolume`） | P1 |
 | `debugShowContentBoundingVolume` | `boolean` | `false` | 渲染每 tile content 包围体 | ✅（P36） | P1 |
 | `debugShowViewerRequestVolume` | `boolean` | `false` | 渲染 viewer request volume（黄色） | ✅（setter 已实现） | P2 |
-| `debugShowGeometricError` | `boolean` | `false` | label 显示每 tile geometric error | ❌ | P2 |
-| `debugShowRenderingStatistics` | `boolean` | `false` | label 显示 command/point/triangle/feature 数 | ❌ | P2 |
-| `debugShowMemoryUsage` | `boolean` | `false` | label 显示纹理+几何内存 MB | ❌ | P2 |
+| `debugShowGeometricError` | `boolean` | `false` | label 显示每 tile geometric error | 🟡（API已加，文字渲染基础设施完成，Filament叠加集成待完成） | P2 |
+| `debugShowRenderingStatistics` | `boolean` | `false` | label 显示 command/point/triangle/feature 数 | 🟡（API已加，文字渲染基础设施完成，Filament叠加集成待完成） | P2 |
+| `debugShowMemoryUsage` | `boolean` | `false` | label 显示纹理+几何内存 MB | 🟡（API已加，文字渲染基础设施完成，Filament叠加集成待完成） | P2 |
 | `debugShowUrl` | `boolean` | `false` | label 显示 tile url | 🟡（stderr，无屏内 label） | P2 |
 
 ---
