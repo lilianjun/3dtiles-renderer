@@ -2039,10 +2039,27 @@ public:
 
     void* prepareInMainThread(
         Cesium3DTilesSelection::Tile& tile, void* pLoadThreadResult) override {
-        // Convert Model -> TileRenderData -> bgfx resources
-        // (Implementation mirrors FilamentPrepareResources::prepareInMainThread)
-        // For now, placeholder
-        return nullptr;
+        auto* pLoad = static_cast<LoadThreadData*>(pLoadThreadResult);
+        if (pLoad == nullptr || !pLoad->model.has_value()) {
+            delete pLoad;
+            return nullptr;
+        }
+
+        // Convert Model -> TileRenderData (same as Filament path)
+        const glm::dvec3 rtcCenter = pLoad->rtcCenter;
+        const glm::dmat4 upAxisFix = pLoad->upAxisFix;
+        
+        // Note: Simplified - full ECEF transform logic mirrors Filament version
+        // For now, use identity transform (to be completed)
+        tilesetio::TileRenderData renderData;
+        // TODO: Call tilesetio::convertModel with proper transforms
+        
+        // Create bgfx resources via backend
+        auto* pRes = new tilesetio::BgfxTileResources(
+            _backend->createTile(renderData));
+        
+        delete pLoad;
+        return pRes;
     }
 
     void free(
