@@ -946,10 +946,30 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
             bool isAbsolute = glm::length(glm::dvec3(t.x, t.y, t.z)) > 1000.0;
             if (isAbsolute) {
                 // P37: Absolute ECEF position (EAST_NORTH_UP). The converter
-                // already computed the correct ENU orientation and baked it
-                // into the instance rotation. Do NOT recompute ENU here
-                // (would double-rotate). Use transform as-is.
-                // tz stays as absolute ECEF; rq stays as converter output.
+                // outputs conjugated transform: toTileInv * compose * toTile,
+                // where toTile = upToZ * base. Undo the conjugation to get
+                // the true ECEF compose transform.
+                // Compute upToZ (Y-up to Z-up).
+                glm::dmat4 upToZ(1.0);
+                // Y-up -> Z-up: (x, y, z) -> (x, z, -y)
+                // Column-major: col0=(1,0,0), col1=(0,0,1), col2=(0,-1,0)
+                upToZ[0] = glm::dvec4(1, 0, 0, 0);
+                upToZ[1] = glm::dvec4(0, 0, 1, 0);
+                upToZ[2] = glm::dvec4(0, -1, 0, 0);
+                glm::dmat4 toTile = upToZ * base;
+                glm::dmat4 toTileInv = glm::inverse(toTile);
+                glm::dmat4 conjugated =
+                    glm::translate(glm::dmat4(1.0), tz) *
+                    glm::mat4_cast(rq) *
+                    glm::scale(glm::dmat4(1.0), sz);
+                glm::dmat4 compose = toTile * conjugated * toTileInv;
+                // Decompose compose back to tz, rq, sz for the inst builder.
+                tz = glm::dvec3(compose[3]);
+                rq = glm::quat_cast(glm::dmat3(compose));
+                sz = glm::dvec3(
+                    glm::length(glm::dvec3(compose[0])),
+                    glm::length(glm::dvec3(compose[1])),
+                    glm::length(glm::dvec3(compose[2])));
             } else if (convertInstanceYUpToZUp) {
                 // P37: For cmpt merges, keep instances Y-up (do NOT convert).
                 // convertModel converts the full worldMat Y-up->Z-up.
