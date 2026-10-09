@@ -420,9 +420,13 @@ public:
         //   tilesProcessing — tiles with content in flight
         //                     (ContentLoading/ContentLoaded)
         // tilesLoading == pendingRequests + tilesProcessing.
+        //   tilesSelected   — tiles selected for rendering this frame
+        //   tilesTotal      — total tiles in the instantiated tree
         std::int64_t tilesVisited = -1;
         std::int64_t pendingRequests = -1;
         std::int64_t tilesProcessing = -1;
+        std::int64_t tilesSelected = -1;
+        std::int64_t tilesTotal = -1;
     };
 
     // P17: current TileStats (see above). Like every Renderer method except

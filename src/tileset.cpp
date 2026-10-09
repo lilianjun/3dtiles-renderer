@@ -3220,6 +3220,9 @@ Renderer::TileStats TilesetRenderer::tileStats() const {
     stats.pendingRequests = static_cast<std::int64_t>(_impl->lastWorkerQueue) +
                             static_cast<std::int64_t>(_impl->lastMainQueue);
     stats.tilesProcessing = inFlightContent;
+    // P1: additional statistics (CesiumJS Cesium3DTilesetStatistics).
+    stats.tilesSelected = _impl->lastSelected;
+    stats.tilesTotal = visitedCount;
     return stats;
 #else
     return Renderer::TileStats{};
