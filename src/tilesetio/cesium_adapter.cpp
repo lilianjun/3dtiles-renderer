@@ -407,7 +407,12 @@ TileRenderData convertModel(
                         // linear and converts to sRGB for display).
                         // This matches Cesium UNLIT direct sRGB output.
                         auto srgbToLinear = [](double c) {
-                            return std::pow(c, 2.2);
+                            // Exact sRGB transfer function (IEC 61966-2-1)
+                            if (c <= 0.04045) {
+                                return c / 12.92;
+                            } else {
+                                return std::pow((c + 0.055) / 1.055, 2.4);
+                            }
                         };
                         pd.color[0] = static_cast<float>(srgbToLinear(
                             pbr->baseColorFactor[0]));
