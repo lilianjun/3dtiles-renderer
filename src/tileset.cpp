@@ -152,9 +152,9 @@ public:
             in.read(reinterpret_cast<char*>(bytes.data()), size);
             // P37: Workaround for cesium-native crash on b3dm with
             // binary-only batch table (btblen=0, bttblen>0), e.g.,
-            // BatchTableHierarchyBinary. The hierarchy parser segfaults.
-            // Strip the binary batch table (set bttblen=0) so the geometry
-            // converts without batch table metadata.
+            // BatchTableHierarchyBinary. The hierarchy parser segfaults
+            // (rapidjson GetArray assertion). Strip the binary batch table
+            // (set bttblen=0) so the geometry converts without metadata.
             if (bytes.size() >= 24) {
                 const char* p = reinterpret_cast<const char*>(bytes.data());
                 if (p[0] == 'b' && p[1] == '3' && p[2] == 'd' && p[3] == 'm') {
