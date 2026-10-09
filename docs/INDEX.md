@@ -81,6 +81,8 @@ python3 tests/data/benchmarks/conformance_test.py \
 
 **参数对齐规范**: `docs/plan/P37-C-param-alignment.md`
 
+**3D Tiles 能力清单**: `docs/tileset-capabilities.md`（2026-10-09，CesiumJS 1.146 对照，8 功能域，复刻优先级 P0/P1/P2）
+
 **点云测试方法**: `docs/p37-pointcloud-testing.md`（2026-10-08）
 - 核心规则：参数从 Cesium 渲染后提取、相机自动构图不许猜、Web 图来自 canvas
 - 采集流程已端到端实测：`batch_capture.js`（自动构图 + params.json 导出）
