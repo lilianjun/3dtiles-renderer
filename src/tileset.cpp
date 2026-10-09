@@ -151,19 +151,56 @@ public:
             bytes.resize(static_cast<std::size_t>(size));
             in.read(reinterpret_cast<char*>(bytes.data()), size);
             // P37: Workaround for cesium-native crash on b3dm with
-            // binary-only batch table (btblen=0, bttblen>0), e.g.,
-            // BatchTableHierarchyBinary. The hierarchy parser segfaults
-            // (rapidjson GetArray assertion). Strip the binary batch table
-            // (set bttblen=0) so the geometry converts without metadata.
-            if (bytes.size() >= 24) {
+            // batch table hierarchy (e.g., BatchTableHierarchyBinary).
+            // The hierarchy parser segfaults (rapidjson GetArray assertion
+            // `IsArray()` failed). For rendering we don't need the hierarchy
+            // metadata; extract the embedded GLB and feed it directly,
+            // bypassing the B3dm converter entirely.
+            // b3dm header (28 bytes): magic(4), version(4), byteLength(4),
+            // ftJsonLen(4), ftBinLen(4), btJsonLen(4), btBinLen(4).
+            // GLB starts at 28 + ftJsonLen + ftBinLen + btJsonLen + btBinLen.
+            if (bytes.size() >= 28) {
                 const char* p = reinterpret_cast<const char*>(bytes.data());
                 if (p[0] == 'b' && p[1] == '3' && p[2] == 'd' && p[3] == 'm') {
-                    std::uint32_t btblen, bttblen;
-                    std::memcpy(&btblen, p + 16, 4);
-                    std::memcpy(&bttblen, p + 20, 4);
-                    if (btblen == 0 && bttblen > 0) {
-                        std::uint32_t zero = 0;
-                        std::memcpy(bytes.data() + 20, &zero, 4);
+                    std::uint32_t ftJsonLen, ftBinLen, btJsonLen, btBinLen;
+                    std::memcpy(&ftJsonLen, p + 12, 4);
+                    std::memcpy(&ftBinLen, p + 16, 4);
+                    std::memcpy(&btJsonLen, p + 20, 4);
+                    std::memcpy(&btBinLen, p + 24, 4);
+                    std::size_t glbOffset =
+                        28u + ftJsonLen + ftBinLen + btJsonLen + btBinLen;
+                    // Only apply if batch table has hierarchy (btJson > 0
+                    // and contains "3DTILES_batch_table_hierarchy").
+                    // Check quickly without full parse.
+                    bool hasHierarchy = false;
+                    if (btJsonLen > 0 && glbOffset <= bytes.size()) {
+                        std::size_t btJsonStart = 28u + ftJsonLen + ftBinLen;
+                        if (btJsonStart + btJsonLen <= bytes.size()) {
+                            const char* btJson =
+                                p + btJsonStart;
+                            // Simple substring search (not full JSON parse).
+                            const char* needle =
+                                "3DTILES_batch_table_hierarchy";
+                            std::size_t needleLen = 29;
+                            for (std::size_t i = 0;
+                                 i + needleLen <= btJsonLen; ++i) {
+                                if (std::memcmp(btJson + i, needle,
+                                        needleLen) == 0) {
+                                    hasHierarchy = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (hasHierarchy && glbOffset + 12 <= bytes.size()) {
+                        const char* glbMagic = p + glbOffset;
+                        if (glbMagic[0] == 'g' && glbMagic[1] == 'l' &&
+                            glbMagic[2] == 'T' && glbMagic[3] == 'F') {
+                            // Extract GLB bytes.
+                            std::vector<std::byte> glbBytes(
+                                bytes.begin() + glbOffset, bytes.end());
+                            bytes = std::move(glbBytes);
+                        }
                     }
                 }
             }
