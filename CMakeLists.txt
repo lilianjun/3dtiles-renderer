@@ -183,11 +183,17 @@ configure_file(
 # Public API: include/tiles_renderer/renderer.h — takes a platform-native
 # window handle + size from the host app. The SDK NEVER depends on SDL3.
 # ---------------------------------------------------------------------------
+set(TILES_BACKEND_SOURCES
+    src/tilesetio/cesium_adapter.cpp
+    src/tilesetio/ecef_transform.cpp)
+if(TILES_WITH_BGFX)
+    list(APPEND TILES_BACKEND_SOURCES src/tilesetio/bgfx_backend.cpp)
+else()
+    list(APPEND TILES_BACKEND_SOURCES src/tilesetio/filament_backend.cpp)
+endif()
 add_library(tiles_renderer STATIC src/renderer.cpp src/tileset.cpp
             src/converter_guard.cpp src/text_renderer.cpp
-            src/tilesetio/cesium_adapter.cpp
-            src/tilesetio/ecef_transform.cpp
-            src/tilesetio/filament_backend.cpp)
+            ${TILES_BACKEND_SOURCES})
 tiles_apply_sanitizers(tiles_renderer)
 if(DEFINED TILES_WINDOWS_DEFS)
   target_compile_definitions(tiles_renderer PRIVATE ${TILES_WINDOWS_DEFS})
@@ -469,6 +475,12 @@ if(TILES_WITH_FILAMENT)
     # PUBLIC: consumers of this static SDK library need the transitive link.
     target_link_libraries(tiles_renderer PUBLIC filament_prebuilt)
     target_compile_definitions(tiles_renderer PRIVATE TILES_WITH_FILAMENT)
+
+# bgfx backend (replaces Filament, 2026-10-09).
+if(TILES_WITH_BGFX)
+    target_link_libraries(tiles_renderer PUBLIC bgfx bx bimg)
+    target_compile_definitions(tiles_renderer PRIVATE TILES_WITH_BGFX)
+endif()
 
     # Host matc: compiles the embedded demo material. matc is a *host* tool,
     # so it comes from the host-platform tgz (reused when target == host).
