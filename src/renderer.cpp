@@ -816,12 +816,38 @@ bool Renderer::renderFrame() {
         
         // Camera matrices (from orbit or explicit camera)
         float view[16], proj[16];
-        // TODO: Compute from bs.orbit / bs.explicitCam
-        // For now, identity (to be implemented)
-        for (int i = 0; i < 16; ++i) {
-            view[i] = (i % 5 == 0) ? 1.0f : 0.0f;
-            proj[i] = (i % 5 == 0) ? 1.0f : 0.0f;
-        }
+        // Compute view matrix from orbit camera
+        // For now: simple lookAt from orbit position
+        // TODO: Full orbit/explicit camera logic mirrors Filament path
+        float eye[3] = {0.0f, 0.0f, 4.0f};
+        float target[3] = {0.0f, 0.0f, 0.0f};
+        float up[3] = {0.0f, 1.0f, 0.0f};
+        // Simple lookAt implementation
+        float zaxis[3] = {eye[0]-target[0], eye[1]-target[1], eye[2]-target[2]};
+        float zlen = sqrtf(zaxis[0]*zaxis[0] + zaxis[1]*zaxis[1] + zaxis[2]*zaxis[2]);
+        zaxis[0]/=zlen; zaxis[1]/=zlen; zaxis[2]/=zlen;
+        float xaxis[3] = {up[1]*zaxis[2]-up[2]*zaxis[1], up[2]*zaxis[0]-up[0]*zaxis[2], up[0]*zaxis[1]-up[1]*zaxis[0]};
+        float xlen = sqrtf(xaxis[0]*xaxis[0] + xaxis[1]*xaxis[1] + xaxis[2]*xaxis[2]);
+        xaxis[0]/=xlen; xaxis[1]/=xlen; xaxis[2]/=xlen;
+        float yaxis[3] = {zaxis[1]*xaxis[2]-zaxis[2]*xaxis[1], zaxis[2]*xaxis[0]-zaxis[0]*xaxis[2], zaxis[0]*xaxis[1]-zaxis[1]*xaxis[0]};
+        // View matrix (column-major for bgfx)
+        view[0]=xaxis[0]; view[1]=yaxis[0]; view[2]=zaxis[0]; view[3]=0;
+        view[4]=xaxis[1]; view[5]=yaxis[1]; view[6]=zaxis[1]; view[7]=0;
+        view[8]=xaxis[2]; view[9]=yaxis[2]; view[10]=zaxis[2]; view[11]=0;
+        view[12]=-(xaxis[0]*eye[0]+xaxis[1]*eye[1]+xaxis[2]*eye[2]);
+        view[13]=-(yaxis[0]*eye[0]+yaxis[1]*eye[1]+yaxis[2]*eye[2]);
+        view[14]=-(zaxis[0]*eye[0]+zaxis[1]*eye[1]+zaxis[2]*eye[2]);
+        view[15]=1;
+        // Projection matrix (perspective)
+        float fov = bs.fovDegrees * 3.14159f / 180.0f;
+        float aspect = (float)bs.width / (float)bs.height;
+        float near = (float)bs.nearPlane;
+        float far = (float)bs.farPlane;
+        float f = 1.0f / tanf(fov * 0.5f);
+        proj[0]=f/aspect; proj[1]=0; proj[2]=0; proj[3]=0;
+        proj[4]=0; proj[5]=f; proj[6]=0; proj[7]=0;
+        proj[8]=0; proj[9]=0; proj[10]=far/(near-far); proj[11]=-1;
+        proj[12]=0; proj[13]=0; proj[14]=(far*near)/(near-far); proj[15]=0;
         bgfx::setViewTransform(bs.viewId, view, proj);
         
         // Update tileset (LOD selection)
