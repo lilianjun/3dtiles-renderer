@@ -822,6 +822,15 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
     using namespace CesiumGltf;
     constexpr const char* kExt =
         ExtensionExtMeshGpuInstancing::ExtensionName;
+    // P37: For cmpt merges, get the RTC_CENTER from the Model (b3dm's RTC).
+    // i3dm instances (ENU, absolute ECEF) need RTC subtracted so that
+    // prepareInMainThread's RTC application doesn't double-count.
+    glm::dvec3 modelRtc(0.0);
+    if (const auto* pRtc = model.getExtension<ExtensionCesiumRTC>();
+        pRtc != nullptr && pRtc->center.size() == 3) {
+        modelRtc = glm::dvec3(
+            pRtc->center[0], pRtc->center[1], pRtc->center[2]);
+    }
 
     std::vector<std::uint32_t> instancedNodes;
     for (std::uint32_t i = 0; i < model.nodes.size(); ++i) {
@@ -970,6 +979,15 @@ void expandGpuInstancing(CesiumGltf::Model& model, bool convertInstanceYUpToZUp 
                     glm::length(glm::dvec3(compose[0])),
                     glm::length(glm::dvec3(compose[1])),
                     glm::length(glm::dvec3(compose[2])));
+                // P37: For cmpt merges, subtract model RTC so that
+                // prepareInMainThread's RTC application (which applies to
+                // the whole merged Model) doesn't double-count for i3dm
+                // instances (which are already in ECEF).
+                // b3dm vertices (local) need RTC; i3dm instances (ECEF)
+                // need RTC removed here, then re-applied later (net zero).
+                if (convertInstanceYUpToZUp && modelRtc != glm::dvec3(0.0)) {
+                    tz -= modelRtc;
+                }
             } else if (convertInstanceYUpToZUp) {
                 // P37: For cmpt merges, keep instances Y-up (do NOT convert).
                 // convertModel converts the full worldMat Y-up->Z-up.
