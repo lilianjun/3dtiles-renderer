@@ -147,7 +147,7 @@
 | 参数 | 类型 | 默认值 | 说明 | 我方状态 | 优先级 |
 |---|---|---|---|---|---|
 | `debugHeatmapTilePropertyName` | `string` | — | 按指定 tile 变量值做 heatmap 着色 | ❌ | P2 |
-| `debugFreezeFrame` | `boolean` | `false` | 只用上一帧 tile 渲染，不做新遍历 | ❌ | P2 |
+| `debugFreezeFrame` | `boolean` | `false` | 只用上一帧 tile 渲染，不做新遍历 | ✅（`setDebugFreezeFrame`，跳过 traversal） | P2 |
 | `debugColorizeTiles` | `boolean` | `false` | 每 tile 随机色 | ✅（`setDebugColorizeTiles`） | P2 |
 | `enableDebugWireframe` | `boolean` | `false` | WebGL1 下 `debugWireframe` 的前置开关（创建后不可改） | ❌（Filament 无运行时线框切换） | P2 |
 | `debugWireframe` | `boolean` | `false` | 每 tile 内容线框渲染 | ❌ | P2 |
