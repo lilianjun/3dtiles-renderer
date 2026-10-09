@@ -813,7 +813,18 @@ bool Renderer::renderFrame() {
             (uint32_t)(bs.clearColor[3]*255),
             1.0f, 0);
         bgfx::setViewRect(bs.viewId, 0, 0, bs.width, bs.height);
-        // TODO: Update tileset and submit tiles
+        
+        // Update tileset (LOD selection)
+        const bool useTileset = bs.tileset != nullptr && bs.tileset->isLoaded();
+        if (useTileset) {
+            // TODO: Compute camera matrices and update tiles
+            // bs.tileset->update(...);
+            
+            // TODO: Submit visible tiles
+            // For each tile in render list:
+            //   bs.backend.submitTile(bs.viewId, tileResources, modelMatrix);
+        }
+        
         bgfx::touch(bs.viewId);
         bgfx::frame();
         return true;
